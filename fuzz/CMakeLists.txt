@@ -15,21 +15,24 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 cmake_minimum_required(VERSION 3.10)
-project(quick-lint-js)
+include(QuickLintJSTarget)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+quick_lint_js_add_executable(
+  quick-lint-js-fuzz-options
+  fuzz-options.cpp
+)
+target_link_libraries(quick-lint-js-fuzz-options PRIVATE quick-lint-js-lib)
 
-include(QuickLintJSCompiler)
+# @@@
+target_compile_options(quick-lint-js-fuzz-options PRIVATE -fsanitize=fuzzer)
+target_link_libraries(quick-lint-js-fuzz-options PRIVATE -fsanitize=fuzzer)
 
-quick_lint_js_set_cxx_standard()
-quick_lint_js_enable_char8_t_if_supported()
+quick_lint_js_add_executable(
+  quick-lint-js-fuzz-parse
+  fuzz-parse.cpp
+)
+target_link_libraries(quick-lint-js-fuzz-parse PRIVATE quick-lint-js-lib)
 
-add_subdirectory(vendor)
-
-add_subdirectory(benchmark)
-add_subdirectory(fuzz)
-add_subdirectory(src)
-include(CTest)
-if (BUILD_TESTING)
-  add_subdirectory(test)
-endif ()
+# @@@
+target_compile_options(quick-lint-js-fuzz-parse PRIVATE -fsanitize=fuzzer)
+target_link_libraries(quick-lint-js-fuzz-parse PRIVATE -fsanitize=fuzzer)
