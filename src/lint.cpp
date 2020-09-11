@@ -161,7 +161,6 @@ void linter::visit_enter_function_scope_body() {
 void linter::visit_enter_named_function_scope(identifier function_name) {
   scope &current_scope = this->scopes_.emplace_back();
   current_scope.function_expression_declaration = declared_variable{
-      .name = string8(function_name.string_view()),
       .kind = variable_kind::_function,
       .declaration = function_name,
       .declaration_scope = declared_variable_scope::declared_in_current_scope,
@@ -362,9 +361,13 @@ void linter::propagate_variable_uses_to_parent_scope(
   scope &parent_scope = this->scopes_[this->scopes_.size() - 2];
 
   auto is_current_scope_function_name = [&](const used_variable &var) {
-    return current_scope.function_expression_declaration.has_value() &&
-           current_scope.function_expression_declaration->name ==
-               var.name.string_view();
+    if (!current_scope.function_expression_declaration.has_value()) {
+      return false;
+    }
+    const declared_variable &decl =
+        *current_scope.function_expression_declaration;
+    QLJS_ASSERT(decl.declaration.has_value());
+    return decl.declaration->string_view() == var.name.string_view();
   };
 
   for (const used_variable &used_var : current_scope.variables_used) {
@@ -516,14 +519,13 @@ const linter::declared_variable *linter::scope::add_variable_declaration(
     declared_variable_scope declared_scope) {
   string8_view name_view = name.string_view();
   return &this->declared_variables[name_view].emplace_back(
-      declared_variable{string8(name_view), kind, name, declared_scope});
+      declared_variable{kind, name, declared_scope});
 }
 
 void linter::scope::add_predefined_variable_declaration(const char8 *name,
                                                         variable_kind kind) {
   string8_view name_view = name;
   this->declared_variables[name_view].emplace_back(declared_variable{
-      .name = string8(name_view),
       .kind = kind,
       .declaration = std::nullopt,
       .declaration_scope = declared_variable_scope::declared_in_current_scope,
