@@ -56,6 +56,23 @@ inline string8_view out_string8(string8_view sv) noexcept { return sv; }
 std::size_t strlen(const char8 *);
 const char8 *strchr(const char8 *haystack, char8 needle);
 const char8 *strstr(const char8 *haystack, const char8 *needle);
+
+#if QLJS_HAVE_CHAR8_T
+// Reimplementation of std::hash<string8_view>.
+//
+// libstdc++ 7.5.0 does not implement
+// std::hash<std::basic_string_view<char8_t>>, so we provide a custom
+// implementation.
+struct string8_view_hash {
+  std::size_t operator()(string8_view sv) const noexcept {
+    std::hash<std::string_view> hasher;
+    return hasher(
+        std::string_view(reinterpret_cast<const char *>(sv.data()), sv.size()));
+  }
+};
+#else
+using string8_view_hash = std::hash<string8_view>;
+#endif
 }
 
 namespace testing::internal {

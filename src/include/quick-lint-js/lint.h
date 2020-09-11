@@ -22,6 +22,7 @@
 #include <quick-lint-js/language.h>
 #include <quick-lint-js/lex.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace quick_lint_js {
@@ -74,7 +75,9 @@ class linter {
   };
 
   struct scope {
-    std::vector<declared_variable> declared_variables;
+    std::unordered_map<string8_view, std::vector<declared_variable>,
+                       string8_view_hash>
+        declared_variables;
     std::vector<used_variable> variables_used;
     std::vector<used_variable> variables_used_in_descendant_scope;
     std::optional<declared_variable> function_expression_declaration;
