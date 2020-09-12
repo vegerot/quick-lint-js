@@ -112,10 +112,34 @@ TEST(test_lex, lex_binary_numbers) {
   check_single_token(u8"0B010101010101010", token_type::number);
 }
 
+TEST(test_lex, lex_octal_numbers) {
+  check_single_token(u8"000", token_type::number);
+  check_single_token(u8"001", token_type::number);
+  check_single_token(u8"00010101010101010", token_type::number);
+  check_single_token(u8"00010101010101010", token_type::number);
+  check_single_token(u8"051", token_type::number);
+  check_single_token(u8"058", token_type::number);
+  check_single_token(u8"058.9", token_type::number);
+  check_single_token(u8"0o51", token_type::number);
+}
+
+TEST(test_lex, fail_lex_octal_numbers) {
+  check_single_token(u8"0o58", token_type::number);
+  check_single_token(u8"0o58.2", token_type::number);
+  check_single_token(u8"057.2", token_type::number);
+}
+
 TEST(test_lex, lex_hex_numbers) {
   check_single_token(u8"0x0", token_type::number);
   check_single_token(u8"0x123456789abcdef", token_type::number);
   check_single_token(u8"0X123456789ABCDEF", token_type::number);
+}
+
+TEST(test_lex, DISABLED_fail_lex_hex_numbers) {
+  // TODO(🎅🏾) make better
+  check_tokens(u8"0x42.3", {token_type::number, token_type::number});
+  check_tokens(u8"0x.3", {token_type::number, token_type::number});
+  check_tokens(u8"0x%", {token_type::number, token_type::number});
 }
 
 TEST(test_lex, lex_number_with_trailing_garbage) {
@@ -188,6 +212,21 @@ TEST(test_lex, lex_number_with_trailing_garbage) {
   {
     error_collector v;
     padded_string input(u8"0b0h0lla");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    ASSERT_EQ(v.errors.size(), 1);
+    EXPECT_EQ(v.errors[0].kind,
+              error_collector::error_unexpected_characters_in_number);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 3);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 8);
+  }
+
+  {
+    error_collector v;
+    padded_string input(u8"0o69");
     lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, token_type::number);
     l.skip();

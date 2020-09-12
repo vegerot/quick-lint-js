@@ -91,15 +91,18 @@
   case 'y':                        \
   case 'z'
 
+#define QLJS_CASE_OCTAL_DIGIT \
+  case '0':                   \
+  case '1':                   \
+  case '2':                   \
+  case '3':                   \
+  case '4':                   \
+  case '5':                   \
+  case '6':                   \
+  case '7'
+
 #define QLJS_CASE_DECIMAL_DIGIT \
-  case '0':                     \
-  case '1':                     \
-  case '2':                     \
-  case '3':                     \
-  case '4':                     \
-  case '5':                     \
-  case '6':                     \
-  case '7':                     \
+  QLJS_CASE_OCTAL_DIGIT:        \
   case '8':                     \
   case '9'
 
@@ -145,15 +148,24 @@ retry:
       this->last_token_.type = token_type::number;
       if (this->input_[0] == '0') {
         switch (this->input_[1]) {
-          case 'x':
-          case 'X':
-            this->input_ += 2;
-            this->parse_hexadecimal_number();
-            break;
           case 'b':
           case 'B':
             this->input_ += 2;
             this->parse_binary_number();
+            break;
+          case 'o':
+            this->input_ += 2;
+            this->parse_octal_number();
+            break;
+            // probably wrong
+          QLJS_CASE_DECIMAL_DIGIT:
+            this->input_ += 1;
+            this->parse_number();
+            break;
+          case 'x':
+          case 'X':
+            this->input_ += 2;
+            this->parse_hexadecimal_number();
             break;
           default:
             this->parse_number();
@@ -613,15 +625,7 @@ const char8* lexer::end_of_previous_token() const noexcept {
   return this->last_last_token_end_;
 }
 
-void lexer::parse_hexadecimal_number() {
-  QLJS_ASSERT(this->is_hex_digit(this->input_[0]) || this->input_[0] == '.');
-  while (this->is_hex_digit(this->input_[0])) {
-    this->input_ += 1;
-  }
-}
-
 void lexer::parse_binary_number() {
-  QLJS_ASSERT(this->is_binary_digit(this->input_[0]));
   const char8* input = this->input_;
 
   while (this->is_binary_digit(*input)) {
@@ -648,6 +652,12 @@ done_parsing_garbage:
   }
 
   this->input_ = input;
+}
+
+void lexer::parse_octal_number() {
+  while (this->is_octal_digit(this->input_[0])) {
+    this->input_ += 1;
+  }
 }
 
 void lexer::parse_number() {
@@ -707,6 +717,12 @@ void lexer::parse_number() {
     break;
   }
   this->input_ = input;
+}
+
+void lexer::parse_hexadecimal_number() {
+  while (this->is_hex_digit(this->input_[0])) {
+    this->input_ += 1;
+  }
 }
 
 const char8* lexer::parse_decimal_digits(const char8* input) noexcept {
@@ -1003,6 +1019,15 @@ void lexer::skip_line_comment() {
 }
 
 bool lexer::is_binary_digit(char8 c) { return c == u8'0' || c == u8'1'; }
+
+bool lexer::is_octal_digit(char8 c) {
+  switch (c) {
+  QLJS_CASE_OCTAL_DIGIT:
+    return true;
+    default:
+      return false;
+  }
+}
 
 bool lexer::is_digit(char8 c) {
   switch (c) {
