@@ -518,18 +518,31 @@ const linter::declared_variable *linter::scope::add_variable_declaration(
     identifier name, variable_kind kind,
     declared_variable_scope declared_scope) {
   string8_view name_view = name.string_view();
-  return &this->declared_variables[name_view].emplace_back(
-      declared_variable{kind, name, declared_scope});
+  return this->add_variable_declaration(
+      name_view, declared_variable{kind, name, declared_scope});
 }
 
 void linter::scope::add_predefined_variable_declaration(const char8 *name,
                                                         variable_kind kind) {
-  string8_view name_view = name;
-  this->declared_variables[name_view].emplace_back(declared_variable{
-      .kind = kind,
-      .declaration = std::nullopt,
-      .declaration_scope = declared_variable_scope::declared_in_current_scope,
-  });
+  this->add_variable_declaration(
+      string8_view(name),
+      declared_variable{
+          .kind = kind,
+          .declaration = std::nullopt,
+          .declaration_scope =
+              declared_variable_scope::declared_in_current_scope,
+      });
+}
+
+const linter::declared_variable *linter::scope::add_variable_declaration(
+    string8_view name, declared_variable &&new_var) {
+  auto [it, inserted] =
+      this->declared_variables.try_emplace(name, std::move(new_var));
+  if (inserted) {
+    return &it->second.primary;
+  } else {
+    return &it->second.others.emplace_back(std::move(new_var));
+  }
 }
 
 const linter::declared_variable *linter::scope::find_declared_variable(
@@ -538,9 +551,7 @@ const linter::declared_variable *linter::scope::find_declared_variable(
   if (it == this->declared_variables.end()) {
     return nullptr;
   } else {
-    const std::vector<declared_variable> &vars = it->second;
-    QLJS_ASSERT(!vars.empty());
-    return &vars[0];
+    return &it->second.primary;
   }
 }
 }

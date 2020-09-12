@@ -17,12 +17,16 @@
 #ifndef QUICK_LINT_JS_LINT_H
 #define QUICK_LINT_JS_LINT_H
 
+#include <cstddef>
+#include <iterator>
 #include <optional>
 #include <quick-lint-js/char8.h>
 #include <quick-lint-js/language.h>
 #include <quick-lint-js/lex.h>
+#include <quick-lint-js/narrow-cast.h>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace quick_lint_js {
@@ -59,6 +63,64 @@ class linter {
     declared_variable_scope declaration_scope;
   };
 
+  struct declared_variable_set {
+    class const_iterator;
+
+    declared_variable primary;
+    std::vector<declared_variable> others;
+
+    explicit declared_variable_set(declared_variable &&primary) noexcept
+        : primary(std::move(primary)) {}
+
+    const_iterator begin() const noexcept { return const_iterator(this, -1); }
+
+    const_iterator end() const noexcept {
+      return const_iterator(this, narrow_cast<int>(this->others.size()));
+    }
+
+    class const_iterator {
+     public:
+      using difference_type = std::ptrdiff_t;
+      using iterator_category = std::forward_iterator_tag;
+      using pointer = const declared_variable *;
+      using reference = const declared_variable &;
+      using value_type = declared_variable;
+
+      /*implicit*/ const_iterator() = default;
+
+      const declared_variable &operator*() const noexcept {
+        if (this->index_ == -1) {
+          return this->set_->primary;
+        } else {
+          return this->set_->others[narrow_cast<std::size_t>(this->index_)];
+        }
+      }
+
+      const const_iterator &operator++() noexcept {
+        this->index_ += 1;
+        return *this;
+      }
+
+      bool operator==(const const_iterator &other) const noexcept {
+        return this->set_ == other.set_ && this->index_ == other.index_;
+      }
+
+      bool operator!=(const const_iterator &other) const noexcept {
+        return !(*this == other);
+      }
+
+     private:
+      explicit const_iterator(const declared_variable_set *set,
+                              int index) noexcept
+          : set_(set), index_(index) {}
+
+      const declared_variable_set *set_ = nullptr;
+      int index_ = -1;
+
+      friend struct declared_variable_set;
+    };
+  };
+
   enum class used_variable_kind {
     _typeof,
     assignment,
@@ -74,8 +136,7 @@ class linter {
   };
 
   struct scope {
-    std::unordered_map<string8_view, std::vector<declared_variable>,
-                       string8_view_hash>
+    std::unordered_map<string8_view, declared_variable_set, string8_view_hash>
         declared_variables;
     std::vector<used_variable> variables_used;
     std::vector<used_variable> variables_used_in_descendant_scope;
@@ -85,6 +146,8 @@ class linter {
                                                       variable_kind,
                                                       declared_variable_scope);
     void add_predefined_variable_declaration(const char8 *name, variable_kind);
+    const declared_variable *add_variable_declaration(string8_view name,
+                                                      declared_variable &&);
 
     const declared_variable *find_declared_variable(identifier name) const
         noexcept;
