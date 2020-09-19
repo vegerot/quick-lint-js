@@ -123,10 +123,14 @@ TEST(test_lex, lex_octal_numbers) {
   check_single_token(u8"0o51", token_type::number);
 }
 
+// TODO(👮🏾‍♀️)doesn't work
 TEST(test_lex, fail_lex_octal_numbers) {
-  check_single_token(u8"0o58", token_type::number);
-  check_single_token(u8"0o58.2", token_type::number);
-  check_single_token(u8"057.2", token_type::number);
+  // q(👮🏾‍♀️)should there be a `token_type::any`?
+  check_tokens(u8"0o58", {token_type::number, token_type::number});
+  // q(👮🏾‍♀️)should there be a `token_type::any`?
+  check_tokens(u8"0o58.2", {token_type::number, token_type::number});
+
+  check_tokens(u8"057.2", {token_type::number, token_type::number});
 }
 
 TEST(test_lex, lex_hex_numbers) {
@@ -224,6 +228,7 @@ TEST(test_lex, lex_number_with_trailing_garbage) {
     EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 8);
   }
 
+  // TODO(👮🏾‍♀️)doesn't work
   {
     error_collector v;
     padded_string input(u8"0o69");

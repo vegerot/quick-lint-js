@@ -155,12 +155,12 @@ retry:
             break;
           case 'o':
             this->input_ += 2;
-            this->parse_octal_number();
+            this->parse_octal_number(true);
             break;
             // probably wrong
           QLJS_CASE_DECIMAL_DIGIT:
             this->input_ += 1;
-            this->parse_number();
+            this->parse_octal_number(false);
             break;
           case 'x':
           case 'X':
@@ -635,6 +635,7 @@ void lexer::parse_binary_number() {
   const char8* garbage_begin = input;
   for (;;) {
     switch (*input) {
+    /* TODO (👮🏾‍ measure if n including 0 or 1 makes this faster */
     QLJS_CASE_DECIMAL_DIGIT:
     QLJS_CASE_IDENTIFIER_START:
       input += 1;
@@ -643,6 +644,51 @@ void lexer::parse_binary_number() {
         goto done_parsing_garbage;
     }
   }
+done_parsing_garbage:
+  // q (👮🏾‍♀️)Why not parse this like in
+  // parse_number.consume_garbage?
+  const char8* garbage_end = input;
+  if (garbage_end != garbage_begin) {
+    this->error_reporter_->report_error_unexpected_characters_in_number(
+        source_code_span(garbage_begin, garbage_end));
+    input = garbage_end;
+  }
+
+  this->input_ = input;
+}
+
+void lexer::parse_octal_number(bool strict) {
+  const char8* input = this->input_;
+
+  while (this->is_octal_digit(*input)) {
+    ++input;
+  }
+
+  const char8* garbage_begin = input;
+  for (;;) {
+    switch (*input) {
+      /* TODO (👮🏾‍♀️ mswitch switch to just 8 and 9)*/
+      // decimal point should also be included
+    QLJS_CASE_DECIMAL_DIGIT:
+      if (strict) {
+        ++input;
+        break;
+      } else {
+        this->input_ = input;
+        this->parse_number();
+        return;
+      }
+    QLJS_CASE_IDENTIFIER_START:
+      input += 1;
+      break;
+      default:
+        goto done_parsing_garbage;
+    }
+  }
+  /* note(👮🏾‍♀️)this is bad, because it won't parse the trailing
+   * garbage separate tokens correctly. for example, `0o57.2` should be two
+   * number tokens, while `0o5a` should be an "unknown" token and an "any" token
+   */
 done_parsing_garbage:
   const char8* garbage_end = input;
   if (garbage_end != garbage_begin) {
@@ -654,17 +700,12 @@ done_parsing_garbage:
   this->input_ = input;
 }
 
-void lexer::parse_octal_number() {
-  while (this->is_octal_digit(this->input_[0])) {
-    this->input_ += 1;
-  }
-}
-
 void lexer::parse_number() {
   QLJS_ASSERT(this->is_digit(this->input_[0]) || this->input_[0] == '.');
   const char8* number_begin = this->input_;
   const char8* input = number_begin;
 
+  // @@@ (👮🏾‍♀️)can I use this other places?
   auto consume_garbage = [this, &input]() {
     const char8* garbage_begin = input;
     const char8* garbage_end = this->parse_identifier(garbage_begin);
