@@ -112,19 +112,22 @@ TEST(test_lex, lex_binary_numbers) {
   check_single_token(u8"0B010101010101010", token_type::number);
 }
 
-TEST(test_lex, lex_octal_numbers) {
+TEST(test_lex, lex_octal_numbers_strict) {
   check_single_token(u8"000", token_type::number);
   check_single_token(u8"001", token_type::number);
   check_single_token(u8"00010101010101010", token_type::number);
   check_single_token(u8"00010101010101010", token_type::number);
   check_single_token(u8"051", token_type::number);
-  check_single_token(u8"058", token_type::number);
-  check_single_token(u8"058.9", token_type::number);
   check_single_token(u8"0o51", token_type::number);
 }
 
+TEST(test_lex, lex_octal_numbers_lax) {
+  check_single_token(u8"058", token_type::number);
+  check_single_token(u8"058.9", token_type::number);
+}
+
 // TODO(👮🏾‍♀️)doesn't work
-TEST(test_lex, fail_lex_octal_numbers) {
+TEST(test_lex, fail_lex_octal_numbers_lax) {
   // q(👮🏾‍♀️)should there be a `token_type::any`?
   check_tokens(u8"0o58", {token_type::number, token_type::number});
   // q(👮🏾‍♀️)should there be a `token_type::any`?
@@ -132,6 +135,9 @@ TEST(test_lex, fail_lex_octal_numbers) {
 
   check_tokens(u8"057.2", {token_type::number, token_type::number});
 }
+
+// TODO (👮🏾‍♀️) (when strict mode implemented) tests to fail in
+// strict mode
 
 TEST(test_lex, lex_hex_numbers) {
   check_single_token(u8"0x0", token_type::number);
