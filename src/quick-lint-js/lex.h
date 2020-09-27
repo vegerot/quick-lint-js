@@ -324,6 +324,7 @@ class lexer {
                                            error_reporter*);
 
   void parse_binary_number();
+  void parse_octal_number(bool strict, bool is_0o);
   void parse_hexadecimal_number();
   char8* check_garbage_in_number_literal(char8* input);
   void parse_number();
@@ -345,6 +346,7 @@ class lexer {
   bool is_eof(const char8*) noexcept;
 
   static bool is_binary_digit(char8);
+  static bool is_octal_digit(char8);
   static bool is_digit(char8);
   static bool is_hex_digit(char8);
   static bool is_identifier_character(int code_point);
