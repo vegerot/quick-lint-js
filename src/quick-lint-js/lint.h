@@ -158,8 +158,8 @@ class linter {
                                                       declared_variable_scope);
     void add_predefined_variable_declaration(const char8 *name, variable_kind);
 
-    const declared_variable *find_declared_variable(identifier name) const
-        noexcept;
+    const declared_variable *find_declared_variable(
+        identifier name) const noexcept;
 
     void clear();
   };

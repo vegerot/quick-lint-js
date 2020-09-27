@@ -161,11 +161,118 @@ TEST(test_lex, lex_binary_numbers) {
   check_single_token(u8"0B010101010101010", token_type::number);
 }
 
+// fails
+TEST(test_lex, DISABLED_fail_lex_binary_number) {
+  {
+    error_collector v;
+    padded_string input(u8"0b1.1");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_binary_number?
+    EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
+                              error_unexpected_characters_in_number, characters,
+                              offsets_matcher(&input, 3, 4))));
+  }
+}
+
+TEST(test_lex, lex_octal_numbers_strict) {
+  check_single_token(u8"000", token_type::number);
+  check_single_token(u8"001", token_type::number);
+  check_single_token(u8"00010101010101010", token_type::number);
+  check_single_token(u8"00010101010101010", token_type::number);
+  check_single_token(u8"051", token_type::number);
+  check_single_token(u8"0o51", token_type::number);
+  check_single_token(u8"0o123n", token_type::number);
+}
+
+TEST(test_lex, lex_octal_numbers_lax) {
+  check_single_token(u8"058", token_type::number);
+  check_single_token(u8"058.9", token_type::number);
+}
+
+// TODO(👮🏾‍♀️)doesn't work
+TEST(test_lex, fail_lex_octal_numbers_lax) {
+  // Each scope is essentially `check-single-token`, but pulled out of the
+  // function to access the error_collector at the end
+  //
+  // idea: have `check_single_token` accept a callback with the errors
+  {
+    error_collector v;
+    padded_string input(u8"0o58");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_octal_number?
+    EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
+                              error_unexpected_characters_in_octal_number,
+                              characters, offsets_matcher(&input, 3, 4))));
+  }
+  {
+    error_collector v;
+    padded_string input(u8"0o58.2");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_octal_number?
+    EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
+                              error_unexpected_characters_in_octal_number,
+                              characters, offsets_matcher(&input, 3, 5))));
+  }
+  {
+    error_collector v;
+    padded_string input(u8"052.2");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_octal_number?
+    // edit: did it
+    EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
+                              error_unexpected_characters_in_octal_number,
+                              characters, offsets_matcher(&input, 3, 4))));
+  }
+}
+
+TEST(test_lex, fail_lex_octal_numbers) {
+  check_tokens_with_errors(
+      u8"0123n", {token_type::number},
+      [](padded_string_view input, const auto& errors) {
+        EXPECT_THAT(errors, ElementsAre(ERROR_TYPE_FIELD(
+                                error_unexpected_characters_in_octal_number,
+                                characters, offsets_matcher(input, 4, 5))));
+      });
+}
+
+// TODO (👮🏾‍♀️) (when strict mode implemented) tests to fail in
+// strict mode
+
 TEST(test_lex, lex_hex_numbers) {
   check_single_token(u8"0x0", token_type::number);
   check_single_token(u8"0x123456789abcdef", token_type::number);
   check_single_token(u8"0X123456789ABCDEF", token_type::number);
   check_single_token(u8"0X123_4567_89AB_CDEF", token_type::number);
+}
+
+TEST(test_lex, DISABLED_fail_lex_hex_numbers) {
+  check_tokens(u8"0x42.3", {token_type::number, token_type::number});
+  check_tokens(u8"0x.3", {token_type::number, token_type::number});
+  check_tokens(u8"0x%", {token_type::number, token_type::number});
 }
 
 TEST(test_lex, lex_number_with_trailing_garbage) {
@@ -212,6 +319,30 @@ TEST(test_lex, lex_number_with_trailing_garbage) {
                                 error_unexpected_characters_in_number,
                                 characters, offsets_matcher(input, 4, 7))));
       });
+  {
+    error_collector v;
+    padded_string input(u8"0o69");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
+                              error_unexpected_characters_in_octal_number,
+                              characters, offsets_matcher(&input, 3, 4))));
+  }
+  {
+    error_collector v;
+    padded_string input(u8"0123n");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
+                              error_unexpected_characters_in_octal_number,
+                              characters, offsets_matcher(&input, 4, 5))));
+  }
 }
 
 TEST(test_lex, lex_invalid_big_int_number) {
@@ -221,13 +352,6 @@ TEST(test_lex, lex_invalid_big_int_number) {
         EXPECT_THAT(errors, ElementsAre(ERROR_TYPE_FIELD(
                                 error_big_int_literal_contains_decimal_point,
                                 where, offsets_matcher(input, 0, 6))));
-      });
-  check_tokens_with_errors(
-      u8"0123n", {token_type::number},
-      [](padded_string_view input, const auto& errors) {
-        EXPECT_THAT(errors, ElementsAre(ERROR_TYPE_FIELD(
-                                error_big_int_literal_contains_leading_zero,
-                                where, offsets_matcher(input, 0, 5))));
       });
   check_tokens_with_errors(
       u8"1e3n", {token_type::number},
@@ -247,27 +371,25 @@ TEST(test_lex, lex_invalid_big_int_number) {
                 VariantWith<error_big_int_literal_contains_decimal_point>(_)));
       });
 
-  // Complain about both the decimal point and the leading 0 digit.
+  /* // Complain about both the decimal point and the leading 0 digit. */
   check_tokens_with_errors(
-      u8"01.2n", {token_type::number},
+      u8"01.2n", {token_type::number,token_type::number},
       [](padded_string_view, const auto& errors) {
         EXPECT_THAT(
             errors,
             UnorderedElementsAre(
-                VariantWith<error_big_int_literal_contains_decimal_point>(_),
-                VariantWith<error_big_int_literal_contains_leading_zero>(_)));
+                VariantWith<error_unexpected_characters_in_octal_number>(_)));
       });
 
   // Complain about everything. What a disaster.
   check_tokens_with_errors(
-      u8"01.2e+3n", {token_type::number},
+      u8"01.2e+3n", {token_type::number,token_type::number},
       [](padded_string_view, const auto& errors) {
         EXPECT_THAT(
             errors,
             UnorderedElementsAre(
-                VariantWith<error_big_int_literal_contains_decimal_point>(_),
-                VariantWith<error_big_int_literal_contains_exponent>(_),
-                VariantWith<error_big_int_literal_contains_leading_zero>(_)));
+                VariantWith<error_unexpected_characters_in_octal_number>(_),
+                VariantWith<error_big_int_literal_contains_exponent>(_)));
       });
 }
 
