@@ -667,20 +667,21 @@ void lexer::parse_octal_number(bool strict) {
   const char8* garbage_begin = input;
   for (;;) {
     switch (*input) {
-      /* TODO (👮🏾‍♀️ mswitch switch to just 8 and 9)*/
-      // decimal point should also be included
+    /* TODO (👮🏾‍♀️ mswitch switch to just 8 and 9)*/
+    // decimal point should also be included
     QLJS_CASE_DECIMAL_DIGIT:
       if (strict) {
         ++input;
-        break;
+        goto done_parsing_garbage;
       } else {
         this->input_ = input;
         this->parse_number();
         return;
       }
     QLJS_CASE_IDENTIFIER_START:
-      input += 1;
-      break;
+    case u8'.':
+      ++input;
+      goto done_parsing_garbage;
       default:
         goto done_parsing_garbage;
     }
@@ -692,11 +693,10 @@ void lexer::parse_octal_number(bool strict) {
 done_parsing_garbage:
   const char8* garbage_end = input;
   if (garbage_end != garbage_begin) {
-    this->error_reporter_->report_error_unexpected_characters_in_number(
+    this->error_reporter_->report_error_unexpected_characters_in_octal_number(
         source_code_span(garbage_begin, garbage_end));
     input = garbage_end;
   }
-
   this->input_ = input;
 }
 

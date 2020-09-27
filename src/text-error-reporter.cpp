@@ -164,6 +164,12 @@ void text_error_reporter::report_error_unexpected_characters_in_number(
   this->output_ << "error: unexpected characters in number literal\n";
 }
 
+void text_error_reporter::report_error_unexpected_characters_in_octal_number(
+    source_code_span characters) {
+  this->log_location(characters);
+  this->output_ << "error: unexpected characters in octal literal\n";
+}
+
 void text_error_reporter::report_error_unexpected_hash_character(
     source_code_span where) {
   this->log_location(where);

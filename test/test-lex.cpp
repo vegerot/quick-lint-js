@@ -112,6 +112,26 @@ TEST(test_lex, lex_binary_numbers) {
   check_single_token(u8"0B010101010101010", token_type::number);
 }
 
+// fails
+TEST(test_lex, fail_lex_binary_number) {
+  {
+    error_collector v;
+    padded_string input(u8"0b1.1");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    ASSERT_EQ(v.errors.size(), 1);
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_binary_number?
+    EXPECT_EQ(v.errors[0].kind,
+              error_collector::error_unexpected_characters_in_number);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 3);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 5);
+  }
+}
+
 TEST(test_lex, lex_octal_numbers_strict) {
   check_single_token(u8"000", token_type::number);
   check_single_token(u8"001", token_type::number);
@@ -128,12 +148,63 @@ TEST(test_lex, lex_octal_numbers_lax) {
 
 // TODO(👮🏾‍♀️)doesn't work
 TEST(test_lex, fail_lex_octal_numbers_lax) {
-  // q(👮🏾‍♀️)should there be a `token_type::any`?
-  check_tokens(u8"0o58", {token_type::number, token_type::number});
-  // q(👮🏾‍♀️)should there be a `token_type::any`?
-  check_tokens(u8"0o58.2", {token_type::number, token_type::number});
+  // Each scope is essentially `check-single-token`, but pulled out of the
+  // function to access the error_collector at the end
+  //
+  // idea: have `check_single_token` accept a callback with the errors
+  {
+    error_collector v;
+    padded_string input(u8"0o58");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
 
-  check_tokens(u8"057.2", {token_type::number, token_type::number});
+    ASSERT_EQ(v.errors.size(), 1);
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_octal_number?
+    EXPECT_EQ(v.errors[0].kind,
+              error_collector::error_unexpected_characters_in_octal_number);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 3);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 4);
+  }
+  {
+    error_collector v;
+    padded_string input(u8"0o58.2");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    ASSERT_EQ(v.errors.size(), 1);
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_octal_number?
+    EXPECT_EQ(v.errors[0].kind,
+              error_collector::error_unexpected_characters_in_octal_number);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 3);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 4);
+  }
+  {
+    error_collector v;
+    padded_string input(u8"052.2");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    ASSERT_EQ(v.errors.size(), 1);
+    // q(🎅🏾) have another error kind for
+    // `unexpected_character_in_octal_number?
+    // edit: did it
+    EXPECT_EQ(v.errors[0].kind,
+              error_collector::error_unexpected_characters_in_octal_number);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 3);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 4);
+  }
 }
 
 // TODO (👮🏾‍♀️) (when strict mode implemented) tests to fail in
@@ -146,7 +217,6 @@ TEST(test_lex, lex_hex_numbers) {
 }
 
 TEST(test_lex, DISABLED_fail_lex_hex_numbers) {
-  // TODO(🎅🏾) make better
   check_tokens(u8"0x42.3", {token_type::number, token_type::number});
   check_tokens(u8"0x.3", {token_type::number, token_type::number});
   check_tokens(u8"0x%", {token_type::number, token_type::number});
@@ -245,9 +315,9 @@ TEST(test_lex, lex_number_with_trailing_garbage) {
 
     ASSERT_EQ(v.errors.size(), 1);
     EXPECT_EQ(v.errors[0].kind,
-              error_collector::error_unexpected_characters_in_number);
+              error_collector::error_unexpected_characters_in_octal_number);
     EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 3);
-    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 8);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 4);
   }
 }
 
@@ -277,8 +347,8 @@ TEST(test_lex, lex_invalid_big_int_number) {
 
     ASSERT_EQ(v.errors.size(), 1);
     EXPECT_EQ(v.errors[0].kind,
-              error_collector::error_big_int_literal_contains_leading_zero);
-    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 0);
+              error_collector::error_unexpected_characters_in_octal_number);
+    EXPECT_EQ(locator(&input).range(v.errors[0].where).begin_offset(), 4);
     EXPECT_EQ(locator(&input).range(v.errors[0].where).end_offset(), 5);
   }
 
@@ -312,30 +382,16 @@ TEST(test_lex, lex_invalid_big_int_number) {
   }
 
   // Complain about both the decimal point and the leading 0 digit.
+  // q(👮🏽‍♀️)S
+  // o do we want this to be?  Should it complain it's a bad octal number
+  // (because of `.`) and bad big_int because of `.2n`?
+  // The problem with that is I lex the `.` in `lexer::parse_octal_number`
   {
     error_collector v;
     padded_string input(u8"01.2n");
     lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, token_type::number);
     l.skip();
-    EXPECT_EQ(l.peek().type, token_type::end_of_file);
-
-    EXPECT_THAT(
-        v.errors,
-        UnorderedElementsAre(
-            FIELD(
-                error_collector::error, kind,
-                error_collector::error_big_int_literal_contains_decimal_point),
-            FIELD(
-                error_collector::error, kind,
-                error_collector::error_big_int_literal_contains_leading_zero)));
-  }
-
-  // Complain about everything. What a disaster.
-  {
-    error_collector v;
-    padded_string input(u8"01.2e+3n");
-    lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, token_type::number);
     l.skip();
     EXPECT_EQ(l.peek().type, token_type::end_of_file);
@@ -343,14 +399,40 @@ TEST(test_lex, lex_invalid_big_int_number) {
     EXPECT_THAT(
         v.errors,
         UnorderedElementsAre(
-            FIELD(
-                error_collector::error, kind,
-                error_collector::error_big_int_literal_contains_decimal_point),
             FIELD(error_collector::error, kind,
-                  error_collector::error_big_int_literal_contains_exponent),
-            FIELD(
-                error_collector::error, kind,
-                error_collector::error_big_int_literal_contains_leading_zero)));
+                  error_collector::error_unexpected_characters_in_octal_number)
+            /* FIELD(error_collector::error, kind, */
+            /*       error_collector:: */
+            /*           error_big_int_literal_contains_decimal_point) */
+            ));
+  }
+
+  // Complain about everything. What a disaster.
+  // q(👮🏽‍♀️)S
+  // o do we want this to be?  Should it complain it's a bad octal number
+  // (because of `.`) and bad big_int because of `.2n`?
+  // The problem with that is I lex the `.` in `lexer::parse_octal_number`
+  {
+    error_collector v;
+    padded_string input(u8"01.2e+3n");
+    lexer l(&input, &v);
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::number);
+    l.skip();
+    EXPECT_EQ(l.peek().type, token_type::end_of_file);
+
+    EXPECT_THAT(
+        v.errors,
+        UnorderedElementsAre(
+            FIELD(error_collector::error, kind,
+                  error_collector::error_unexpected_characters_in_octal_number),
+            /* FIELD( */
+            /*     error_collector::error, kind, */
+            /*     error_collector::error_big_int_literal_contains_decimal_point),
+             */
+            FIELD(error_collector::error, kind,
+                  error_collector::error_big_int_literal_contains_exponent)));
   }
 }
 

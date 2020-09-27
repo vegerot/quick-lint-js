@@ -78,6 +78,8 @@ class error_reporter {
       source_code_span incomplete_template) = 0;
   virtual void report_error_unexpected_characters_in_number(
       source_code_span characters) = 0;
+  virtual void report_error_unexpected_characters_in_octal_number(
+      source_code_span characters) = 0;
   virtual void report_error_unexpected_hash_character(
       source_code_span where) = 0;
   virtual void report_error_unexpected_identifier(source_code_span where) = 0;
@@ -137,6 +139,8 @@ class null_error_reporter : public error_reporter {
   void report_error_unclosed_template(source_code_span) override {}
   void report_error_unexpected_characters_in_number(source_code_span) override {
   }
+  void report_error_unexpected_characters_in_octal_number(
+      source_code_span) override {}
   void report_error_unexpected_hash_character(source_code_span) override {}
   void report_error_unexpected_identifier(source_code_span) override {}
   void report_error_unmatched_parenthesis(source_code_span) override {}

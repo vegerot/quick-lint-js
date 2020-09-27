@@ -156,6 +156,12 @@ struct error_collector : public error_reporter {
                               characters);
   }
 
+  void report_error_unexpected_characters_in_octal_number(
+      source_code_span characters) override {
+    this->errors.emplace_back(error_unexpected_characters_in_octal_number,
+                              characters);
+  }
+
   void report_error_unexpected_hash_character(source_code_span where) override {
     this->errors.emplace_back(error_unexpected_hash_character, where);
   }
@@ -193,6 +199,8 @@ struct error_collector : public error_reporter {
     error_assignment_to_undeclared_variable,
     error_big_int_literal_contains_decimal_point,
     error_big_int_literal_contains_exponent,
+    // q(🤷🏽‍♀️)either rename to `big_int_literal_for_octal` or just
+    // remove
     error_big_int_literal_contains_leading_zero,
     error_invalid_binding_in_let_statement,
     error_invalid_expression_left_of_assignment,
@@ -208,6 +216,7 @@ struct error_collector : public error_reporter {
     error_unclosed_string_literal,
     error_unclosed_template,
     error_unexpected_characters_in_number,
+    error_unexpected_characters_in_octal_number,
     error_unexpected_hash_character,
     error_unexpected_identifier,
     error_unmatched_parenthesis,
