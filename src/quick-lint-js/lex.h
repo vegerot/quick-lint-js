@@ -324,7 +324,13 @@ class lexer {
                                            error_reporter*);
 
   void parse_binary_number();
-  void parse_octal_number(bool strict, bool is_0o);
+
+  enum class octal_kind {
+    sloppy,
+    // strict_0,
+    strict_0o,
+  };
+  void parse_octal_number(octal_kind);
   void parse_hexadecimal_number();
   char8* check_garbage_in_number_literal(char8* input);
   void parse_number();
