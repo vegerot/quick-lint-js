@@ -193,12 +193,13 @@ TEST(test_lex, lex_octal_numbers_lax) {
   check_single_token(u8"058.9", token_type::number);
 }
 
-// TODO(👮🏾‍♀️)doesn't work
 TEST(test_lex, fail_lex_octal_numbers_lax) {
   // Each scope is essentially `check-single-token`, but pulled out of the
   // function to access the error_collector at the end
   //
   // idea: have `check_single_token` accept a callback with the errors
+
+  // TODO(👨🏻) refactor to new callback-style
   {
     error_collector v;
     padded_string input(u8"0o58");
@@ -207,8 +208,6 @@ TEST(test_lex, fail_lex_octal_numbers_lax) {
     l.skip();
     EXPECT_EQ(l.peek().type, token_type::end_of_file);
 
-    // q(🎅🏾) have another error kind for
-    // `unexpected_character_in_octal_number?
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
                               error_unexpected_characters_in_octal_number,
                               characters, offsets_matcher(&input, 3, 4))));
@@ -223,11 +222,9 @@ TEST(test_lex, fail_lex_octal_numbers_lax) {
     l.skip();
     EXPECT_EQ(l.peek().type, token_type::end_of_file);
 
-    // q(🎅🏾) have another error kind for
-    // `unexpected_character_in_octal_number?
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
                               error_unexpected_characters_in_octal_number,
-                              characters, offsets_matcher(&input, 3, 5))));
+                              characters, offsets_matcher(&input, 3, 4))));
   }
   {
     error_collector v;
@@ -239,9 +236,6 @@ TEST(test_lex, fail_lex_octal_numbers_lax) {
     l.skip();
     EXPECT_EQ(l.peek().type, token_type::end_of_file);
 
-    // q(🎅🏾) have another error kind for
-    // `unexpected_character_in_octal_number?
-    // edit: did it
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
                               error_unexpected_characters_in_octal_number,
                               characters, offsets_matcher(&input, 3, 4))));
