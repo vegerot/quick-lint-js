@@ -185,6 +185,9 @@ TEST(test_lex, lex_octal_numbers_strict) {
   check_single_token(u8"00010101010101010", token_type::number);
   check_single_token(u8"051", token_type::number);
   check_single_token(u8"0o51", token_type::number);
+  check_single_token(u8"0o0", token_type::number);
+  check_single_token(u8"0o0n", token_type::number);
+  check_single_token(u8"0o01", token_type::number);
   check_single_token(u8"0o123n", token_type::number);
 }
 
@@ -193,13 +196,20 @@ TEST(test_lex, lex_octal_numbers_lax) {
   check_single_token(u8"058.9", token_type::number);
 }
 
-TEST(test_lex, fail_lex_octal_numbers_lax) {
+TEST(test_lex, fail_lex_octal_numbers) {
   // Each scope is essentially `check-single-token`, but pulled out of the
   // function to access the error_collector at the end
   //
   // idea: have `check_single_token` accept a callback with the errors
 
   // TODO(👨🏻) refactor to new callback-style
+  check_tokens_with_errors(
+      u8"0123n", {token_type::number},
+      [](padded_string_view input, const auto& errors) {
+        EXPECT_THAT(errors, ElementsAre(ERROR_TYPE_FIELD(
+                                error_unexpected_characters_in_octal_number,
+                                characters, offsets_matcher(input, 4, 5))));
+      });
   {
     error_collector v;
     padded_string input(u8"0o58");
@@ -242,18 +252,8 @@ TEST(test_lex, fail_lex_octal_numbers_lax) {
   }
 }
 
-TEST(test_lex, fail_lex_octal_numbers) {
-  check_tokens_with_errors(
-      u8"0123n", {token_type::number},
-      [](padded_string_view input, const auto& errors) {
-        EXPECT_THAT(errors, ElementsAre(ERROR_TYPE_FIELD(
-                                error_unexpected_characters_in_octal_number,
-                                characters, offsets_matcher(input, 4, 5))));
-      });
-}
-
-// TODO (👮🏾‍♀️) (when strict mode implemented) tests to fail in
-// strict mode
+// TODO (👮🏾‍♀️) (when strict mode implemented) octal number literal
+// tests to fail in strict mode
 
 TEST(test_lex, lex_hex_numbers) {
   check_single_token(u8"0x0", token_type::number);
