@@ -796,7 +796,7 @@ void lexer::parse_octal_number(octal_kind kind) {
     ++input;
   }
 
-  if (kind != octal_kind::strict_0o) {
+  if (kind == octal_kind::sloppy) {
     switch (*input) {
     QLJS_CASE_DECIMAL_DIGIT:
       this->input_ = input;
@@ -816,12 +816,9 @@ void lexer::parse_octal_number(octal_kind kind) {
     // strict mode or following another number identifier (such as a `.`),
     // both of which are invalid
     QLJS_CASE_DECIMAL_DIGIT:
-      ++input;
-      break;
     QLJS_CASE_IDENTIFIER_START:
     case u8'.':
       ++input;
-      goto done_parsing_garbage;
     default:
       goto done_parsing_garbage;
     }
