@@ -245,7 +245,7 @@
   QLJS_ERROR_TYPE(                                                             \
       error_unexpected_characters_in_octal_number,                             \
       { source_code_span characters; },                                        \
-      .error(u8"unexpected characters in octal literal", characters))          \
+      .error(QLJS_TRANSLATE("unexpected characters in octal literal"), characters)) \
                                                                                \
   QLJS_ERROR_TYPE(                                                             \
       error_unexpected_hash_character, { source_code_span where; },            \

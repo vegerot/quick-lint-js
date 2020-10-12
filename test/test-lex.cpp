@@ -37,7 +37,6 @@ using namespace std::literals::string_view_literals;
 using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
-using ::testing::UnorderedElementsAre;
 using ::testing::VariantWith;
 
 namespace quick_lint_js {
@@ -373,21 +372,21 @@ TEST(test_lex, lex_invalid_big_int_number) {
 
   /* // Complain about both the decimal point and the leading 0 digit. */
   check_tokens_with_errors(
-      u8"01.2n", {token_type::number,token_type::number},
+      u8"01.2n", {token_type::number, token_type::number},
       [](padded_string_view, const auto& errors) {
         EXPECT_THAT(
             errors,
-            UnorderedElementsAre(
+            ElementsAre(
                 VariantWith<error_unexpected_characters_in_octal_number>(_)));
       });
 
   // Complain about everything. What a disaster.
   check_tokens_with_errors(
-      u8"01.2e+3n", {token_type::number,token_type::number},
+      u8"01.2e+3n", {token_type::number, token_type::number},
       [](padded_string_view, const auto& errors) {
         EXPECT_THAT(
             errors,
-            UnorderedElementsAre(
+            ElementsAre(
                 VariantWith<error_unexpected_characters_in_octal_number>(_),
                 VariantWith<error_big_int_literal_contains_exponent>(_)));
       });
