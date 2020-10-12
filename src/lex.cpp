@@ -158,12 +158,11 @@ retry:
         break;
       case 'o':
         this->input_ += 2;
-        this->parse_octal_number(true, true);
+        this->parse_octal_number(octal_kind::strict_0o);
         break;
-        // probably wrong
       QLJS_CASE_DECIMAL_DIGIT:
         this->input_ += 1;
-        this->parse_octal_number(false, false);
+        this->parse_octal_number(octal_kind::sloppy);
         break;
       case 'x':
       case 'X':
@@ -790,15 +789,14 @@ void lexer::parse_binary_number() {
   this->input_ = check_garbage_in_number_literal(input);
 }
 
-void lexer::parse_octal_number(bool strict, bool is_0o) {
-  if (is_0o) assert(strict);
+void lexer::parse_octal_number(octal_kind kind) {
   char8* input = this->input_;
 
   while (this->is_octal_digit(*input)) {
     ++input;
   }
 
-  if (!is_0o) {
+  if (kind != octal_kind::strict_0o) {
     switch (*input) {
     QLJS_CASE_DECIMAL_DIGIT:
       this->input_ = input;
@@ -807,7 +805,7 @@ void lexer::parse_octal_number(bool strict, bool is_0o) {
     }
   }
 
-  if (is_0o) switch (*input)
+  if (kind == octal_kind::strict_0o) switch (*input)
     case u8'n':
       ++input;
 
