@@ -268,12 +268,6 @@ TEST(test_lex, lex_hex_numbers) {
   check_single_token(u8"0X123_4567_89AB_CDEF", token_type::number);
 }
 
-TEST(test_lex, DISABLED_fail_lex_hex_numbers) {
-  check_tokens(u8"0x42.3", {token_type::number, token_type::number});
-  check_tokens(u8"0x.3", {token_type::number, token_type::number});
-  check_tokens(u8"0x%", {token_type::number, token_type::number});
-}
-
 TEST(test_lex, lex_number_with_trailing_garbage) {
   check_tokens_with_errors(
       u8"123abcd", {token_type::number},
