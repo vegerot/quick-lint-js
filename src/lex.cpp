@@ -819,6 +819,7 @@ void lexer::parse_octal_number(octal_kind kind) {
     QLJS_CASE_IDENTIFIER_START:
     case u8'.':
       ++input;
+      break;
     default:
       goto done_parsing_garbage;
     }
