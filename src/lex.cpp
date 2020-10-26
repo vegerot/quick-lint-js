@@ -791,10 +791,9 @@ void lexer::parse_binary_number() {
 
 void lexer::parse_octal_number(octal_kind kind) {
   char8* input = this->input_;
+  const char8* number_begin = input;
 
-  while (this->is_octal_digit(*input)) {
-    ++input;
-  }
+  input = this->parse_octal_digits(input);
 
   if (kind == octal_kind::sloppy) {
     switch (*input) {
@@ -805,11 +804,40 @@ void lexer::parse_octal_number(octal_kind kind) {
     }
   }
 
+  // the next character is not [0-9], and the previous character is an OCTAL_DIGIT
+
   if (kind == octal_kind::strict_0o) switch (*input)
     case u8'n':
       ++input;
 
   const char8* garbage_begin = input;
+  bool has_decimal_point = *input == '.';
+  if (has_decimal_point) {
+    input += 1;
+    this->error_reporter_->report(error_octal_literal_may_not_have_decimal{
+              source_code_span(garbage_begin, input)});
+    input = this->parse_octal_digits(input);
+  }
+  bool has_exponent = *input == 'e' || *input == 'E';
+  if (has_exponent) {
+    char8* e = input;
+    input += 1;
+    if (*input == '-' || *input == '+') {
+      input += 1;
+    }
+    this->error_reporter_->report(error_octal_literal_may_not_have_exponent{
+              source_code_span(garbage_begin, input)});
+    input = this->parse_octal_digits(input);
+  }
+  if (*input == 'n') {
+    input += 1;
+    this->error_reporter_->report(error_octal_literal_may_not_be_big_int{
+          source_code_span(garbage_begin, input)});
+    input = this->parse_octal_digits(input);
+  }
+
+  const char8* unknown_garbage_begin = input;
+
   for (;;) {
     switch (*input) {
     // if we see a DECIMAL_DIGIT at this point it either means we're in
@@ -825,9 +853,9 @@ void lexer::parse_octal_number(octal_kind kind) {
   }
 done_parsing_garbage:
   char8* garbage_end = input;
-  if (garbage_end != garbage_begin) {
+  if (garbage_end != unknown_garbage_begin) {
     this->error_reporter_->report(error_unexpected_characters_in_octal_number{
-        source_code_span(garbage_begin, garbage_end)});
+        source_code_span(unknown_garbage_begin, garbage_end)});
     input = garbage_end;
   }
   this->input_ = input;
@@ -926,6 +954,13 @@ char8* lexer::parse_digits_and_underscores(Func&& is_valid_digit,
     this->error_reporter_->report(
         error_number_literal_contains_trailing_underscores{
             source_code_span(garbage_begin, input)});
+  }
+  return input;
+}
+
+char8* lexer::parse_octal_digits(char8* input) noexcept {
+  while (this->is_octal_digit(*input)) {
+    ++input;
   }
   return input;
 }

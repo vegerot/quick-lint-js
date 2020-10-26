@@ -338,7 +338,7 @@ class lexer {
   template <class Func>
   char8* parse_digits_and_underscores(Func&& is_valid_digit,
                                       char8* input) noexcept;
-
+  char8* parse_octal_digits(char8* input) noexcept;
   char8* parse_decimal_digits_and_underscores(char8* input) noexcept;
   char8* parse_hex_digits_and_underscores(char8* input) noexcept;
 

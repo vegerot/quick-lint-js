@@ -207,7 +207,7 @@ TEST(test_lex, fail_lex_octal_numbers) {
       u8"0123n", {token_type::number},
       [](padded_string_view input, const auto& errors) {
         EXPECT_THAT(errors, ElementsAre(ERROR_TYPE_FIELD(
-                                error_unexpected_characters_in_octal_number,
+                                error_octal_literal_may_not_be_big_int,
                                 characters, offsets_matcher(input, 4, 5))));
       });
   {
@@ -242,12 +242,10 @@ TEST(test_lex, fail_lex_octal_numbers) {
     lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, token_type::number);
     l.skip();
-    EXPECT_EQ(l.peek().type, token_type::number);
-    l.skip();
     EXPECT_EQ(l.peek().type, token_type::end_of_file);
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
-                              error_unexpected_characters_in_octal_number,
+                              error_octal_literal_may_not_have_decimal,
                               characters, offsets_matcher(&input, 3, 4))));
   }
 }
@@ -327,7 +325,7 @@ TEST(test_lex, lex_number_with_trailing_garbage) {
     EXPECT_EQ(l.peek().type, token_type::end_of_file);
 
     EXPECT_THAT(v.errors, ElementsAre(ERROR_TYPE_FIELD(
-                              error_unexpected_characters_in_octal_number,
+                              error_octal_literal_may_not_be_big_int,
                               characters, offsets_matcher(&input, 4, 5))));
   }
 }
@@ -360,23 +358,25 @@ TEST(test_lex, lex_invalid_big_int_number) {
 
   /* // Complain about both the decimal point and the leading 0 digit. */
   check_tokens_with_errors(
-      u8"01.2n", {token_type::number, token_type::number},
+      u8"01.2n", {token_type::number},
       [](padded_string_view, const auto& errors) {
         EXPECT_THAT(
             errors,
             ElementsAre(
-                VariantWith<error_unexpected_characters_in_octal_number>(_)));
+                VariantWith<error_octal_literal_may_not_have_decimal>(_),
+                VariantWith<error_octal_literal_may_not_be_big_int>(_)));
       });
 
   // Complain about everything. What a disaster.
   check_tokens_with_errors(
-      u8"01.2e+3n", {token_type::number, token_type::number},
+      u8"01.2e+3n", {token_type::number},
       [](padded_string_view, const auto& errors) {
         EXPECT_THAT(
             errors,
             ElementsAre(
-                VariantWith<error_unexpected_characters_in_octal_number>(_),
-                VariantWith<error_big_int_literal_contains_exponent>(_)));
+                VariantWith<error_octal_literal_may_not_have_decimal>(_),
+                VariantWith<error_octal_literal_may_not_have_exponent>(_),
+                VariantWith<error_octal_literal_may_not_be_big_int>(_)));
       });
 }
 

@@ -75,6 +75,7 @@
       error_big_int_literal_contains_exponent, { source_code_span where; },    \
       .error(QLJS_TRANSLATE("BigInt literal contains exponent"), where))       \
                                                                                \
+  /* TODO(mc2), remove */                                                      \
   QLJS_ERROR_TYPE(                                                             \
       error_big_int_literal_contains_leading_zero,                             \
       { source_code_span where; },                                             \
@@ -176,6 +177,21 @@
       error_number_literal_contains_trailing_underscores,                      \
       { source_code_span underscores; },                                       \
       .error(u8"number literal contains trailing underscore(s)", underscores)) \
+                                                                               \
+  QLJS_ERROR_TYPE(                                                             \
+      error_octal_literal_may_not_have_exponent,                               \
+      { source_code_span characters; },                                        \
+      .error(QLJS_TRANSLATE("octal literal may not have exponent"), characters)) \
+                                                                               \
+  QLJS_ERROR_TYPE(                                                             \
+      error_octal_literal_may_not_have_decimal,                                \
+      { source_code_span characters; },                                        \
+      .error(QLJS_TRANSLATE("octal literal may not have decimal"), characters)) \
+                                                                               \
+  QLJS_ERROR_TYPE(                                                             \
+      error_octal_literal_may_not_be_big_int,                                  \
+      { source_code_span characters; },                                        \
+      .error(QLJS_TRANSLATE("octal literal may not be BigInt"), characters))  \
                                                                                \
   QLJS_ERROR_TYPE(                                                             \
       error_redeclaration_of_global_variable, { identifier redeclaration; },   \
