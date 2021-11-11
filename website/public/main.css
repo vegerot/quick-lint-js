@@ -166,6 +166,18 @@ nav.breadcrumbs ol > li:not(:first-child)::before {
   content: "➤ ";
 }
 
+/* make "#" selected sections stand out */
+h4:target::before {
+  content: "👉"; /*TODO(😎): localize for different layout directions (e.g. rtl)*/
+}
+h4:target {
+  transition-property: box-shadow, transform;
+  transition-duration: 333ms;
+  transition-timing-function: ease;
+  box-shadow: 0 0.8rem 1.0rem 0.1rem rgba(0, 0, 0, 0.2);
+  transform: translateY(-0.4rem);
+}
+
 @media (prefers-color-scheme: dark) {
   a:link {
     color: #3398e0;
