@@ -26,6 +26,7 @@ namespace quick_lint_js {
 namespace {
 class Test_Parse_TypeScript_Generic_Arrow : public Test_Parse_Expression {};
 
+
 TEST_F(Test_Parse_TypeScript_Generic_Arrow, generic_arrow_function) {
   {
     Spy_Visitor p = test_parse_and_visit_statement(
