@@ -26,6 +26,74 @@ namespace quick_lint_js {
 namespace {
 class Test_Parse_TypeScript_Generic_Arrow : public Test_Parse_Expression {};
 
+TEST_F(Test_Parse_TypeScript_Generic_Arrow, asdf) {
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<T> => null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<T>=>null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<T>=> null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<RT<T>>=> null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+}
+
 TEST_F(Test_Parse_TypeScript_Generic_Arrow, generic_arrow_function) {
   {
     Spy_Visitor p = test_parse_and_visit_statement(
