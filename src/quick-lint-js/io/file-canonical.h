@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_IO_FILE_CANONICAL_H
-#define QUICK_LINT_JS_IO_FILE_CANONICAL_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No canonicalize_path on the web.
@@ -18,7 +17,7 @@
 #include <vector>
 
 namespace quick_lint_js {
-class canonical_path_result;
+class Canonical_Path_Result;
 
 // A filesystem path.
 //
@@ -34,16 +33,16 @@ class canonical_path_result;
 //   creation of the canonical_path.
 //
 // Exception to the above rules: A canonical_path can contain one or more '..'
-// components before canonical_path_result::drop_missing_components has been
+// components before Canonical_Path_Result::drop_missing_components has been
 // called.
-class canonical_path {
+class Canonical_Path {
  public:
   // Does not check the validity of the path.
-  explicit canonical_path(std::string &&path);
+  explicit Canonical_Path(std::string &&path);
 
-  std::string_view path() const &noexcept;
-  std::string &&path() && noexcept;
-  const char *c_str() const noexcept;
+  std::string_view path() const &;
+  std::string &&path() &&;
+  const char *c_str() const;
 
   // Add a new component to the end of the path.
   //
@@ -61,14 +60,12 @@ class canonical_path {
   // This function does not consult the filesystem.
   bool parent();
 
-  friend bool operator==(const canonical_path &,
-                         const canonical_path &) noexcept;
-  friend bool operator!=(const canonical_path &,
-                         const canonical_path &) noexcept;
-  friend bool operator==(std::string_view, const canonical_path &) noexcept;
-  friend bool operator!=(std::string_view, const canonical_path &) noexcept;
-  friend bool operator==(const canonical_path &, std::string_view) noexcept;
-  friend bool operator!=(const canonical_path &, std::string_view) noexcept;
+  friend bool operator==(const Canonical_Path &, const Canonical_Path &);
+  friend bool operator!=(const Canonical_Path &, const Canonical_Path &);
+  friend bool operator==(std::string_view, const Canonical_Path &);
+  friend bool operator!=(std::string_view, const Canonical_Path &);
+  friend bool operator==(const Canonical_Path &, std::string_view);
+  friend bool operator!=(const Canonical_Path &, std::string_view);
 
  private:
   std::string path_;
@@ -82,74 +79,72 @@ class canonical_path {
   // If path_ is a root path, then path_lengths_ is empty.
   std::vector<std::size_t> path_lengths_;
 
-  friend canonical_path_result;
+  friend Canonical_Path_Result;
 };
 
-class canonical_path_result {
+class Canonical_Path_Result {
  public:
-  explicit canonical_path_result(std::string &&path,
+  explicit Canonical_Path_Result(std::string &&path,
                                  std::size_t existing_path_length);
 
-  std::string_view path() const &noexcept;
-  std::string &&path() && noexcept;
-  const char *c_str() const noexcept;
+  std::string_view path() const &;
+  std::string &&path() &&;
+  const char *c_str() const;
 
-  const canonical_path &canonical() const &noexcept;
-  canonical_path &&canonical() && noexcept;
+  const Canonical_Path &canonical() const &;
+  Canonical_Path &&canonical() &&;
 
-  bool have_missing_components() const noexcept;
+  bool have_missing_components() const;
   void drop_missing_components();
 
  private:
-  canonical_path path_;
+  Canonical_Path path_;
   std::size_t existing_path_length_;
 };
 
-struct canonicalize_path_io_error {
+struct Canonicalize_Path_IO_Error {
   std::string input_path;
   std::string canonicalizing_path;
-  platform_file_io_error io_error;
+  Platform_File_IO_Error io_error;
 
   std::string to_string() const;
 
-  friend bool operator==(const canonicalize_path_io_error &,
-                         const canonicalize_path_io_error &) noexcept;
-  friend bool operator!=(const canonicalize_path_io_error &,
-                         const canonicalize_path_io_error &) noexcept;
+  friend bool operator==(const Canonicalize_Path_IO_Error &,
+                         const Canonicalize_Path_IO_Error &);
+  friend bool operator!=(const Canonicalize_Path_IO_Error &,
+                         const Canonicalize_Path_IO_Error &);
 };
 
-class canonicalize_observer {
+class Canonicalize_Observer {
  public:
-  virtual ~canonicalize_observer() = default;
+  virtual ~Canonicalize_Observer() = default;
 
   virtual void on_canonicalize_child_of_directory(const char *) = 0;
   virtual void on_canonicalize_child_of_directory(const wchar_t *) = 0;
 };
 
-result<canonical_path_result, canonicalize_path_io_error> canonicalize_path(
+Result<Canonical_Path_Result, Canonicalize_Path_IO_Error> canonicalize_path(
     const char *path);
-result<canonical_path_result, canonicalize_path_io_error> canonicalize_path(
+Result<Canonical_Path_Result, Canonicalize_Path_IO_Error> canonicalize_path(
     const std::string &path);
-result<canonical_path_result, canonicalize_path_io_error> canonicalize_path(
-    const char *path, canonicalize_observer *);
-result<canonical_path_result, canonicalize_path_io_error> canonicalize_path(
-    const std::string &path, canonicalize_observer *);
+Result<Canonical_Path_Result, Canonicalize_Path_IO_Error> canonicalize_path(
+    const char *path, Canonicalize_Observer *);
+Result<Canonical_Path_Result, Canonicalize_Path_IO_Error> canonicalize_path(
+    const std::string &path, Canonicalize_Observer *);
 
 template <>
-struct hasher<canonical_path> {
+struct Hasher<Canonical_Path> {
   using is_transparent = void;
 
-  std::size_t operator()(const canonical_path &path) const noexcept {
+  std::size_t operator()(const Canonical_Path &path) const {
     return std::hash<std::string_view>()(path.path());
   }
 
-  std::size_t operator()(std::string_view path) const noexcept {
+  std::size_t operator()(std::string_view path) const {
     return std::hash<std::string_view>()(path);
   }
 };
 }
-
-#endif
 
 #endif
 

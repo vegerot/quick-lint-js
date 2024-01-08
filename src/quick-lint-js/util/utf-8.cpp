@@ -3,32 +3,36 @@
 
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/port/warning.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <quick-lint-js/util/utf-8.h>
 
 namespace quick_lint_js {
 // See: https://www.unicode.org/versions/Unicode11.0.0/ch03.pdf
-char8* encode_utf_8(char32_t code_point, char8* out) {
-  auto byte = [](char32_t x) -> char8 {
-    QLJS_ASSERT(x <= 0x100);
-    return static_cast<char8>(x);
+Char8* encode_utf_8(char32_t code_point, Char8* out) {
+  auto append = [&out](char32_t x) -> void {
+    QLJS_ASSERT(x <= 0xff);
+    *out = static_cast<Char8>(x);
+    ++out;
   };
-  char32_t continuation = 0b1000'0000;
+  char32_t cont_flag = 0b1000'0000;  // 'cont' is short for 'continuation'.
+  char32_t cont_mask = 0b0011'1111;
+  // clang-format off
   if (code_point >= 0x10000) {
-    *out++ = byte(0b1111'0000 | (code_point >> 18));
-    *out++ = byte(continuation | ((code_point >> 12) & 0b0011'1111));
-    *out++ = byte(continuation | ((code_point >> 6) & 0b0011'1111));
-    *out++ = byte(continuation | ((code_point >> 0) & 0b0011'1111));
+    append((code_point >> (3 * 6)            ) | 0b1111'0000);
+    append((code_point >> (2 * 6) & cont_mask) | cont_flag);
+    append((code_point >> (1 * 6) & cont_mask) | cont_flag);
+    append((code_point >> (0 * 6) & cont_mask) | cont_flag);
   } else if (code_point >= 0x0800) {
-    *out++ = byte(0b1110'0000 | (code_point >> 12));
-    *out++ = byte(continuation | ((code_point >> 6) & 0b0011'1111));
-    *out++ = byte(continuation | ((code_point >> 0) & 0b0011'1111));
+    append((code_point >> (2 * 6)            ) | 0b1110'0000);
+    append((code_point >> (1 * 6) & cont_mask) | cont_flag);
+    append((code_point >> (0 * 6) & cont_mask) | cont_flag);
   } else if (code_point >= 0x80) {
-    *out++ = byte(0b1100'0000 | (code_point >> 6));
-    *out++ = byte(continuation | ((code_point >> 0) & 0b0011'1111));
+    append((code_point >> (1 * 6)            ) | 0b1100'0000);
+    append((code_point >> (0 * 6) & cont_mask) | cont_flag);
   } else {
-    *out++ = byte(code_point);
+    append(code_point);
   }
+  // clang-format on
   return out;
 }
 
@@ -36,39 +40,39 @@ namespace {
 QLJS_WARNING_PUSH
 QLJS_WARNING_IGNORE_GCC("-Wattributes")
 // See: https://www.unicode.org/versions/Unicode11.0.0/ch03.pdf
-[[gnu::always_inline]] decode_utf_8_result
-    decode_utf_8_inline(padded_string_view input) noexcept {
-  auto is_continuation_byte = [](std::uint8_t byte) noexcept -> bool {
+[[gnu::always_inline]] Decode_UTF8_Result
+    decode_utf_8_inline(Padded_String_View input) {
+  auto is_continuation_byte = [](std::uint8_t byte) -> bool {
     return (byte & 0b1100'0000) == 0b1000'0000;
   };
   const std::uint8_t* c = reinterpret_cast<const std::uint8_t*>(input.data());
   if (input.size() == 0) {
-    return decode_utf_8_result{
+    return Decode_UTF8_Result{
         .size = 0,
         .code_point = 0,
         .ok = false,
     };
   } else if (c[0] <= 0x7f) {
     // 1-byte sequence (0x00..0x7f, i.e. ASCII).
-    return decode_utf_8_result{
+    return Decode_UTF8_Result{
         .size = 1,
         .code_point = *c,
         .ok = true,
     };
   } else if ((c[0] & 0b1110'0000) == 0b1100'0000) {
     // 2-byte sequence (0xc0..0xdf).
-    static_assert(padded_string::padding_size >= 1);
+    static_assert(Padded_String::padding_size >= 1);
     bool byte_0_ok = c[0] >= 0xc2;
     bool byte_1_ok = is_continuation_byte(c[1]);
     if (byte_0_ok && byte_1_ok) {
-      return decode_utf_8_result{
+      return Decode_UTF8_Result{
           .size = 2,
           .code_point =
               (char32_t(c[0] & 0b0001'1111) << 6) | (c[1] & 0b0011'1111),
           .ok = true,
       };
     } else {
-      return decode_utf_8_result{
+      return Decode_UTF8_Result{
           .size = 1,
           .code_point = 0,
           .ok = false,
@@ -76,13 +80,15 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
     }
   } else if ((c[0] & 0b1111'0000) == 0b1110'0000) {
     // 3-byte sequence (0xe0..0xef).
-    static_assert(padded_string::padding_size >= 2);
+    static_assert(Padded_String::padding_size >= 2);
+    // clang-format off
     bool byte_1_ok = (c[0] == 0xe0 ? 0xa0 <= c[1] && c[1] <= 0xbf
-                                   : c[0] == 0xed ? 0x80 <= c[1] && c[1] <= 0x9f
-                                                  : is_continuation_byte(c[1]));
+                    : c[0] == 0xed ? 0x80 <= c[1] && c[1] <= 0x9f
+                    : is_continuation_byte(c[1]));
+    // clang-format on
     bool byte_2_ok = is_continuation_byte(c[2]);
     if (byte_1_ok && byte_2_ok) {
-      return decode_utf_8_result{
+      return Decode_UTF8_Result{
           .size = 3,
           .code_point = (char32_t(c[0] & 0b0000'1111) << 12) |
                         (char32_t(c[1] & 0b0011'1111) << 6) |
@@ -90,7 +96,7 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
           .ok = true,
       };
     } else {
-      return decode_utf_8_result{
+      return Decode_UTF8_Result{
           .size = byte_1_ok ? 2 : 1,
           .code_point = 0,
           .ok = false,
@@ -98,7 +104,7 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
     }
   } else if ((c[0] & 0b1111'1000) == 0b1111'0000) {
     // 4-byte sequence (0xf0..0xf7).
-    static_assert(padded_string::padding_size >= 3);
+    static_assert(Padded_String::padding_size >= 3);
     bool byte_0_ok = c[0] <= 0xf4;
     bool byte_1_ok = (c[0] == 0xf0 ? 0x90 <= c[1] && c[1] <= 0xbf
                                    : c[0] == 0xf4 ? 0x80 <= c[1] && c[1] <= 0x8f
@@ -106,7 +112,7 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
     bool byte_2_ok = is_continuation_byte(c[2]);
     bool byte_3_ok = is_continuation_byte(c[3]);
     if (byte_0_ok && byte_1_ok && byte_2_ok && byte_3_ok) {
-      return decode_utf_8_result{
+      return Decode_UTF8_Result{
           .size = 4,
           .code_point = (char32_t(c[0] & 0b0000'0111) << 18) |
                         (char32_t(c[1] & 0b0011'1111) << 12) |
@@ -115,7 +121,7 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
           .ok = true,
       };
     } else {
-      return decode_utf_8_result{
+      return Decode_UTF8_Result{
           .size = byte_0_ok && byte_1_ok ? byte_2_ok ? 3 : 2 : 1,
           .code_point = 0,
           .ok = false,
@@ -124,7 +130,7 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
   } else {
     // Continuation byte (0x80..0xbf), or 5-byte or longer sequence
     // (0xf8..0xff).
-    return decode_utf_8_result{
+    return Decode_UTF8_Result{
         .size = 1,
         .code_point = 0,
         .ok = false,
@@ -134,27 +140,26 @@ QLJS_WARNING_IGNORE_GCC("-Wattributes")
 QLJS_WARNING_POP
 }
 
-decode_utf_8_result decode_utf_8(padded_string_view input) noexcept {
+Decode_UTF8_Result decode_utf_8(Padded_String_View input) {
   return decode_utf_8_inline(input);
 }
 
-const char8* advance_lsp_characters_in_utf_8(string8_view utf_8,
-                                             int character_count) noexcept {
-  const char8* c = utf_8.data();
-  const char8* end = c + utf_8.size();
+const Char8* advance_lsp_characters_in_utf_8(String8_View utf_8,
+                                             int character_count) {
+  const Char8* c = utf_8.data();
+  const Char8* end = c + utf_8.size();
   if (narrow_cast<std::size_t>(character_count) >= utf_8.size()) {
     return end;
   }
 
   // TODO(strager): Avoid this copy!
-  padded_string utf_8_copy(utf_8);
+  Padded_String utf_8_copy(utf_8);
   c = utf_8_copy.data();
   end = utf_8_copy.null_terminator();
 
   int characters = 0;
   while (characters < character_count && c != end) {
-    decode_utf_8_result result =
-        decode_utf_8_inline(padded_string_view(c, end));
+    Decode_UTF8_Result result = decode_utf_8_inline(Padded_String_View(c, end));
     if (result.ok && result.code_point >= 0x10000) {
       // Count non-BMP characters as two characters.
       if (characters + 1 >= character_count) {
@@ -178,14 +183,14 @@ const char8* advance_lsp_characters_in_utf_8(string8_view utf_8,
   return utf_8.data() + (c - utf_8_copy.data());
 }
 
-std::ptrdiff_t count_lsp_characters_in_utf_8(padded_string_view utf_8,
-                                             int offset) noexcept {
-  const char8* c = utf_8.data();
-  const char8* end = utf_8.null_terminator();
-  const char8* stop = c + offset;
+std::ptrdiff_t count_lsp_characters_in_utf_8(Padded_String_View utf_8,
+                                             int offset) {
+  const Char8* c = utf_8.data();
+  const Char8* end = utf_8.null_terminator();
+  const Char8* stop = c + offset;
   std::ptrdiff_t count = 0;
   while (c < stop) {
-    decode_utf_8_result result = decode_utf_8(padded_string_view(c, end));
+    Decode_UTF8_Result result = decode_utf_8(Padded_String_View(c, end));
     if (result.ok) {
       if (c + result.size > stop) {
         break;
@@ -204,15 +209,15 @@ std::ptrdiff_t count_lsp_characters_in_utf_8(padded_string_view utf_8,
   return count;
 }
 
-std::size_t count_utf_8_characters(padded_string_view utf_8,
-                                   std::size_t offset) noexcept {
-  const char8* c = utf_8.data();
-  const char8* end = utf_8.null_terminator();
-  const char8* stop = c + offset;
+std::size_t count_utf_8_characters(Padded_String_View utf_8,
+                                   std::size_t offset) {
+  const Char8* c = utf_8.data();
+  const Char8* end = utf_8.null_terminator();
+  const Char8* stop = c + offset;
   std::size_t count = 0;
 
   while (c < stop) {
-    auto result = decode_utf_8(padded_string_view(c, end));
+    Decode_UTF8_Result result = decode_utf_8(Padded_String_View(c, end));
     if (!result.ok) {
       c++;
       count += 1;

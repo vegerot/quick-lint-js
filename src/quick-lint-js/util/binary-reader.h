@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_BINARY_READER_H
-#define QUICK_LINT_JS_UTIL_BINARY_READER_H
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -11,46 +10,35 @@
 #include <quick-lint-js/port/function-ref.h>
 #include <quick-lint-js/port/unreachable.h>
 #include <quick-lint-js/util/algorithm.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/byte-order.h>
+#include <quick-lint-js/util/cast.h>
 #include <utility>
 
 namespace quick_lint_js {
-// checked_binary_reader calls unexpected_end_of_file on error.
+// Checked_Binary_Reader calls unexpected_end_of_file on error.
 //
 // Invariant: When unexpected_end_of_file is called, it does not return.
-class checked_binary_reader {
+class Checked_Binary_Reader {
  public:
-  explicit checked_binary_reader(const std::uint8_t* data,
-                                 std::size_t data_size,
-                                 function_ref<void()> unexpected_end_of_file)
+  explicit Checked_Binary_Reader(
+      const std::uint8_t* data, std::size_t data_size,
+      Async_Function_Ref<void()> unexpected_end_of_file)
       : data_(data),
         data_end_(data + data_size),
         unexpected_end_of_file_(unexpected_end_of_file) {}
 
-  bool eof() const noexcept { return this->data_ == this->data_end_; }
+  bool eof() const { return this->data_ == this->data_end_; }
 
   std::uint8_t u8() { return *this->advance(1); }
 
   std::uint32_t u32_le() {
     const std::uint8_t* d = this->advance(4);
-    std::uint32_t result = (static_cast<std::uint32_t>(d[0]) << (8 * 0)) |
-                           (static_cast<std::uint32_t>(d[1]) << (8 * 1)) |
-                           (static_cast<std::uint32_t>(d[2]) << (8 * 2)) |
-                           (static_cast<std::uint32_t>(d[3]) << (8 * 3));
-    return result;
+    return load_u32_le(d);
   }
 
   std::uint64_t u64_le() {
     const std::uint8_t* d = this->advance(8);
-    std::uint64_t result = (static_cast<std::uint64_t>(d[0]) << (8 * 0)) |
-                           (static_cast<std::uint64_t>(d[1]) << (8 * 1)) |
-                           (static_cast<std::uint64_t>(d[2]) << (8 * 2)) |
-                           (static_cast<std::uint64_t>(d[3]) << (8 * 3)) |
-                           (static_cast<std::uint64_t>(d[4]) << (8 * 4)) |
-                           (static_cast<std::uint64_t>(d[5]) << (8 * 5)) |
-                           (static_cast<std::uint64_t>(d[6]) << (8 * 6)) |
-                           (static_cast<std::uint64_t>(d[7]) << (8 * 7));
-    return result;
+    return load_u64_le(d);
   }
 
   const std::uint8_t* advance(std::size_t size) {
@@ -84,11 +72,9 @@ class checked_binary_reader {
  private:
   const std::uint8_t* data_;
   const std::uint8_t* data_end_;
-  function_ref<void()> unexpected_end_of_file_;
+  Async_Function_Ref<void()> unexpected_end_of_file_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

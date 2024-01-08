@@ -22,7 +22,7 @@
 #include <quick-lint-js/port/vector-erase.h>
 #include <quick-lint-js/port/warning.h>
 #include <quick-lint-js/util/algorithm.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <string>
 #include <string_view>
 #include <sys/inotify.h>
@@ -35,9 +35,9 @@ int mock_inotify_force_init_error = 0;
 int mock_inotify_force_add_watch_error = 0;
 
 namespace {
-std::vector<posix_fd_file> garbage_inotify_fds;
+std::vector<POSIX_FD_File> garbage_inotify_fds;
 
-int mockable_inotify_init1(int flags) noexcept {
+int mockable_inotify_init1(int flags) {
   if (mock_inotify_force_init_error != 0) {
     errno = mock_inotify_force_init_error;
     return -1;
@@ -46,7 +46,7 @@ int mockable_inotify_init1(int flags) noexcept {
 }
 
 int mockable_inotify_add_watch(int fd, const char* pathname,
-                               std::uint32_t mask) noexcept {
+                               std::uint32_t mask) {
   if (mock_inotify_force_add_watch_error != 0) {
     errno = mock_inotify_force_add_watch_error;
     return -1;
@@ -55,22 +55,22 @@ int mockable_inotify_add_watch(int fd, const char* pathname,
 }
 }
 
-change_detecting_filesystem_inotify::change_detecting_filesystem_inotify() {
-  posix_fd_file inotify_fd(mockable_inotify_init1(IN_CLOEXEC | IN_NONBLOCK));
+Change_Detecting_Filesystem_Inotify::Change_Detecting_Filesystem_Inotify() {
+  POSIX_FD_File inotify_fd(mockable_inotify_init1(IN_CLOEXEC | IN_NONBLOCK));
   if (inotify_fd.valid()) {
     this->inotify_fd_ =
-        result<posix_fd_file, posix_file_io_error>(std::move(inotify_fd));
+        Result<POSIX_FD_File, POSIX_File_IO_Error>(std::move(inotify_fd));
   } else {
-    posix_file_io_error error{errno};
+    POSIX_File_IO_Error error{errno};
     this->inotify_fd_ = failed_result(error);
-    this->watch_errors_.emplace_back(watch_io_error{
+    this->watch_errors_.emplace_back(Watch_IO_Error{
         .path = "",
         .io_error = error,
     });
   }
 }
 
-change_detecting_filesystem_inotify::~change_detecting_filesystem_inotify() {
+Change_Detecting_Filesystem_Inotify::~Change_Detecting_Filesystem_Inotify() {
   // HACK(strager): On Linux 5.4.86, close() becomes *very* slow (10
   // milliseconds or more) because it summons RCU synchronization demons.
   // (This performance problem only matters in tests.) More details:
@@ -97,74 +97,73 @@ change_detecting_filesystem_inotify::~change_detecting_filesystem_inotify() {
   }
 }
 
-result<canonical_path_result, canonicalize_path_io_error>
-change_detecting_filesystem_inotify::canonicalize_path(
+Result<Canonical_Path_Result, Canonicalize_Path_IO_Error>
+Change_Detecting_Filesystem_Inotify::canonicalize_path(
     const std::string& path) {
   return quick_lint_js::canonicalize_path(path, this);
 }
 
-result<padded_string, read_file_io_error>
-change_detecting_filesystem_inotify::read_file(const canonical_path& path) {
-  canonical_path directory = path;
+Result<Padded_String, Read_File_IO_Error>
+Change_Detecting_Filesystem_Inotify::read_file(const Canonical_Path& path) {
+  Canonical_Path directory = path;
   directory.parent();
   bool ok = this->watch_directory(directory);
   if (!ok) {
-    this->watch_errors_.emplace_back(watch_io_error{
+    this->watch_errors_.emplace_back(Watch_IO_Error{
         .path = std::move(directory).path(),
-        .io_error = posix_file_io_error{errno},
+        .io_error = POSIX_File_IO_Error{errno},
     });
   }
 
-  result<padded_string, read_file_io_error> r =
+  Result<Padded_String, Read_File_IO_Error> r =
       quick_lint_js::read_file(path.c_str());
   if (!r.ok()) return r.propagate();
   return *std::move(r);
 }
 
-void change_detecting_filesystem_inotify::on_canonicalize_child_of_directory(
+void Change_Detecting_Filesystem_Inotify::on_canonicalize_child_of_directory(
     const char* path) {
   bool ok = this->watch_directory(path);
   if (!ok) {
-    this->watch_errors_.emplace_back(watch_io_error{
+    this->watch_errors_.emplace_back(Watch_IO_Error{
         .path = path,
-        .io_error = posix_file_io_error{errno},
+        .io_error = POSIX_File_IO_Error{errno},
     });
   }
 }
 
 QLJS_WARNING_PUSH
 QLJS_WARNING_IGNORE_GCC("-Wsuggest-attribute=noreturn")
-void change_detecting_filesystem_inotify::on_canonicalize_child_of_directory(
+void Change_Detecting_Filesystem_Inotify::on_canonicalize_child_of_directory(
     const wchar_t*) {
   // We don't use wchar_t paths on Linux.
   QLJS_UNREACHABLE();
 }
 QLJS_WARNING_POP
 
-std::optional<posix_fd_file_ref>
-change_detecting_filesystem_inotify::get_inotify_fd() noexcept {
+std::optional<POSIX_FD_File_Ref>
+Change_Detecting_Filesystem_Inotify::get_inotify_fd() {
   if (!this->inotify_fd_.ok()) {
     return std::nullopt;
   }
   return this->inotify_fd_->ref();
 }
 
-void change_detecting_filesystem_inotify::handle_poll_event(
-    const ::pollfd& event) {
-  if (event.revents & POLLIN) {
+void Change_Detecting_Filesystem_Inotify::handle_poll_event(short revents) {
+  if (revents & POLLIN) {
     this->read_inotify();
   }
-  if (event.revents & POLLERR) {
+  if (revents & POLLERR) {
     QLJS_UNIMPLEMENTED();
   }
 }
 
-std::vector<watch_io_error>
-change_detecting_filesystem_inotify::take_watch_errors() {
-  return std::exchange(this->watch_errors_, std::vector<watch_io_error>());
+std::vector<Watch_IO_Error>
+Change_Detecting_Filesystem_Inotify::take_watch_errors() {
+  return std::exchange(this->watch_errors_, std::vector<Watch_IO_Error>());
 }
 
-void change_detecting_filesystem_inotify::read_inotify() {
+void Change_Detecting_Filesystem_Inotify::read_inotify() {
   union inotify_event_buffer {
     ::inotify_event event;
     char buffer[sizeof(::inotify_event) + NAME_MAX + 1];
@@ -181,8 +180,8 @@ void change_detecting_filesystem_inotify::read_inotify() {
     ssize_t rc = ::read(this->inotify_fd_->get(), &buffer, sizeof(buffer));
     QLJS_ASSERT(rc <= narrow_cast<ssize_t>(sizeof(buffer)));
     if (rc == -1) {
-      int error = errno;
-      if (error == EAGAIN) {
+      POSIX_File_IO_Error error{.error = errno};
+      if (error.is_would_block_try_again_error()) {
         // We read all of the queuedevents.
         break;
       }
@@ -198,12 +197,12 @@ void change_detecting_filesystem_inotify::read_inotify() {
   }
 }
 
-bool change_detecting_filesystem_inotify::watch_directory(
-    const canonical_path& directory) {
+bool Change_Detecting_Filesystem_Inotify::watch_directory(
+    const Canonical_Path& directory) {
   return this->watch_directory(directory.c_str());
 }
 
-bool change_detecting_filesystem_inotify::watch_directory(
+bool Change_Detecting_Filesystem_Inotify::watch_directory(
     const char* directory) {
   if (!this->inotify_fd_.ok()) {
     // We already reported the error after calling inotify_init1. Don't report

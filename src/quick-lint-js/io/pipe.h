@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_IO_PIPE_H
-#define QUICK_LINT_JS_IO_PIPE_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No pipes on the web.
@@ -11,15 +10,13 @@
 #include <quick-lint-js/io/file-handle.h>
 
 namespace quick_lint_js {
-struct pipe_fds {
-  platform_file reader;
-  platform_file writer;
+struct Pipe_FDs {
+  Platform_File reader;
+  Platform_File writer;
 };
 
-pipe_fds make_pipe();
+Pipe_FDs make_pipe();
 }
-
-#endif
 
 #endif
 

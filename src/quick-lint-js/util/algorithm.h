@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_ALGORITHM_H
-#define QUICK_LINT_JS_UTIL_ALGORITHM_H
+#pragma once
 
 #include <algorithm>
 #include <iterator>
@@ -11,8 +10,8 @@
 
 namespace quick_lint_js {
 // Backport of C++20 std::copy.
-template <class InputIt, class OutputIt>
-constexpr OutputIt copy(InputIt begin, InputIt end, OutputIt out_begin) {
+template <class Input_It, class Output_It>
+constexpr Output_It copy(Input_It begin, Input_It end, Output_It out_begin) {
   while (begin != end) {
     *out_begin = *begin;
     ++begin;
@@ -27,20 +26,10 @@ It find_first(It begin, It end, const T& needle) {
   return std::find(begin, end, needle);
 }
 
-// Like std::find, but the element must exist.
-//
-// Precondition: std::find(begin, end, needle) != end
-// Postcondition: result != end
-template <class It, class T>
-It find_existing(It begin, It end, const T& needle) {
-  It result = std::find(begin, end, needle);
-  QLJS_ASSERT(result != end);
-  return result;
-}
-
-template <class Range, class T>
-auto find_existing(Range&& haystack, const T& needle) {
-  return find_existing(std::begin(haystack), std::end(haystack), needle);
+template <class Range, class Predicate>
+auto find_first_if(Range&& haystack, Predicate&& predicate) {
+  return std::find_if(std::begin(haystack), std::end(haystack),
+                      std::forward<Predicate>(predicate));
 }
 
 // Like std::find, but the element must exist at most once.
@@ -141,14 +130,14 @@ bool contains(Range&& haystack, const T& needle) {
 }
 
 // An alias for std::ranges::equal.
-template <class RangeA, class RangeB>
-bool ranges_equal(RangeA&& a, RangeB&& b) {
+template <class Range_A, class Range_B>
+bool ranges_equal(Range_A&& a, Range_B&& b) {
   return std::equal(std::begin(a), std::end(a), std::begin(b), std::end(b));
 }
 
 // An alias for std::ranges::equal.
-template <class RangeA, class RangeB, class Pred>
-auto ranges_equal(RangeA&& a, RangeB&& b, Pred&& predicate) {
+template <class Range_A, class Range_B, class Pred>
+auto ranges_equal(Range_A&& a, Range_B&& b, Pred&& predicate) {
   return std::equal(std::begin(a), std::end(a), std::begin(b), std::end(b),
                     predicate);
 }
@@ -177,8 +166,6 @@ void reverse(Range&& r) {
   std::reverse(std::begin(r), std::end(r));
 }
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

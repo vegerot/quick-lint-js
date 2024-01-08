@@ -1,7 +1,8 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-import { TraceReader, TraceEventType } from "./trace.mjs";
+import { LSPReplayer } from "./lsp-replay.mjs";
+import { TraceReader, TraceEventType, TraceLSPDocumentType } from "./trace.mjs";
 
 let DEBUG_LSP_LOG = false;
 
@@ -67,6 +68,11 @@ class VectorProfileView {
       );
     }
   }
+
+  reset() {
+    this.maxSizeHistogramElementByOwner.clear();
+    this.element.replaceChildren();
+  }
 }
 
 let vectorProfileView = new VectorProfileView(
@@ -95,25 +101,19 @@ class EventEmitter {
   }
 }
 
-class DebugServerSocket extends EventEmitter {
-  constructor(webSocket) {
+class TraceProcessor extends EventEmitter {
+  constructor() {
     super();
 
-    this.webSocket = webSocket;
     this.traceReaders = new Map(); // Key is the thread index.
-
-    this.webSocket.addEventListener("message", (event) => {
-      this._onMessage(event);
-    });
   }
 
-  _onMessage(event) {
-    let messageData = event.data;
-    let threadIndex = new DataView(messageData).getBigUint64(
-      0,
-      /*littleEndian=*/ true
-    );
-
+  /**
+   * @param {number} threadIndex
+   * @param {Uint8Array} bytes
+   * @param {number} offset
+   */
+  appendBytes(threadIndex, bytes, offset = 0) {
     let reader = this.traceReaders.get(threadIndex);
     if (reader === undefined) {
       reader = new TraceReader();
@@ -125,7 +125,7 @@ class DebugServerSocket extends EventEmitter {
       return;
     }
 
-    reader.appendBytes(messageData, 8);
+    reader.appendBytes(bytes, offset);
     for (let event of reader.pullNewEvents()) {
       switch (event.eventType) {
         case TraceEventType.INIT:
@@ -153,6 +153,9 @@ class DebugServerSocket extends EventEmitter {
         case TraceEventType.PROCESS_ID:
           this.emit("processIDEvent", event);
           break;
+        case TraceEventType.LSP_DOCUMENTS:
+          this.emit("lspDocumentsEvent", event);
+          break;
         default:
           this.emit("unknownTraceEvent", event);
           break;
@@ -161,6 +164,27 @@ class DebugServerSocket extends EventEmitter {
     if (reader.error !== null) {
       this.emit("error", reader.error);
     }
+  }
+}
+
+class DebugServerSocket extends TraceProcessor {
+  constructor(webSocket) {
+    super();
+
+    this.webSocket = webSocket;
+
+    this.webSocket.addEventListener("message", (event) => {
+      this._onMessage(event);
+    });
+  }
+
+  _onMessage(event) {
+    let messageData = event.data;
+    let threadIndex = new DataView(messageData).getBigUint64(
+      0,
+      /*littleEndian=*/ true
+    );
+    this.appendBytes(threadIndex, new Uint8Array(messageData), 8);
   }
 
   static connectAsync() {
@@ -204,6 +228,10 @@ class LSPLogDetailsView {
       }
     }
   }
+
+  reset() {
+    this._paramsElement.replaceChildren();
+  }
 }
 
 class LSPLogView {
@@ -221,6 +249,13 @@ class LSPLogView {
     this._elementToMessage = new Map();
 
     this._selectedMessageElement = null;
+  }
+
+  reset() {
+    this._selectedMessageElement = null;
+    this._elementToMessage.clear();
+    this._dataElement.replaceChildren();
+    this._detailsView.reset();
   }
 
   addClientToServerMessage(_timestamp, json) {
@@ -273,6 +308,180 @@ class LSPLogView {
   }
 }
 
+class LSPStateDetailsView {
+  constructor(rootElement) {
+    this._rootElement = rootElement;
+    this._documentLanguageIDElement =
+      rootElement.querySelector(".lsp-language-id");
+    this._documentTextElement = rootElement.querySelector(".lsp-document-text");
+  }
+
+  setState(doc) {
+    if (doc === null) {
+      this._documentTextElement.textContent = "";
+      this._documentLanguageIDElement.textContent = "";
+    } else {
+      if (doc.text === LSPReplayer.UNKNOWN_DOCUMENT_TEXT) {
+        this._documentTextElement.textContent = "<unknown>";
+      } else {
+        this._documentTextElement.textContent = doc.text;
+      }
+      if (doc.languageID === LSPReplayer.UNKNOWN_DOCUMENT_LANGUAGE_ID) {
+        this._documentLanguageIDElement.textContent = "<unknown>";
+      } else {
+        this._documentLanguageIDElement.textContent = doc.languageID;
+      }
+    }
+  }
+
+  reset() {
+    this.setState(null);
+  }
+}
+
+class LSPStateView {
+  constructor(rootElement) {
+    this._rootElement = rootElement;
+    this._documentListElement = rootElement.querySelector(".lsp-documents");
+    this._detailsView = new LSPStateDetailsView(
+      rootElement.querySelector(".lsp-details")
+    );
+
+    this._documentListElement.addEventListener("click", (event) => {
+      this._onClick(event);
+    });
+
+    this._elementToDocumentState = new Map();
+
+    this._selectedDocumentElement = null;
+    this._selectedDocumentURI = null;
+  }
+
+  setDocuments(_timestamp, documents) {
+    // TODO(strager): Preserve scroll and text selection.
+    this._documentListElement.replaceChildren();
+    this._elementToDocumentState.clear();
+
+    let selectedDocs = documents.filter(
+      (doc) => doc.uri === this._selectedDocumentURI
+    );
+    let selectedDoc = selectedDocs.length === 1 ? selectedDocs[0] : null;
+
+    for (let doc of documents) {
+      let element = document.createElement("li");
+      element.classList.add("lsp-document");
+      element.classList.toggle(
+        "lsp-unknown-document-type",
+        doc.type === TraceLSPDocumentType.UNKNOWN || doc.type === null
+      );
+      element.textContent = doc.uri;
+
+      this._documentListElement.appendChild(element);
+      this._elementToDocumentState.set(element, doc);
+
+      if (doc === selectedDoc) {
+        element.classList.add("selected");
+        this._selectedDocumentElement = element;
+      }
+    }
+
+    this._detailsView.setState(selectedDoc);
+  }
+
+  _onClick(event) {
+    let element = event.target;
+    while (element !== document && element !== event.currentTarget) {
+      let doc = this._elementToDocumentState.get(element);
+      if (doc !== undefined) {
+        this._onMessageClicked(element, doc);
+        break;
+      }
+      element = element.parentNode;
+    }
+  }
+
+  _onMessageClicked(element, doc) {
+    if (this._selectedDocumentElement !== null) {
+      this._selectedDocumentElement.classList.remove("selected");
+    }
+    element.classList.add("selected");
+    this._selectedDocumentElement = element;
+    this._selectedDocumentURI = doc.uri;
+
+    this._detailsView.setState(doc);
+  }
+
+  reset() {
+    this._elementToDocumentState.clear();
+    this._documentListElement.replaceChildren();
+    this._selectedDocumentElement = null;
+    this._selectedDocumentURI = null;
+    this._detailsView.reset();
+  }
+}
+
+class LSPReplayView {
+  constructor(rootElement) {
+    this._rootElement = rootElement;
+    this._currentStateView = new LSPStateView(rootElement);
+    this._replayer = new LSPReplayer();
+
+    this._replayLogBodyElement = rootElement.querySelector(
+      ".lsp-replay-log tbody"
+    );
+    this._replayLogBodyElement.addEventListener("click", (event) => {
+      this._onClickReplayLog(event);
+    });
+
+    this._selectedLogEntryElement = null;
+    this._selectedLogEntryIndex = null;
+  }
+
+  addClientToServerMessage(_timestamp, json) {
+    let message = JSON.parse(json);
+
+    let messageIndex = this._replayer.appendClientToServerMessage(message);
+
+    let tr = document.createElement("tr");
+    let td = document.createElement("td");
+    td.textContent = message.method;
+    tr.appendChild(td);
+    tr.dataset.messageIndex = messageIndex;
+    this._replayLogBodyElement.appendChild(tr);
+  }
+
+  _onClickReplayLog(event) {
+    let clickedLogEntryElement = event.target.closest("[data-message-index]");
+    if (clickedLogEntryElement === null) {
+      return;
+    }
+    this._onLogEntryClicked(
+      clickedLogEntryElement,
+      parseInt(clickedLogEntryElement.dataset.messageIndex, 10)
+    );
+  }
+
+  _onLogEntryClicked(element, logEntryIndex) {
+    if (this._selectedLogEntryElement !== null) {
+      this._selectedLogEntryElement.classList.remove("selected");
+    }
+    element.classList.add("selected");
+    this._selectedLogEntryElement = element;
+    this._selectedLogEntryIndex = logEntryIndex;
+
+    let documents = this._replayer.getOpenedDocumentsBeforeMessageIndex(
+      logEntryIndex + 1
+    );
+    this._currentStateView.setDocuments(/*timestamp=*/ null, documents);
+  }
+
+  reset() {
+    this._replayLogBodyElement.replaceChildren();
+    this._replayer = new LSPReplayer();
+    this._currentStateView.reset();
+  }
+}
+
 function createElementWithText(tagName, textContent) {
   let element = document.createElement(tagName);
   element.textContent = textContent;
@@ -280,6 +489,8 @@ function createElementWithText(tagName, textContent) {
 }
 
 let lspLog = new LSPLogView(document.getElementById("lsp-log"));
+let lspState = new LSPStateView(document.getElementById("lsp-state"));
+let lspReplay = new LSPReplayView(document.getElementById("lsp-replay"));
 
 class ServerInfoView {
   constructor(rootElement) {
@@ -301,34 +512,58 @@ class ServerInfoView {
   setVersion(value) {
     this._versionElement.textContent = value;
   }
+
+  reset() {
+    this.setProcessID("");
+    this.setVersion("");
+  }
 }
 
 let serverInfo = new ServerInfoView(document.getElementById("server-info"));
 
-DebugServerSocket.connectAsync().then((socket) => {
-  socket.on("error", (error) => {
+function connectTraceProcessorToViews(traceProcessor) {
+  traceProcessor.on("error", (error) => {
     console.error(error);
   });
-  socket.on("initEvent", ({ version }) => {
+  traceProcessor.on("initEvent", ({ version }) => {
     serverInfo.setVersion(version);
   });
-  socket.on("processIDEvent", ({ processID }) => {
+  traceProcessor.on("processIDEvent", ({ processID }) => {
     serverInfo.setProcessID(processID);
   });
-  socket.on("lspClientToServerMessageEvent", ({ timestamp, body }) => {
+  traceProcessor.on("lspClientToServerMessageEvent", ({ timestamp, body }) => {
     lspLog.addClientToServerMessage(timestamp, body);
+    lspReplay.addClientToServerMessage(timestamp, body);
   });
-  socket.on("vectorMaxSizeHistogramByOwner", ({ timestamp, entries }) => {
-    for (let { owner, maxSizeEntries } of entries) {
-      vectorProfileView.updateMaxSizeHistogram({
-        owner,
-        maxSizeEntries: maxSizeEntries.map((entry) => ({
-          maxSize: Number(entry.maxSize),
-          count: Number(entry.count),
-        })),
-      });
+  traceProcessor.on("lspDocumentsEvent", ({ timestamp, documents }) => {
+    lspState.setDocuments(timestamp, documents);
+  });
+  traceProcessor.on(
+    "vectorMaxSizeHistogramByOwner",
+    ({ timestamp, entries }) => {
+      for (let { owner, maxSizeEntries } of entries) {
+        vectorProfileView.updateMaxSizeHistogram({
+          owner,
+          maxSizeEntries: maxSizeEntries.map((entry) => ({
+            maxSize: Number(entry.maxSize),
+            count: Number(entry.count),
+          })),
+        });
+      }
     }
-  });
+  );
+}
+
+function resetViews() {
+  lspLog.reset();
+  lspReplay.reset();
+  lspState.reset();
+  serverInfo.reset();
+  vectorProfileView.reset();
+}
+
+DebugServerSocket.connectAsync().then((socket) => {
+  connectTraceProcessorToViews(socket);
 });
 
 class TabBarView {
@@ -364,19 +599,59 @@ new TabBarView(
   document.querySelector("main.tabbed-container")
 );
 
+let attachTraceInputElement = document.querySelector(
+  "#attach-trace input[name=trace]"
+);
+attachTraceInputElement.addEventListener("change", (event) => {
+  resetViews();
+  let traceProcessor = new TraceProcessor();
+  connectTraceProcessorToViews(traceProcessor);
+
+  let files = [...event.target.files];
+  Promise.all(
+    files.map(
+      async (file, index) =>
+        await addTraceFileFromStreamAsync(traceProcessor, file.stream(), index)
+    )
+  )
+    .then(() => {
+      console.log("done processing attached files");
+    })
+    .catch((error) => {
+      console.error("error while processing attached files", error);
+    });
+});
+
+async function addTraceFileFromStreamAsync(
+  traceProcessor,
+  stream,
+  threadIndex
+) {
+  for await (let chunk of stream) {
+    traceProcessor.appendBytes(threadIndex, chunk);
+  }
+}
+
 if (DEBUG_LSP_LOG) {
-  for (let i = 0; i < 10; ++i) {
-    lspLog.addClientToServerMessage(
+  for (let view of [lspLog, lspReplay]) {
+    for (let i = 0; i < 10; ++i) {
+      view.addClientToServerMessage(
+        0,
+        `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"console.log('hello world');\\n\\n"}],"textDocument":{"uri":"file:///home/strager/Projects/quicklint-js/hello.js","version":4264}}}`
+      );
+      view.addClientToServerMessage(
+        0,
+        `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"console.log('hello world');\\n"}],"textDocument":{"uri":"file:///home/strager/Projects/quicklint-js/hello.js","version":4265}}}`
+      );
+      view.addClientToServerMessage(
+        0,
+        `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"console.log('hello world');\\n"}],"textDocument":{"uri":"file:///home/strager/Projects/quicklint-js/hello.js","version":4266}}}`
+      );
+    }
+
+    view.addClientToServerMessage(
       0,
-      `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"console.log('hello world');\\n\\n"}],"textDocument":{"uri":"file:///home/strager/Projects/quicklint-js/hello.js","version":4264}}}`
-    );
-    lspLog.addClientToServerMessage(
-      0,
-      `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"console.log('hello world');\\n"}],"textDocument":{"uri":"file:///home/strager/Projects/quicklint-js/hello.js","version":4265}}}`
-    );
-    lspLog.addClientToServerMessage(
-      0,
-      `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"console.log('hello world');\\n"}],"textDocument":{"uri":"file:///home/strager/Projects/quicklint-js/hello.js","version":4266}}}`
+      `{"method":"textDocument/didChange","jsonrpc":"2.0","params":{"contentChanges":[{"text":"x","range":{"start":{"character":0,"line":0},"end":{"character":1,"line":0}}}],"textDocument":{"uri":"file:///change-without-open.js","version":1}}}`
     );
   }
 }

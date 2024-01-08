@@ -8,45 +8,46 @@
 #include <quick-lint-js/container/monotonic-allocator.h>
 #include <quick-lint-js/container/optional.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/container/vector.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/lsp/lsp-location.h>
 #include <quick-lint-js/port/unreachable.h>
 #include <quick-lint-js/web-demo-location.h>
-#include <string>
+#include <string_view>
 
 namespace quick_lint_js {
 template <class Diagnostic, class Locator>
-c_api_diag_reporter<Diagnostic, Locator>::c_api_diag_reporter() = default;
+C_API_Diag_Reporter<Diagnostic, Locator>::C_API_Diag_Reporter() = default;
 
 template <class Diagnostic, class Locator>
-void c_api_diag_reporter<Diagnostic, Locator>::set_input(
-    padded_string_view input) {
+void C_API_Diag_Reporter<Diagnostic, Locator>::set_input(
+    Padded_String_View input) {
   this->input_ = input.data();
   this->locator_.emplace(input);
 }
 
 template <class Diagnostic, class Locator>
-void c_api_diag_reporter<Diagnostic, Locator>::reset() {
+void C_API_Diag_Reporter<Diagnostic, Locator>::reset() {
   this->diagnostics_.clear();
   // TODO(strager): Release allocated string memory.
 }
 
 template <class Diagnostic, class Locator>
-void c_api_diag_reporter<Diagnostic, Locator>::set_translator(translator t) {
+void C_API_Diag_Reporter<Diagnostic, Locator>::set_translator(Translator t) {
   this->translator_ = t;
 }
 
 template <class Diagnostic, class Locator>
-void c_api_diag_reporter<Diagnostic, Locator>::report_impl(diag_type type,
+void C_API_Diag_Reporter<Diagnostic, Locator>::report_impl(Diag_Type type,
                                                            void *diag) {
-  c_api_diag_formatter formatter(this);
+  C_API_Diag_Formatter formatter(this);
   formatter.format(get_diagnostic_info(type), diag);
 }
 
 template <class Diagnostic, class Locator>
-const Diagnostic *c_api_diag_reporter<Diagnostic, Locator>::get_diagnostics() {
+const Diagnostic *C_API_Diag_Reporter<Diagnostic, Locator>::get_diagnostics() {
   // Null-terminate the returned diagnostics.
   this->diagnostics_.emplace_back();
 
@@ -54,27 +55,30 @@ const Diagnostic *c_api_diag_reporter<Diagnostic, Locator>::get_diagnostics() {
 }
 
 template <class Diagnostic, class Locator>
-char8 *c_api_diag_reporter<Diagnostic, Locator>::allocate_c_string(
-    string8_view string) {
-  char8 *result =
-      this->string_allocator_.template allocate_uninitialized_array<char8>(
+Char8 *C_API_Diag_Reporter<Diagnostic, Locator>::allocate_c_string(
+    String8_View string) {
+  // TODO(strager): Use Linked_Bump_Allocator::new_objects_copy.
+  Span<Char8> result =
+      this->string_allocator_.template allocate_uninitialized_span<Char8>(
           string.size() + 1);
-  std::uninitialized_copy(string.begin(), string.end(), result);
-  result[string.size()] = u8'\0';
-  return result;
+  Char8 *result_end =
+      std::uninitialized_copy(string.begin(), string.end(), result.begin());
+  *result_end++ = u8'\0';
+  QLJS_ASSERT(result_end == result.end());
+  return result.data();
 }
 
 template <class Diagnostic, class Locator>
-c_api_diag_formatter<Diagnostic, Locator>::c_api_diag_formatter(
-    c_api_diag_reporter<Diagnostic, Locator> *reporter)
-    : diagnostic_formatter<c_api_diag_formatter<Diagnostic, Locator>>(
+C_API_Diag_Formatter<Diagnostic, Locator>::C_API_Diag_Formatter(
+    C_API_Diag_Reporter<Diagnostic, Locator> *reporter)
+    : Diagnostic_Formatter<C_API_Diag_Formatter<Diagnostic, Locator>>(
           reporter->translator_),
       reporter_(reporter) {}
 
 template <class Diagnostic, class Locator>
-void c_api_diag_formatter<Diagnostic, Locator>::write_before_message(
-    std::string_view, diagnostic_severity sev, const source_code_span &) {
-  if (sev == diagnostic_severity::note) {
+void C_API_Diag_Formatter<Diagnostic, Locator>::write_before_message(
+    std::string_view, Diagnostic_Severity sev, const Source_Code_Span &) {
+  if (sev == Diagnostic_Severity::note) {
     // Don't write notes. Only write the main message.
     return;
   }
@@ -82,40 +86,40 @@ void c_api_diag_formatter<Diagnostic, Locator>::write_before_message(
 }
 
 template <class Diagnostic, class Locator>
-void c_api_diag_formatter<Diagnostic, Locator>::write_message_part(
-    std::string_view, diagnostic_severity sev, string8_view message) {
-  if (sev == diagnostic_severity::note) {
+void C_API_Diag_Formatter<Diagnostic, Locator>::write_message_part(
+    std::string_view, Diagnostic_Severity sev, String8_View message) {
+  if (sev == Diagnostic_Severity::note) {
     // Don't write notes. Only write the main message.
     return;
   }
-  this->current_message_.append(message);
+  this->current_message_ += message;
 }
 
 template <class Diagnostic, class Locator>
-void c_api_diag_formatter<Diagnostic, Locator>::write_after_message(
-    std::string_view code, diagnostic_severity sev,
-    const source_code_span &origin) {
-  qljs_severity diag_severity = qljs_severity_error;
+void C_API_Diag_Formatter<Diagnostic, Locator>::write_after_message(
+    std::string_view code, Diagnostic_Severity sev,
+    const Source_Code_Span &origin) {
+  QLJS_Severity diag_severity = qljs_severity_error;
   switch (sev) {
-  case diagnostic_severity::note:
+  case Diagnostic_Severity::note:
     // Don't write notes. Only write the main message.
     return;
-  case diagnostic_severity::error:
+  case Diagnostic_Severity::error:
     diag_severity = qljs_severity_error;
     break;
-  case diagnostic_severity::warning:
+  case Diagnostic_Severity::warning:
     diag_severity = qljs_severity_warning;
     break;
   }
   Diagnostic &diag = this->reporter_->diagnostics_.emplace_back();
-  if constexpr (std::is_same_v<Locator, lsp_locator>) {
-    lsp_range r = this->reporter_->locator_->range(origin);
+  if constexpr (std::is_same_v<Locator, LSP_Locator>) {
+    LSP_Range r = this->reporter_->locator_->range(origin);
     diag.start_line = r.start.line;
     diag.start_character = r.start.character;
     diag.end_line = r.end.line;
     diag.end_character = r.end.character;
   } else {
-    web_demo_source_range r = this->reporter_->locator_->range(origin);
+    Web_Demo_Source_Range r = this->reporter_->locator_->range(origin);
     diag.begin_offset = narrow_cast<int>(r.begin);
     diag.end_offset = narrow_cast<int>(r.end);
   }
@@ -123,13 +127,13 @@ void c_api_diag_formatter<Diagnostic, Locator>::write_after_message(
   char *code_end = std::copy(code.begin(), code.end(), &diag.code[0]);
   *code_end = '\0';
 
-  diag.message = reinterpret_cast<const char *>(
-      this->reporter_->allocate_c_string(this->current_message_));
+  this->current_message_.push_back(u8'\0');
+  diag.message = reinterpret_cast<const char *>(this->current_message_.data());
   diag.severity = diag_severity;
 }
 
-template class c_api_diag_formatter<qljs_web_demo_diagnostic, web_demo_locator>;
-template class c_api_diag_reporter<qljs_web_demo_diagnostic, web_demo_locator>;
+template class C_API_Diag_Formatter<QLJS_Web_Demo_Diagnostic, Web_Demo_Locator>;
+template class C_API_Diag_Reporter<QLJS_Web_Demo_Diagnostic, Web_Demo_Locator>;
 }
 
 // quick-lint-js finds bugs in JavaScript programs.

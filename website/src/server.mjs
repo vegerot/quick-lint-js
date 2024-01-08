@@ -1,7 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-import assert from "assert";
+import assert from "node:assert";
 import colors from "@colors/colors/safe.js";
 import {
   IndexConflictVFSError,
@@ -10,7 +10,7 @@ import {
   VFS,
   VFSDirectory,
 } from "./vfs.mjs";
-import { performance } from "perf_hooks";
+import { performance } from "node:perf_hooks";
 
 export function makeServer({ wwwRootPath }) {
   let vfs = new VFS(wwwRootPath);
@@ -56,13 +56,13 @@ export function makeServer({ wwwRootPath }) {
     let listing = await vfs.listDirectoryAsync(directoryURI);
     let entry = listing.get(childName);
     if (entry === null || entry instanceof VFSDirectory) {
-      response.writeHeader(404);
+      response.writeHead(404);
       response.end();
     } else if (entry instanceof ServerConfigVFSFile) {
-      response.writeHeader(403);
+      response.writeHead(403);
       response.end();
     } else if (entry instanceof IndexConflictVFSError) {
-      response.writeHeader(409);
+      response.writeHead(409);
       response.end();
     } else {
       let headers = { "content-type": entry.getContentType() };
@@ -70,7 +70,7 @@ export function makeServer({ wwwRootPath }) {
       if (request.method === "GET") {
         data = await entry.getContentsAsync();
       }
-      response.writeHeader(200, headers);
+      response.writeHead(200, headers);
       response.end(data);
     }
   }

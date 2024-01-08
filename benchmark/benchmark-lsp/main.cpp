@@ -1,8 +1,6 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#include <boost/json/serialize.hpp>
-#include <boost/json/value.hpp>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -11,11 +9,11 @@
 #include <map>
 #include <memory>
 #include <quick-lint-js/benchmark-config.h>
-#include <quick-lint-js/boost-json.h>
 #include <quick-lint-js/cli/arg-parser.h>
 #include <quick-lint-js/container/result.h>
 #include <quick-lint-js/container/string-view.h>
 #include <quick-lint-js/io/file.h>
+#include <quick-lint-js/io/output-stream.h>
 #include <quick-lint-js/lsp-benchmarks.h>
 #include <quick-lint-js/lsp-logging.h>
 #include <quick-lint-js/lsp-server-process.h>
@@ -30,25 +28,25 @@ bool log_colors = false;
 }
 
 namespace {
-struct benchmark_run_config {
+struct Benchmark_Run_Config {
   int warmup_iterations;
   int measurement_iterations;
 
   int samples;
 };
 
-struct parsed_args {
+struct Parsed_Args {
   std::string_view benchmark_filter = std::string_view();
   const char* output_json_path = nullptr;
   bool list_benchmarks = false;
-  benchmark_run_config run_config = {
+  Benchmark_Run_Config run_config = {
       .warmup_iterations = 1,
       .measurement_iterations = 10,
       .samples = 1,
   };
 };
 
-parsed_args parse_arguments(int argc, char** argv);
+Parsed_Args parse_arguments(int argc, char** argv);
 
 // {
 //   "data": [
@@ -62,35 +60,29 @@ parsed_args parse_arguments(int argc, char** argv);
 //     }
 //   ]
 // }
-class benchmark_results_writer {
+class Benchmark_Results_Writer {
  public:
   // json_output is optional.
   // verbose_output is optional.
-  explicit benchmark_results_writer(FILE* json_output, FILE* verbose_output)
+  explicit Benchmark_Results_Writer(FILE* json_output, FILE* verbose_output)
       : json_output_(json_output), verbose_output_(verbose_output) {}
 
-  void add_metadata(const benchmark_config_program& program_config) {
+  void add_metadata(const Benchmark_Config_Program& program_config) {
     if (this->json_output_) {
-      ::boost::json::object out_metadata;
-      for (auto& [key, value] : program_config.get_metadata()) {
-        out_metadata[key] = value;
-      }
-      this->metadatas_[program_config.name] = out_metadata;
+      this->metadatas_[program_config.name] = program_config.get_metadata();
     }
   }
 
   void begin_benchmark(const char* name,
-                       const benchmark_run_config& run_config) {
-    QLJS_ASSERT(this->current_benchmark_.empty());
-    QLJS_ASSERT(this->current_benchmark_samples_.empty());
+                       const Benchmark_Run_Config& run_config) {
+    QLJS_ASSERT(this->current_benchmark_.samples.empty());
 
-    this->current_benchmark_.emplace("benchmarkName", name);
-    this->current_benchmark_.emplace("warmupIterations",
-                                     run_config.warmup_iterations);
-    this->current_benchmark_.emplace("measurementIterations",
-                                     run_config.measurement_iterations);
+    this->current_benchmark_.benchmark_name = name;
+    this->current_benchmark_.warmup_iterations = run_config.warmup_iterations;
+    this->current_benchmark_.measurement_iterations =
+        run_config.measurement_iterations;
 
-    this->current_benchmark_samples_.reserve(
+    this->current_benchmark_.samples.reserve(
         narrow_cast<std::size_t>(run_config.samples));
 
     if (this->verbose_output_) {
@@ -100,23 +92,13 @@ class benchmark_results_writer {
   }
 
   void end_benchmark() {
-    ::boost::json::object& samples =
-        this->current_benchmark_["samples"].emplace_object();
-    ::boost::json::array& duration_per_iteration_array =
-        samples["durationPerIteration"].emplace_array();
-    for (sample& s : this->current_benchmark_samples_) {
-      duration_per_iteration_array.push_back(s.duration_per_iteration);
-    }
-
-    this->datas_.emplace_back(std::move(this->current_benchmark_));
-
-    this->current_benchmark_.clear();
-    this->current_benchmark_samples_.clear();
+    this->benchmark_results_.emplace_back(std::move(this->current_benchmark_));
+    this->current_benchmark_ = Benchmark_Result();
   }
 
   void write_sample(double duration_per_iteration) {
-    this->current_benchmark_samples_.emplace_back(
-        sample{.duration_per_iteration = duration_per_iteration});
+    this->current_benchmark_.samples.emplace_back(
+        Sample{.duration_per_iteration = duration_per_iteration});
 
     if (this->verbose_output_) {
       std::fprintf(this->verbose_output_, "%.2f ms per iteration\n",
@@ -127,13 +109,67 @@ class benchmark_results_writer {
 
   void done() {
     if (this->json_output_) {
-      ::boost::json::object root;
-      root.emplace("data", std::move(this->datas_));
-      root.emplace("metadata", std::move(this->metadatas_));
-      std::string json = ::boost::json::serialize(std::move(root));
-      std::size_t written =
-          std::fwrite(json.data(), 1, json.size(), this->json_output_);
-      if (written != json.size()) {
+      Memory_Output_Stream json;
+
+      json.append_copy(u8"{\n  \"data\": [\n"_sv);
+      bool need_data_comma = false;
+      for (const Benchmark_Result& result : this->benchmark_results_) {
+        if (need_data_comma) {
+          json.append_copy(u8",\n"_sv);
+        }
+        json.append_copy(u8"    {\n      \"benchmarkName\": \""_sv);
+        write_json_escaped_string(json, to_string8_view(result.benchmark_name));
+        json.append_copy(u8"\",\n      \"warmupIterations\": "_sv);
+        json.append_decimal_integer(result.warmup_iterations);
+        json.append_copy(u8",\n      \"measurementIterations\": "_sv);
+        json.append_decimal_integer(result.measurement_iterations);
+        json.append_copy(
+            u8",\n      \"samples\": {\n      \"durationPerIteration\": ["_sv);
+        bool need_sample_comma = false;
+        for (const Sample& s : result.samples) {
+          if (need_sample_comma) {
+            json.append_copy(u8", "_sv);
+          }
+          json.append_decimal_float_slow(s.duration_per_iteration);
+          need_sample_comma = true;
+        }
+        json.append_copy(u8"]\n      }\n    }"_sv);
+        need_data_comma = true;
+      }
+
+      json.append_copy(u8"\n  ],\n  \"metadata\": {\n"_sv);
+      bool need_metadata_comma = false;
+      for (const auto& [program_name, program_metadata] : this->metadatas_) {
+        if (need_metadata_comma) {
+          json.append_copy(u8",\n"_sv);
+        }
+        json.append_copy(u8"    \""_sv);
+        write_json_escaped_string(json, to_string8_view(program_name));
+        json.append_copy(u8"\": {\n"_sv);
+        bool need_metadata_entry_comma = false;
+        for (const auto& [key, value] : program_metadata) {
+          if (need_metadata_entry_comma) {
+            json.append_copy(u8",\n"_sv);
+          }
+          json.append_copy(u8"      \""_sv);
+          write_json_escaped_string(json, to_string8_view(key));
+          json.append_copy(u8"\": \""_sv);
+          write_json_escaped_string(json, to_string8_view(value));
+          json.append_copy(u8"\""_sv);
+          need_metadata_entry_comma = true;
+        }
+        json.append_copy(u8"\n    }\n"_sv);
+        need_metadata_comma = true;
+      }
+      json.append_copy(u8"  }\n"_sv);
+
+      json.append_copy(u8"}\n"_sv);
+      json.flush();
+      String8 json_string = json.get_flushed_string8();
+
+      std::size_t written = std::fwrite(json_string.data(), 1,
+                                        json_string.size(), this->json_output_);
+      if (written != json_string.size()) {
         std::fprintf(stderr, "error: failed to write JSON\n");
         std::exit(1);
       }
@@ -141,28 +177,34 @@ class benchmark_results_writer {
   }
 
  private:
-  struct sample {
+  struct Sample {
     double duration_per_iteration;
+  };
+
+  struct Benchmark_Result {
+    std::string benchmark_name;
+    int warmup_iterations;
+    int measurement_iterations;
+    std::vector<Sample> samples;
   };
 
   FILE* json_output_;
   FILE* verbose_output_;
-  ::boost::json::array datas_;
-  ::boost::json::object current_benchmark_;
-  ::boost::json::object metadatas_;
-  std::vector<sample> current_benchmark_samples_;
+  Benchmark_Result current_benchmark_;
+  std::vector<Benchmark_Result> benchmark_results_;
+  std::map<std::string, std::map<std::string, std::string>> metadatas_;
 };
 
-void run_benchmark(benchmark_factory&, const benchmark_config_server&,
-                   const benchmark_run_config&,
-                   benchmark_results_writer& results);
-void run_benchmark_once(benchmark*, const benchmark_config_server&,
-                        const benchmark_run_config&,
-                        benchmark_results_writer& results);
+void run_benchmark(Benchmark_Factory&, const Benchmark_Config_Server&,
+                   const Benchmark_Run_Config&,
+                   Benchmark_Results_Writer& results);
+void run_benchmark_once(Benchmark*, const Benchmark_Config_Server&,
+                        const Benchmark_Run_Config&,
+                        Benchmark_Results_Writer& results);
 }
 
 int main(int argc, char** argv) {
-  parsed_args args = parse_arguments(argc, argv);
+  Parsed_Args args = parse_arguments(argc, argv);
 
   FILE* output_json_file = nullptr;
   if (args.output_json_path) {
@@ -173,16 +215,16 @@ int main(int argc, char** argv) {
       std::exit(1);
     }
   }
-  benchmark_results_writer results(/*json_output=*/output_json_file,
+  Benchmark_Results_Writer results(/*json_output=*/output_json_file,
                                    /*verbose_output=*/stdout);
 
-  benchmark_config config = benchmark_config::load();
-  std::vector<benchmark_factory> benchmark_factories =
+  Benchmark_Config config = Benchmark_Config::load();
+  std::vector<Benchmark_Factory> benchmark_factories =
       get_benchmark_factories();
 
-  for (benchmark_config_server& server_config : config.servers) {
-    for (benchmark_factory& factory : benchmark_factories) {
-      std::unique_ptr<benchmark> b = factory();
+  for (Benchmark_Config_Server& server_config : config.servers) {
+    for (Benchmark_Factory& factory : benchmark_factories) {
+      std::unique_ptr<Benchmark> b = factory();
       if (!b->is_supported(server_config)) {
         continue;
       }
@@ -200,7 +242,7 @@ int main(int argc, char** argv) {
 
         auto program_it = std::find_if(
             config.programs.begin(), config.programs.end(),
-            [&](const benchmark_config_program& program_config) {
+            [&](const Benchmark_Config_Program& program_config) {
               return program_config.name == server_config.program_name;
             });
         if (program_it != config.programs.end() &&
@@ -217,21 +259,20 @@ int main(int argc, char** argv) {
 }
 
 namespace {
-parsed_args parse_arguments(int argc, char** argv) {
+Parsed_Args parse_arguments(int argc, char** argv) {
   auto read_number = [](const char* arg_value) {
     int output_number;
-    from_chars_result result = from_chars(
-        &arg_value[0], &arg_value[std::strlen(arg_value)], output_number);
-    if (*result.ptr != '\0' || result.ec != std::errc{}) {
+    if (parse_integer_exact(std::string_view(arg_value), output_number) !=
+        Parse_Integer_Exact_Error::ok) {
       std::fprintf(stderr, "error: failed to parse number: %s\n", arg_value);
       std::exit(2);
     }
     return output_number;
   };
 
-  parsed_args args;
+  Parsed_Args args;
 
-  arg_parser parser(argc, argv);
+  Arg_Parser parser(argc, argv);
   while (!parser.done()) {
     if (const char* argument = parser.match_argument()) {
       if (args.benchmark_filter.empty()) {
@@ -274,22 +315,22 @@ parsed_args parse_arguments(int argc, char** argv) {
   return args;
 }
 
-void run_benchmark(benchmark_factory& factory,
-                   const benchmark_config_server& server_config,
-                   const benchmark_run_config& run_config,
-                   benchmark_results_writer& results) {
+void run_benchmark(Benchmark_Factory& factory,
+                   const Benchmark_Config_Server& server_config,
+                   const Benchmark_Run_Config& run_config,
+                   Benchmark_Results_Writer& results) {
   for (int i = 0; i < run_config.samples; ++i) {
-    std::unique_ptr<benchmark> b = factory();
+    std::unique_ptr<Benchmark> b = factory();
     run_benchmark_once(b.get(), server_config, run_config, results);
   }
 }
 
-void run_benchmark_once(benchmark* b,
-                        const benchmark_config_server& server_config,
-                        const benchmark_run_config& run_config,
-                        benchmark_results_writer& results) {
-  lsp_server_process server = lsp_server_process::spawn(server_config);
-  server.run_and_kill([&]() -> lsp_task<void> {
+void run_benchmark_once(Benchmark* b,
+                        const Benchmark_Config_Server& server_config,
+                        const Benchmark_Run_Config& run_config,
+                        Benchmark_Results_Writer& results) {
+  LSP_Server_Process server = LSP_Server_Process::spawn(server_config);
+  server.run_and_kill([&]() -> LSP_Task<void> {
     co_await server.initialize_lsp_async();
 
     int total_iteration_count =

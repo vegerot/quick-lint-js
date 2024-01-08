@@ -8,34 +8,32 @@
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/parse-support.h>
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/unreachable.h>
 #include <quick-lint-js/port/warning.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <string>
 #include <string_view>
 #include <vector>
 
-using ::testing::_;
-using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using namespace std::literals::string_literals;
 
 namespace quick_lint_js {
 namespace {
-class test_parse_conditional_expression
-    : public test_parse_expression,
-      public ::testing::WithParamInterface<parser_options> {};
+class Test_Parse_Conditional_Expression
+    : public Test_Parse_Expression,
+      public ::testing::WithParamInterface<Parser_Options> {};
 
-TEST_P(test_parse_conditional_expression, conditional_expression) {
+TEST_P(Test_Parse_Conditional_Expression, conditional_expression) {
   {
-    test_parser p(u8"x?y:z"_sv, GetParam());
-    expression* ast = p.parse_expression();
-    EXPECT_EQ(ast->kind(), expression_kind::conditional);
+    Test_Parser p(u8"x?y:z"_sv, GetParam());
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(ast->kind(), Expression_Kind::Conditional);
     EXPECT_EQ(summarize(ast->child_0()), "var x");
     EXPECT_EQ(summarize(ast->child_1()), "var y");
     EXPECT_EQ(summarize(ast->child_2()), "var z");
@@ -43,153 +41,139 @@ TEST_P(test_parse_conditional_expression, conditional_expression) {
   }
 
   {
-    test_parser p(u8"x+x?y+y:z+z"_sv, GetParam());
-    expression* ast = p.parse_expression();
-    EXPECT_EQ(ast->kind(), expression_kind::conditional);
+    Test_Parser p(u8"x+x?y+y:z+z"_sv, GetParam());
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(ast->kind(), Expression_Kind::Conditional);
     EXPECT_EQ(summarize(ast->child_0()), "binary(var x, var x)");
     EXPECT_EQ(summarize(ast->child_1()), "binary(var y, var y)");
     EXPECT_EQ(summarize(ast->child_2()), "binary(var z, var z)");
   }
 
   {
-    test_parser p(u8"a ? b : c ? d : e"_sv, GetParam());
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? b : c ? d : e"_sv, GetParam());
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, var b, cond(var c, var d, var e))");
   }
 
   {
     // Regression test: This code once failed to parse with TypeScript.
-    test_parser p(u8"a ? !b : !c"_sv, GetParam());
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? !b : !c"_sv, GetParam());
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, unary(var b), unary(var c))");
   }
 
   {
     // Regression test: This code once failed to parse with TypeScript.
-    test_parser p(u8"a ? () => foo : c"_sv, GetParam());
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? () => foo : c"_sv, GetParam());
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, arrowfunc(), var c)");
   }
 }
 
-TEST_P(test_parse_conditional_expression,
+TEST_P(Test_Parse_Conditional_Expression,
        conditional_expression_with_missing_condition) {
   {
-    test_parser p(u8"? b : c"_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"? b : c"_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(missing, var b, var c)");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code, diag_missing_operand_for_operator,  //
-                              where, 0, u8"?"),
-        }));
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"? b : c"));
+    assert_diagnostics(p.code, p.errors,
+                       {
+                           u8"^ Diag_Missing_Operand_For_Operator"_diag,
+                       });
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"? b : c"_sv));
   }
 }
 
-TEST_P(test_parse_conditional_expression,
+TEST_P(Test_Parse_Conditional_Expression,
        conditional_expression_with_missing_true_component) {
   {
-    test_parser p(u8"a ? : c"_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? : c"_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, missing, var c)");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code, diag_missing_operand_for_operator,  //
-                              where, strlen(u8"a "), u8"?"),
-        }));
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? : c"));
+    assert_diagnostics(p.code, p.errors,
+                       {
+                           u8"  ^ Diag_Missing_Operand_For_Operator"_diag,
+                       });
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? : c"_sv));
   }
 }
 
-TEST_P(test_parse_conditional_expression,
+TEST_P(Test_Parse_Conditional_Expression,
        conditional_expression_with_missing_false_component) {
   {
-    test_parser p(u8"a ? b : "_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? b : "_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, var b, missing)");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code, diag_missing_operand_for_operator,  //
-                              where, strlen(u8"a ? b "), u8":"),
-        }));
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? b : "));
+    assert_diagnostics(p.code, p.errors,
+                       {
+                           u8"      ^ Diag_Missing_Operand_For_Operator"_diag,
+                       });
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? b : "_sv));
   }
 
   {
-    test_parser p(u8"(a ? b :)"_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"(a ? b :)"_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "paren(cond(var a, var b, missing))");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code, diag_missing_operand_for_operator,  //
-                              where, strlen(u8"(a ? b "), u8":"),
-        }));
+    assert_diagnostics(p.code, p.errors,
+                       {
+                           u8"       ^ Diag_Missing_Operand_For_Operator"_diag,
+                       });
     EXPECT_THAT(ast->child_0()->span(),
-                p.matches_offsets(strlen(u8"("), u8"a ? b :)"));
+                p.matches_offsets(u8"("_sv.size(), u8"a ? b :)"_sv));
   }
 }
 
-TEST_P(test_parse_conditional_expression,
+TEST_P(Test_Parse_Conditional_Expression,
        conditional_expression_with_missing_colon_and_false_component) {
   {
-    test_parser p(u8"a ? b "_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? b "_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, var b, missing)");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_2_OFFSETS(
-                p.code, diag_missing_colon_in_conditional_expression,  //
-                expected_colon, strlen(u8"a ? b"), u8"",               //
-                question, strlen(u8"a "), u8"?"),
-        }));
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? b"));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"     ` Diag_Missing_Colon_In_Conditional_Expression.expected_colon\n"_diag
+            u8"  ^ .question"_diag,
+        });
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? b"_sv));
   }
 
   {
-    test_parser p(u8"a ? b c"_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"a ? b c"_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var a, var b, missing)");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_2_OFFSETS(
-                p.code, diag_missing_colon_in_conditional_expression,  //
-                expected_colon, strlen(u8"a ? b"), u8"",               //
-                question, strlen(u8"a "), u8"?"),
-        }));
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? b"));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"     ` Diag_Missing_Colon_In_Conditional_Expression.expected_colon\n"_diag
+            u8"  ^ .question"_diag,
+        });
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"a ? b"_sv));
   }
 
   {
-    test_parser p(u8"(a ? b)"_sv, GetParam(), capture_diags);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"(a ? b)"_sv, GetParam(), capture_diags);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "paren(cond(var a, var b, missing))");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_2_OFFSETS(
-                p.code, diag_missing_colon_in_conditional_expression,  //
-                expected_colon, strlen(u8"(a ? b"), u8"",              //
-                question, strlen(u8"(a "), u8"?"),
-        }));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"      ` Diag_Missing_Colon_In_Conditional_Expression.expected_colon\n"_diag
+            u8"   ^ .question"_diag,
+        });
     EXPECT_THAT(ast->child_0()->span(),
-                p.matches_offsets(strlen(u8"("), u8"a ? b"));
+                p.matches_offsets(u8"("_sv.size(), u8"a ? b"_sv));
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(javascript, test_parse_conditional_expression,
+INSTANTIATE_TEST_SUITE_P(javascript, Test_Parse_Conditional_Expression,
                          ::testing::Values(javascript_options));
 
 // In TypeScript, ':' is used for both type annotations in arrow functions and
 // for the conditional operator. Ensure we parse all of the examples as
 // conditional operators.
-INSTANTIATE_TEST_SUITE_P(typescript, test_parse_conditional_expression,
+INSTANTIATE_TEST_SUITE_P(typescript, Test_Parse_Conditional_Expression,
                          ::testing::Values(typescript_options));
 }
 }

@@ -1,7 +1,10 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-import { createProcessFactoryAsync } from "../../wasm/quick-lint-js.js";
+import {
+  LanguageOptions,
+  createProcessFactoryAsync,
+} from "../../wasm/quick-lint-js.js";
 import {} from "../error-box.mjs";
 
 let codeInputElement = document.getElementById("code-input");
@@ -10,6 +13,9 @@ let codeInputMarksScrollerElement = document.getElementById(
   "code-input-marks-scroller"
 );
 let shadowCodeInputElement = document.getElementById("shadow-code-input");
+
+let enableJSXElement = document.getElementById("enable-jsx");
+let enableTypeScriptElement = document.getElementById("enable-typescript");
 
 codeInputElement.addEventListener("scroll", (event) => {
   synchronizeScrollingAndSize();
@@ -50,10 +56,16 @@ class FloatingEditorMarker {
       range.setEnd(textNode, mark.end);
       let rects = range.getClientRects();
       for (let r of rects) {
-        if (r.width === 0) {
+        if (r.width === 0 && rects.length > 1) {
           // If a mark starts at the beginning of a line, Safari gives an extra
           // 0-width rectangle at the end of the previous line. Ignore this
           // extra rectangle.
+          //
+          // Note that zero-width rectangles are expected for diagnostics with
+          // an empty span. For example, in the following code:
+          //
+          //   var i j;
+          //       ^^ diagnostic between these two characters.
           continue;
         }
         let { markElement, markWrapperElement } =
@@ -152,6 +164,10 @@ createProcessFactoryAsync()
       let input = codeInputElement.value;
       let marks;
       try {
+        doc.setLanguageOptions(
+          (enableTypeScriptElement.checked ? LanguageOptions.TYPESCRIPT : 0) |
+            (enableJSXElement.checked ? LanguageOptions.JSX : 0)
+        );
         doc.setText(input);
         marks = doc.lint();
       } catch (e) {
@@ -164,6 +180,12 @@ createProcessFactoryAsync()
     codeInputElement.addEventListener("input", (event) => {
       lintAndUpdate();
       synchronizeScrollingAndSize();
+    });
+    enableTypeScriptElement.addEventListener("change", (_event) => {
+      lintAndUpdate();
+    });
+    enableJSXElement.addEventListener("change", (_event) => {
+      lintAndUpdate();
     });
     lintAndUpdate();
   })
@@ -178,20 +200,54 @@ function synchronizeContent() {
 }
 
 function synchronizeScrollingAndSize() {
-  codeInputMarksElement.scrollWidth = codeInputElement.scrollWidth;
-  codeInputMarksElement.scrollHeight = codeInputElement.scrollHeight;
+  // Make the scroller's size match the size of the code input's scroll region.
+  //
+  // If the scroller is too big, then scrolling will stop prematurely due to
+  // Element#scroll's clamping.
+  //
+  // If the scroller is too small, then the marks will be visually clipped.
+  codeInputMarksScrollerElement.style.width = `${codeInputElement.clientWidth}px`;
+  codeInputMarksScrollerElement.style.height = `${codeInputElement.clientHeight}px`;
 
-  codeInputMarksScrollerElement.scroll({
-    top: codeInputElement.scrollTop,
-    left: codeInputElement.scrollLeft,
-    behavior: "instant",
-  });
-
-  codeInputMarksScrollerElement.style.width = `${codeInputElement.offsetWidth}px`;
-  codeInputMarksScrollerElement.style.height = `${codeInputElement.offsetHeight}px`;
-
+  // Make the marks container's size match the code input's virtual size.
+  //
+  // If the marks container is too small, then scrolling will stop prematurely
+  // due to Element#scroll's clamping.
+  //
+  // If the marks container is too big, I haven't noticed any issues. It's
+  // probably a bad idea to make the marks container too big, though.
   codeInputMarksElement.style.width = `${codeInputElement.scrollWidth}px`;
   codeInputMarksElement.style.height = `${codeInputElement.scrollHeight}px`;
+
+  // Scroll the marks container so it aligns with how the user scrolled the code
+  // input.
+  let inputScrollTop = codeInputElement.scrollTop;
+  let inputScrollLeft = codeInputElement.scrollLeft;
+  codeInputMarksScrollerElement.scroll({
+    top: inputScrollTop,
+    left: inputScrollLeft,
+    behavior: "instant",
+  });
+  let scrollerScrollTop = codeInputMarksScrollerElement.scrollTop;
+  let scrollerScrollLeft = codeInputMarksScrollerElement.scrollLeft;
+
+  // Element#scroll keeps the scrollTop and scrollLeft in bounds by clamping,
+  // but because we adjusted the sizes of our scroller and marks container above
+  // to match the code input, no clamping should occur.
+  if (
+    !(
+      scrollerScrollTop === inputScrollTop &&
+      scrollerScrollLeft === inputScrollLeft
+    )
+  ) {
+    console.warn(
+      "scrolling out of sync; tried to scroll to <%d,%d> but instead scrolled to <%d,%d>",
+      inputScrollLeft,
+      inputScrollTop,
+      scrollerScrollLeft,
+      scrollerScrollTop
+    );
+  }
 }
 
 // quick-lint-js finds bugs in JavaScript programs.

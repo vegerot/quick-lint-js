@@ -12,280 +12,181 @@
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/variable-analyzer-support.h>
 
-using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::IsEmpty;
 
 namespace quick_lint_js {
 namespace {
-TEST(test_variable_analyzer_enum,
+TEST(Test_Variable_Analyzer_Enum,
      member_initializers_can_reference_other_members) {
-  const char8 enum_declaration[] = u8"E";
-  const char8 member_use[] = u8"A";
-
-  // enum E {
-  //   A = 42,
-  //   B = A,
-  // }
-  diag_collector v;
-  variable_analyzer l(&v, &default_globals, javascript_var_options);
-  l.visit_variable_declaration(identifier_of(enum_declaration),
-                               variable_kind::_enum,
-                               variable_init_kind::normal);
-  l.visit_enter_enum_scope();
-  l.visit_variable_use(identifier_of(member_use));
-  l.visit_exit_enum_scope();
-  l.visit_end_of_module();
-
-  EXPECT_THAT(v.errors, IsEmpty());
+  test_parse_and_analyze(
+      u8"enum E {"_sv
+      u8"  A = 42,"_sv
+      u8"  B = A,"_sv
+      u8"} "_sv,
+      no_diags, typescript_analyze_options, default_globals);
 }
 
-TEST(test_variable_analyzer_enum, enum_can_merge_with_another_enum) {
-  const char8 enum_declaration_1[] = u8"E";
-  const char8 enum_declaration_2[] = u8"E";
-
-  // enum E {}
-  // enum E {}
-  diag_collector v;
-  variable_analyzer l(&v, &default_globals, javascript_var_options);
-  l.visit_variable_declaration(identifier_of(enum_declaration_1),
-                               variable_kind::_enum,
-                               variable_init_kind::normal);
-  l.visit_enter_enum_scope();
-  l.visit_exit_enum_scope();
-  l.visit_variable_declaration(identifier_of(enum_declaration_2),
-                               variable_kind::_enum,
-                               variable_init_kind::normal);
-  l.visit_enter_enum_scope();
-  l.visit_exit_enum_scope();
-  l.visit_end_of_module();
-
-  EXPECT_THAT(v.errors, IsEmpty());
+TEST(Test_Variable_Analyzer_Enum, enum_can_merge_with_another_enum) {
+  test_parse_and_analyze(
+      u8"enum E {} "_sv
+      u8"enum E {} "_sv,
+      no_diags, typescript_analyze_options, default_globals);
 }
 
-TEST(test_variable_analyzer_enum, enum_can_shadow_catch_variables) {
-  const char8 catch_declaration[] = u8"e";
-  const char8 enum_declaration[] = u8"e";
-
-  // try {
-  // } catch (e) {
-  //   enum e {}
-  // }
-  diag_collector v;
-  variable_analyzer l(&v, &default_globals, javascript_var_options);
-  l.visit_enter_block_scope();
-  l.visit_exit_block_scope();
-  l.visit_enter_block_scope();
-  l.visit_variable_declaration(identifier_of(catch_declaration),
-                               variable_kind::_catch,
-                               variable_init_kind::normal);
-  l.visit_variable_declaration(identifier_of(enum_declaration),
-                               variable_kind::_enum,
-                               variable_init_kind::normal);
-  l.visit_enter_enum_scope();
-  l.visit_exit_enum_scope();
-  l.visit_exit_block_scope();
-  l.visit_end_of_module();
-
-  EXPECT_THAT(v.errors, IsEmpty());
+TEST(Test_Variable_Analyzer_Enum, enum_can_shadow_catch_variables) {
+  test_parse_and_analyze(
+      u8"try {"_sv
+      u8"} catch (e) {"_sv
+      u8"  enum e {} "_sv
+      u8"} "_sv,
+      no_diags, typescript_analyze_options, default_globals);
 }
 
-TEST(test_variable_analyzer_enum,
+TEST(Test_Variable_Analyzer_Enum,
      enum_conflicts_with_most_variables_in_same_scope) {
-  const char8 enum_declaration[] = u8"E";
-  const char8 other_declaration[] = u8"E";
+  test_parse_and_analyze(
+      u8"((E) => { enum E {} });"_sv,
+      u8"               ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"  ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"class E {}  enum E {}"_sv,
+      u8"                 ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"      ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"const E = null; enum E {}"_sv,
+      u8"                     ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"      ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"function E() {}  enum E {}"_sv,
+      u8"                      ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"         ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"(function(E) { enum E {} });"_sv,
+      u8"                    ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"          ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"(function<E>() { enum E {} });"_sv,
+      u8"                      ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"          ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"import {E} from 'mod'; enum E {}"_sv,
+      u8"                            ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"        ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  // TODO(strager): Is declaring after _index_signature_parameter possible?
+  test_parse_and_analyze(
+      u8"interface E {}  enum E {}"_sv,
+      u8"                     ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"          ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"let E; enum E {}"_sv,
+      u8"            ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"    ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"var E; enum E {}"_sv,
+      u8"            ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"    ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
 
-  for (variable_kind other_kind : {
-           variable_kind::_arrow_parameter,
-           variable_kind::_class,
-           variable_kind::_const,
-           variable_kind::_function,
-           variable_kind::_function_parameter,
-           variable_kind::_generic_parameter,
-           variable_kind::_import,
-           // FIXME(strager): Is _index_signature_parameter even possible?
-           variable_kind::_index_signature_parameter,
-           variable_kind::_interface,
-           variable_kind::_let,
-           variable_kind::_var,
-       }) {
-    SCOPED_TRACE(other_kind);
-
-    {
-      // var E;
-      // enum E {}  // ERROR
-      diag_collector v;
-      variable_analyzer l(&v, &default_globals, javascript_var_options);
-      l.visit_variable_declaration(identifier_of(other_declaration), other_kind,
-                                   variable_init_kind::normal);
-      l.visit_variable_declaration(identifier_of(enum_declaration),
-                                   variable_kind::_enum,
-                                   variable_init_kind::normal);
-      l.visit_enter_enum_scope();
-      l.visit_exit_enum_scope();
-      l.visit_end_of_module();
-
-      EXPECT_THAT(v.errors,
-                  ElementsAreArray({
-                      DIAG_TYPE_2_SPANS(
-                          diag_redeclaration_of_variable,            //
-                          redeclaration, span_of(enum_declaration),  //
-                          original_declaration, span_of(other_declaration)),
-                  }));
-    }
-
-    {
-      // enum E {}
-      // var E;     // ERROR
-      diag_collector v;
-      variable_analyzer l(&v, &default_globals, javascript_var_options);
-      l.visit_variable_declaration(identifier_of(enum_declaration),
-                                   variable_kind::_enum,
-                                   variable_init_kind::normal);
-      l.visit_enter_enum_scope();
-      l.visit_exit_enum_scope();
-      l.visit_variable_declaration(identifier_of(other_declaration), other_kind,
-                                   variable_init_kind::normal);
-      l.visit_end_of_module();
-
-      EXPECT_THAT(v.errors,
-                  ElementsAreArray({
-                      DIAG_TYPE_2_SPANS(
-                          diag_redeclaration_of_variable,             //
-                          redeclaration, span_of(other_declaration),  //
-                          original_declaration, span_of(enum_declaration)),
-                  }));
-    }
-  }
+  // TODO(strager): Is declaring before _arrow_parameter in the same scope
+  // possible?
+  test_parse_and_analyze(
+      u8"enum E {}  class E {}"_sv,
+      u8"                 ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"enum E {}  const E = null;"_sv,
+      u8"                 ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"enum E {}  function E() {}"_sv,
+      u8"                    ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  // TODO(strager): Is declaring before _function_parameter in the same scope
+  // possible?
+  // TODO(strager): Is declaring before _generic_parameter in the same scope
+  // possible?
+  test_parse_and_analyze(
+      u8"enum E {}  import {E} from 'mod';"_sv,
+      u8"                   ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  // TODO(strager): Is declaring before _index_signature_parameter in the same
+  // scope possible?
+  test_parse_and_analyze(
+      u8"enum E {}  interface E {}"_sv,
+      u8"                     ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"enum E {}  let E;"_sv,
+      u8"               ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
+  test_parse_and_analyze(
+      u8"enum E {}  var E;"_sv,
+      u8"               ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
 }
 
-TEST(test_variable_analyzer_enum, function_shadows_enum_in_outer_scope) {
-  const char8 enum_declaration[] = u8"E";
-  const char8 function_declaration[] = u8"E";
-
-  // enum E {}
-  // {
-  //   function E() {}
-  // }
-  diag_collector v;
-  variable_analyzer l(&v, &default_globals, javascript_var_options);
-  l.visit_variable_declaration(identifier_of(enum_declaration),
-                               variable_kind::_enum,
-                               variable_init_kind::normal);
-  l.visit_enter_enum_scope();
-  l.visit_exit_enum_scope();
-  l.visit_enter_block_scope();
-  l.visit_variable_declaration(identifier_of(function_declaration),
-                               variable_kind::_function,
-                               variable_init_kind::normal);
-  l.visit_enter_function_scope();
-  l.visit_enter_function_scope_body();
-  l.visit_exit_function_scope();
-  l.visit_exit_block_scope();
-  l.visit_end_of_module();
-
-  EXPECT_THAT(v.errors, IsEmpty());
+TEST(Test_Variable_Analyzer_Enum, function_shadows_enum_in_outer_scope) {
+  test_parse_and_analyze(
+      u8"enum E {} "_sv
+      u8"{"_sv
+      u8"  function E() {} "_sv
+      u8"} "_sv,
+      no_diags, typescript_analyze_options, default_globals);
 }
 
-TEST(test_variable_analyzer_enum, var_conflicts_with_enum_in_outer_scope) {
-  const char8 enum_declaration[] = u8"e";
-  const char8 var_declaration[] = u8"e";
+TEST(Test_Variable_Analyzer_Enum, var_conflicts_with_enum_in_outer_scope) {
+  test_parse_and_analyze(
+      u8"enum e {}  { var e; }"_sv,
+      u8"                 ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"     ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
 
-  {
-    // enum e {}
-    // {
-    //   var e;   // ERROR
-    // }
-    diag_collector v;
-    variable_analyzer l(&v, &default_globals, javascript_var_options);
-    l.visit_variable_declaration(identifier_of(enum_declaration),
-                                 variable_kind::_enum,
-                                 variable_init_kind::normal);
-    l.visit_enter_enum_scope();
-    l.visit_exit_enum_scope();
-    l.visit_enter_block_scope();
-    l.visit_variable_declaration(identifier_of(var_declaration),
-                                 variable_kind::_var,
-                                 variable_init_kind::normal);
-    l.visit_exit_block_scope();
-    l.visit_end_of_module();
-
-    EXPECT_THAT(
-        v.errors,
-        ElementsAreArray({
-            DIAG_TYPE_2_SPANS(diag_redeclaration_of_variable,           //
-                              redeclaration, span_of(var_declaration),  //
-                              original_declaration, span_of(enum_declaration)),
-        }));
-  }
-
-  {
-    // {
-    //   var e;
-    // }
-    // enum e {}  // ERROR
-    diag_collector v;
-    variable_analyzer l(&v, &default_globals, javascript_var_options);
-    l.visit_enter_block_scope();
-    l.visit_variable_declaration(identifier_of(var_declaration),
-                                 variable_kind::_var,
-                                 variable_init_kind::normal);
-    l.visit_exit_block_scope();
-    l.visit_variable_declaration(identifier_of(enum_declaration),
-                                 variable_kind::_enum,
-                                 variable_init_kind::normal);
-    l.visit_enter_enum_scope();
-    l.visit_exit_enum_scope();
-    l.visit_end_of_module();
-
-    EXPECT_THAT(
-        v.errors,
-        ElementsAreArray({
-            DIAG_TYPE_2_SPANS(diag_redeclaration_of_variable,            //
-                              redeclaration, span_of(enum_declaration),  //
-                              original_declaration, span_of(var_declaration)),
-        }));
-  }
+  test_parse_and_analyze(
+      u8"{ var e; }  enum e {}"_sv,
+      u8"                 ^ Diag_Redeclaration_Of_Variable.redeclaration\n"_diag
+      u8"      ^ .original_declaration"_diag,
+      typescript_analyze_options, default_globals);
 }
 
-TEST(test_variable_analyzer_enum, enum_shadows_most_variables_in_outer_scope) {
-  const char8 outer_declaration[] = u8"E";
-  const char8 enum_declaration[] = u8"E";
-
-  for (variable_kind outer_kind : {
-           variable_kind::_arrow_parameter,
-           variable_kind::_class,
-           variable_kind::_const,
-           variable_kind::_function,
-           variable_kind::_function_parameter,
-           variable_kind::_generic_parameter,
-           variable_kind::_import,
-           // FIXME(strager): Is _index_signature_parameter even possible?
-           variable_kind::_index_signature_parameter,
-           variable_kind::_interface,
-           variable_kind::_let,
-           variable_kind::_var,
-       }) {
-    SCOPED_TRACE(outer_kind);
-    // var E;
-    // {
-    //   enum E {}
-    // }
-    diag_collector v;
-    variable_analyzer l(&v, &default_globals, javascript_var_options);
-    l.visit_variable_declaration(identifier_of(outer_declaration), outer_kind,
-                                 variable_init_kind::normal);
-    l.visit_enter_block_scope();
-    l.visit_variable_declaration(identifier_of(enum_declaration),
-                                 variable_kind::_enum,
-                                 variable_init_kind::normal);
-    l.visit_enter_enum_scope();
-    l.visit_exit_enum_scope();
-    l.visit_exit_block_scope();
-    l.visit_end_of_module();
-
-    EXPECT_THAT(v.errors, IsEmpty());
-  }
+TEST(Test_Variable_Analyzer_Enum, enum_shadows_most_variables_in_outer_scope) {
+  test_parse_and_analyze(u8"((E) => { { enum E {} } });"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"class E {}  { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"const E = null; { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"function E() {}  { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"(function(E) { { enum E {} } });"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"(function<E>() { { enum E {} } });"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"import {E} from 'mod'; { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  // TODO(strager): Is shadowing a _index_signature_parameter possible?
+  test_parse_and_analyze(u8"interface E {}  { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"let E; { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
+  test_parse_and_analyze(u8"var E; { enum E {} }"_sv, no_diags,
+                         typescript_analyze_options, default_globals);
 }
 }
 }

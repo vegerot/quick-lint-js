@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_DIAG_MATCHER_H
-#define QUICK_LINT_JS_DIAG_MATCHER_H
+#pragma once
 
 #include <cstddef>
 #include <gmock/gmock.h>
@@ -10,9 +9,8 @@
 #include <quick-lint-js/cli/cli-location.h>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
-#include <quick-lint-js/fe/diagnostic.h>
-#include <quick-lint-js/fe/identifier.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/port/char8.h>
 #include <vector>
@@ -21,33 +19,20 @@
   ::testing::VariantWith<diag_type>(                \
       ::testing::Field(#member, &diag_type::member, matcher))
 
-#define DIAG_TYPE_2_FIELDS(diag_type, member_1, matcher_1, member_2, \
-                           matcher_2)                                \
-  ::testing::VariantWith<diag_type>(::testing::AllOf(                \
-      ::testing::Field(#member_1, &diag_type::member_1, matcher_1),  \
-      ::testing::Field(#member_2, &diag_type::member_2, matcher_2)))
-
-#define DIAG_TYPE_3_FIELDS(diag_type, member_1, matcher_1, member_2, \
-                           matcher_2, member_3, matcher_3)           \
-  ::testing::VariantWith<diag_type>(::testing::AllOf(                \
-      ::testing::Field(#member_1, &diag_type::member_1, matcher_1),  \
-      ::testing::Field(#member_2, &diag_type::member_2, matcher_2),  \
-      ::testing::Field(#member_3, &diag_type::member_3, matcher_3)))
-
 // Equivalent to ::testing::VariantWith<type>(::testing::_), but compiles much
 // more quickly.
 #define DIAG_TYPE(type) \
-  ::quick_lint_js::diag_matcher(::quick_lint_js::diag_type::type)
+  ::quick_lint_js::Diag_Matcher(::quick_lint_js::Diag_Type::type)
 
 // Equivalent to the following, but compiles much more quickly:
 //
 //   DIAG_TYPE_FIELD(type, member_0,
-//                    offsets_matcher(code, start_0, end_or_text_0))
+//                    Offsets_Matcher(code, start_0, end_or_text_0))
 //
 // but compiles much more quickly.
 #define DIAG_TYPE_OFFSETS(code, type, member_0, start_0, end_or_text_0) \
-  ::quick_lint_js::diag_matcher(code, ::quick_lint_js::diag_type::type, \
-                                ::quick_lint_js::diag_matcher::field{   \
+  ::quick_lint_js::Diag_Matcher(code, ::quick_lint_js::Diag_Type::type, \
+                                ::quick_lint_js::Diag_Matcher::Field{   \
                                     DIAG_MATCHER_ARG(type, member_0),   \
                                     start_0,                            \
                                     end_or_text_0,                      \
@@ -56,46 +41,20 @@
 // Equivalent to the following, but compiles much more quickly:
 //
 //   DIAG_TYPE_FIELD(type,
-//                    member_0, offsets_matcher(code, start_0, end_or_text_0),
-//                    member_1, offsets_matcher(code, start_1, end_or_text_1))
+//                    member_0, Offsets_Matcher(code, start_0, end_or_text_0),
+//                    member_1, Offsets_Matcher(code, start_1, end_or_text_1))
 #define DIAG_TYPE_2_OFFSETS(code, type, member_0, start_0, end_or_text_0, \
                             member_1, start_1, end_or_text_1)             \
-  ::quick_lint_js::diag_matcher(code, ::quick_lint_js::diag_type::type,   \
-                                ::quick_lint_js::diag_matcher::field{     \
+  ::quick_lint_js::Diag_Matcher(code, ::quick_lint_js::Diag_Type::type,   \
+                                ::quick_lint_js::Diag_Matcher::Field{     \
                                     DIAG_MATCHER_ARG(type, member_0),     \
                                     start_0,                              \
                                     end_or_text_0,                        \
                                 },                                        \
-                                ::quick_lint_js::diag_matcher::field{     \
+                                ::quick_lint_js::Diag_Matcher::Field{     \
                                     DIAG_MATCHER_ARG(type, member_1),     \
                                     start_1,                              \
                                     end_or_text_1,                        \
-                                })
-
-// Equivalent to the following, but compiles much more quickly:
-//
-//   DIAG_TYPE_FIELD(type,
-//                    member_0, offsets_matcher(code, start_0, end_or_text_0),
-//                    member_1, offsets_matcher(code, start_1, end_or_text_1),
-//                    member_2, offsets_matcher(code, start_2, end_or_text_2))
-#define DIAG_TYPE_3_OFFSETS(code, type, member_0, start_0, end_or_text_0, \
-                            member_1, start_1, end_or_text_1, member_2,   \
-                            start_2, end_or_text_2)                       \
-  ::quick_lint_js::diag_matcher(code, ::quick_lint_js::diag_type::type,   \
-                                ::quick_lint_js::diag_matcher::field{     \
-                                    DIAG_MATCHER_ARG(type, member_0),     \
-                                    start_0,                              \
-                                    end_or_text_0,                        \
-                                },                                        \
-                                ::quick_lint_js::diag_matcher::field{     \
-                                    DIAG_MATCHER_ARG(type, member_1),     \
-                                    start_1,                              \
-                                    end_or_text_1,                        \
-                                },                                        \
-                                ::quick_lint_js::diag_matcher::field{     \
-                                    DIAG_MATCHER_ARG(type, member_2),     \
-                                    start_2,                              \
-                                    end_or_text_2,                        \
                                 })
 
 // Equivalent to the following, but compiles much more quickly:
@@ -104,9 +63,9 @@
 //
 // but compiles much more quickly.
 #define DIAG_TYPE_SPAN(type, member_0, span_0)    \
-  ::quick_lint_js::diag_spans_matcher(            \
-      ::quick_lint_js::diag_type::type,           \
-      ::quick_lint_js::diag_spans_matcher::field{ \
+  ::quick_lint_js::Diag_Spans_Matcher(            \
+      ::quick_lint_js::Diag_Type::type,           \
+      ::quick_lint_js::Diag_Spans_Matcher::Field{ \
           DIAG_MATCHER_ARG(type, member_0),       \
           span_0,                                 \
       })
@@ -119,150 +78,181 @@
 //
 // but compiles much more quickly.
 #define DIAG_TYPE_2_SPANS(type, member_0, span_0, member_1, span_1) \
-  ::quick_lint_js::diag_spans_matcher(                              \
-      ::quick_lint_js::diag_type::type,                             \
-      ::quick_lint_js::diag_spans_matcher::field{                   \
+  ::quick_lint_js::Diag_Spans_Matcher(                              \
+      ::quick_lint_js::Diag_Type::type,                             \
+      ::quick_lint_js::Diag_Spans_Matcher::Field{                   \
           DIAG_MATCHER_ARG(type, member_0),                         \
           span_0,                                                   \
       },                                                            \
-      ::quick_lint_js::diag_spans_matcher::field{                   \
+      ::quick_lint_js::Diag_Spans_Matcher::Field{                   \
           DIAG_MATCHER_ARG(type, member_1),                         \
           span_1,                                                   \
       })
 
 namespace quick_lint_js {
-class offsets_matcher {
+class Offsets_Matcher {
  public:
-  // Create an offsets_matcher which asserts that the matched source_code_span
+  // Create an Offsets_Matcher which asserts that the matched Source_Code_Span
   // begins at begin_offset and ends at end_offset.
-  explicit offsets_matcher(padded_string_view input,
-                           cli_source_position::offset_type begin_offset,
-                           cli_source_position::offset_type end_offset);
+  explicit Offsets_Matcher(Padded_String_View input,
+                           CLI_Source_Position::Offset_Type begin_offset,
+                           CLI_Source_Position::Offset_Type end_offset);
 
-  // Create an offsets_matcher which asserts that the matched source_code_span
+  // Create an Offsets_Matcher which asserts that the matched Source_Code_Span
   // begins at begin_offset and ends at begin_offset+strlen(text).
   //
-  // TODO(strager): Also ensure the matched source_code_span's content equals
+  // TODO(strager): Also ensure the matched Source_Code_Span's content equals
   // text.
-  explicit offsets_matcher(padded_string_view input,
-                           cli_source_position::offset_type begin_offset,
-                           string8_view text);
+  explicit Offsets_Matcher(Padded_String_View input,
+                           CLI_Source_Position::Offset_Type begin_offset,
+                           String8_View text);
 
-  offsets_matcher(const offsets_matcher &) = delete;
-  offsets_matcher &operator=(const offsets_matcher &) = delete;
+  Offsets_Matcher(const Offsets_Matcher &) = delete;
+  Offsets_Matcher &operator=(const Offsets_Matcher &) = delete;
 
-  offsets_matcher(offsets_matcher &&);
-  offsets_matcher &operator=(offsets_matcher &&);
+  Offsets_Matcher(Offsets_Matcher &&);
+  Offsets_Matcher &operator=(Offsets_Matcher &&);
 
-  ~offsets_matcher();
+  ~Offsets_Matcher();
 
-  /*implicit*/ operator testing::Matcher<const identifier &>() const;
-  /*implicit*/ operator testing::Matcher<const source_code_span &>() const;
-
- private:
-  class identifier_impl;
-  class span_impl;
-
-  padded_string_view code_;
-  cli_source_position::offset_type begin_offset_;
-  cli_source_position::offset_type end_offset_;
-};
-
-// Like source_code_span_matcher, but only check the begin pointer.
-//
-// TODO(strager): Delete in favor of source_code_span_matcher.
-class span_matcher {
- public:
-  explicit span_matcher(const char8 *expected);
-
-  /*implicit*/ operator testing::Matcher<const identifier &>() const;
-  /*implicit*/ operator testing::Matcher<const source_code_span &>() const;
+  /*implicit*/ operator testing::Matcher<const Source_Code_Span &>() const;
 
  private:
-  class identifier_impl;
-  class span_impl;
+  class Span_Impl;
 
-  const char8 *expected_;
-};
-
-class source_code_span_matcher {
- public:
-  explicit source_code_span_matcher(source_code_span expected);
-
-  /*implicit*/ operator testing::Matcher<const identifier &>() const;
-  /*implicit*/ operator testing::Matcher<const source_code_span &>() const;
-
- private:
-  class identifier_impl;
-  class span_impl;
-
-  source_code_span expected_;
+  Padded_String_View code_;
+  CLI_Source_Position::Offset_Type begin_offset_;
+  CLI_Source_Position::Offset_Type end_offset_;
 };
 
 // Metadata for a member of a diagnostic class.
-struct diag_matcher_arg {
-  const char *member_name;
+struct Diag_Matcher_Arg {
+  std::string_view member_name;
   std::size_t member_offset;
-  diagnostic_arg_type member_type;
+  Diagnostic_Arg_Type member_type;
 
-  // member_type must be identifier or source_code_span.
-  source_code_span get_span(const void *error_object) const noexcept;
+  // Precondition: this->member_type == Diagnostic_Arg_Type::source_code_span
+  Source_Code_Span get_span(const void *error_object) const;
+
+  // Precondition: this->member_type == Diagnostic_Arg_Type::char8
+  Char8 get_char8(const void *error_object) const;
+
+  // Precondition: this->member_type == Diagnostic_Arg_Type::enum_kind
+  Enum_Kind get_enum_kind(const void *error_object) const;
+
+  // Precondition: this->member_type == Diagnostic_Arg_Type::string8_view
+  String8_View get_string8_view(const void *error_object) const;
+
+  // Precondition: this->member_type == Diagnostic_Arg_Type::statement_kind
+  Statement_Kind get_statement_kind(const void *error_object) const;
+
+  // Precondition: this->member_type == Diagnostic_Arg_Type::variable_kind
+  Variable_Kind get_variable_kind(const void *error_object) const;
 };
 
-// Create a diag_matcher_arg from a diag_ struct type and the name of a member
+// Create a Diag_Matcher_Arg from a Diag_ struct type and the name of a member
 // of that struct.
 #define DIAG_MATCHER_ARG(type, member)                           \
-  (::quick_lint_js::diag_matcher_arg{                            \
+  (::quick_lint_js::Diag_Matcher_Arg{                            \
       #member,                                                   \
       offsetof(type, member),                                    \
       ::quick_lint_js::get_diagnostic_message_arg_type<decltype( \
           type::member)>(),                                      \
   })
 
-// A mix of ::testing::VariantWith, ::testing::Field, and offsets_matcher. These
+// A mix of ::testing::VariantWith, ::testing::Field, and Offsets_Matcher. These
 // are combined into one matcher to significantly reduce compile times.
 //
 // See DIAG_TYPE and DIAG_TYPE_OFFSETS for example usage.
-class diag_matcher {
+class Diag_Matcher {
  public:
-  struct field {
-    // Must be identifier or source_code_span.
-    diag_matcher_arg arg;
+  struct Field {
+    // Must be Source_Code_Span.
+    Diag_Matcher_Arg arg;
 
-    cli_source_position::offset_type begin_offset;
-    string8_view text;
+    CLI_Source_Position::Offset_Type begin_offset;
+    String8_View text;
   };
 
-  explicit diag_matcher(diag_type type);
+  explicit Diag_Matcher(Diag_Type type);
 
-  // Create an offsets_matcher which asserts that an error's source_code_span
+  // Create an Offsets_Matcher which asserts that an error's Source_Code_Span
   // begins at field.begin_offset and ends at
   // field.begin_offset+strlen(field.text).
   //
-  // TODO(strager): Also ensure the error's source_code_span's content equals
+  // TODO(strager): Also ensure the error's Source_Code_Span's content equals
   // text.
-  explicit diag_matcher(padded_string_view input, diag_type type, field);
-  explicit diag_matcher(padded_string_view input, diag_type type, field, field);
-  explicit diag_matcher(padded_string_view input, diag_type type, field, field,
-                        field);
+  explicit Diag_Matcher(Padded_String_View input, Diag_Type type, Field);
+  explicit Diag_Matcher(Padded_String_View input, Diag_Type type, Field, Field);
+  explicit Diag_Matcher(Padded_String_View input, Diag_Type type, Field, Field,
+                        Field);
 
-  diag_matcher(const diag_matcher &) = default;
-  diag_matcher(diag_matcher &&) = default;
-  diag_matcher &operator=(const diag_matcher &) = default;
-  diag_matcher &operator=(diag_matcher &&) = default;
+  Diag_Matcher(const Diag_Matcher &) = default;
+  Diag_Matcher(Diag_Matcher &&) = default;
+  Diag_Matcher &operator=(const Diag_Matcher &) = default;
+  Diag_Matcher &operator=(Diag_Matcher &&) = default;
 
-  /*implicit*/ operator testing::Matcher<const diag_collector::diag &>() const;
+  /*implicit*/ operator testing::Matcher<const Diag_Collector::Diag &>() const;
 
  private:
-  class impl;
+  class Impl;
 
-  struct state {
-    diag_type type;
-    std::optional<padded_string_view> input;
-    std::vector<field> fields;
+  struct State {
+    Diag_Type type;
+    std::optional<Padded_String_View> input;
+    std::vector<Field> fields;
   };
 
-  state state_;
+  State state_;
+};
+
+// A mix of ::testing::VariantWith, ::testing::Field, and Offsets_Matcher. These
+// are combined into one matcher to significantly reduce compile times.
+class Diag_Matcher_2 {
+ public:
+  struct Field {
+    Diag_Matcher_Arg arg;
+
+    // If this->arg.member_type == Diag_Matcher_Arg::source_code_span:
+    CLI_Source_Position::Offset_Type begin_offset;
+    CLI_Source_Position::Offset_Type end_offset;
+
+    // If this->arg.member_type == Diag_Matcher_Arg::char8:
+    Char8 character;
+
+    // If this->arg.member_type == Diag_Matcher_Arg::enum_kind:
+    Enum_Kind enum_kind;
+
+    // If this->arg.member_type == Diag_Matcher_Arg::string8_view:
+    String8_View string;
+
+    // If this->arg.member_type == Diag_Matcher_Arg::statement_kind:
+    Statement_Kind statement_kind;
+
+    // If this->arg.member_type == Diag_Matcher_Arg::variable_kind:
+    Variable_Kind variable_kind;
+  };
+
+  explicit Diag_Matcher_2(Padded_String_View input, Diag_Type type,
+                          std::vector<Field>);
+
+  Diag_Matcher_2(const Diag_Matcher_2 &) = default;
+  Diag_Matcher_2(Diag_Matcher_2 &&) = default;
+  Diag_Matcher_2 &operator=(const Diag_Matcher_2 &) = default;
+  Diag_Matcher_2 &operator=(Diag_Matcher_2 &&) = default;
+
+  /*implicit*/ operator testing::Matcher<const Diag_Collector::Diag &>() const;
+
+ private:
+  class Impl;
+
+  struct State {
+    Diag_Type type;
+    Padded_String_View input;
+    std::vector<Field> fields;
+  };
+
+  State state_;
 };
 
 // A mix of ::testing::VariantWith, ::testing::Field, and
@@ -270,40 +260,38 @@ class diag_matcher {
 // significantly reduce compile times.
 //
 // See DIAG_TYPE_SPAN for example usage.
-class diag_spans_matcher {
+class Diag_Spans_Matcher {
  public:
-  struct field {
-    // Must be identifier or source_code_span.
-    diag_matcher_arg arg;
+  struct Field {
+    // Must be Source_Code_Span.
+    Diag_Matcher_Arg arg;
 
-    source_code_span expected;
+    Source_Code_Span expected;
   };
 
-  // Create a matcher which asserts that an error's source_code_span's
+  // Create a matcher which asserts that an error's Source_Code_Span's
   // begin and end pointers equal the expected span.
-  explicit diag_spans_matcher(diag_type type, field);
-  explicit diag_spans_matcher(diag_type type, field, field);
+  explicit Diag_Spans_Matcher(Diag_Type type, Field);
+  explicit Diag_Spans_Matcher(Diag_Type type, Field, Field);
 
-  diag_spans_matcher(const diag_spans_matcher &) = default;
-  diag_spans_matcher(diag_spans_matcher &&) = default;
-  diag_spans_matcher &operator=(const diag_spans_matcher &) = default;
-  diag_spans_matcher &operator=(diag_spans_matcher &&) = default;
+  Diag_Spans_Matcher(const Diag_Spans_Matcher &) = default;
+  Diag_Spans_Matcher(Diag_Spans_Matcher &&) = default;
+  Diag_Spans_Matcher &operator=(const Diag_Spans_Matcher &) = default;
+  Diag_Spans_Matcher &operator=(Diag_Spans_Matcher &&) = default;
 
-  /*implicit*/ operator testing::Matcher<const diag_collector::diag &>() const;
+  /*implicit*/ operator testing::Matcher<const Diag_Collector::Diag &>() const;
 
  private:
-  class impl;
+  class Impl;
 
-  struct state {
-    diag_type type;
-    std::vector<field> fields;
+  struct State {
+    Diag_Type type;
+    std::vector<Field> fields;
   };
 
-  state state_;
+  State state_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

@@ -1,22 +1,21 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_BINARY_WRITER_H
-#define QUICK_LINT_JS_UTIL_BINARY_WRITER_H
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 
 namespace quick_lint_js {
-// binary_writer does no bounds checking.
-class binary_writer {
+// Binary_Writer does no bounds checking.
+class Binary_Writer {
  public:
-  explicit binary_writer(std::uint8_t *out) noexcept : out_(out) {}
+  explicit Binary_Writer(std::uint8_t *out) : out_(out) {}
 
-  void u8(std::uint8_t data) noexcept { *this->out_++ = data; }
+  void u8(std::uint8_t data) { *this->out_++ = data; }
 
-  void u64_le(std::uint64_t data) noexcept {
+  void u64_le(std::uint64_t data) {
     this->out_[0] = static_cast<std::uint8_t>(data >> (8 * 0));
     this->out_[1] = static_cast<std::uint8_t>(data >> (8 * 1));
     this->out_[2] = static_cast<std::uint8_t>(data >> (8 * 2));
@@ -28,7 +27,7 @@ class binary_writer {
     this->out_ += 8;
   }
 
-  std::size_t bytes_written_since(std::uint8_t *begin) const noexcept {
+  std::size_t bytes_written_since(std::uint8_t *begin) const {
     return narrow_cast<std::size_t>(this->out_ - begin);
   }
 
@@ -36,8 +35,6 @@ class binary_writer {
   std::uint8_t *out_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

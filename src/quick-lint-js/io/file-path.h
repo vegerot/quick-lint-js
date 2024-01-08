@@ -1,23 +1,28 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_IO_FILE_PATH_H
-#define QUICK_LINT_JS_IO_FILE_PATH_H
+#pragma once
 
 #include <quick-lint-js/port/have.h>
+#include <quick-lint-js/util/cpp.h>
 #include <string>
 
 #if defined(_WIN32)
 #define QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR "\\"
+#define QLJS_ALL_PATH_DIRECTORY_SEPARATORS "\\/"
 #else
 #define QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR "/"
+#define QLJS_ALL_PATH_DIRECTORY_SEPARATORS "/"
 #endif
+
+#define QLJS_ALL_PATH_DIRECTORY_SEPARATORS_SV \
+  QLJS_CPP_CONCAT(QLJS_ALL_PATH_DIRECTORY_SEPARATORS, sv)
 
 namespace quick_lint_js {
 std::string parent_path(std::string&&);
-}
 
-#endif
+std::string_view path_file_name(std::string_view);
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

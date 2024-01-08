@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_SPY_LSP_MESSAGE_PARSER_H
-#define QUICK_LINT_JS_SPY_LSP_MESSAGE_PARSER_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No LSP on the web.
@@ -14,16 +13,16 @@
 #include <vector>
 
 namespace quick_lint_js {
-class spy_lsp_message_parser
-    : public lsp_message_parser<spy_lsp_message_parser> {
+class Spy_LSP_Message_Parser
+    : public LSP_Message_Parser<Spy_LSP_Message_Parser> {
  public:
-  void message_parsed(string8_view message) {
+  void message_parsed(String8_View message) {
     std::lock_guard lock(this->mutex_);
     this->messages_.emplace_back(message);
     this->new_message_.notify_all();
   }
 
-  std::vector<string8> messages() {
+  std::vector<String8> messages() {
     std::lock_guard lock(this->mutex_);
     return this->messages_;
   }
@@ -37,14 +36,12 @@ class spy_lsp_message_parser
   }
 
  private:
-  mutable mutex mutex_;
-  mutable condition_variable new_message_;
+  mutable Mutex mutex_;
+  mutable Condition_Variable new_message_;
 
-  std::vector<string8> messages_;
+  std::vector<String8> messages_;
 };
 }
-
-#endif
 
 #endif
 

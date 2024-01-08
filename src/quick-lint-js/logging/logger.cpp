@@ -9,15 +9,16 @@
 #include <cstdio>
 #include <memory>
 #include <quick-lint-js/assert.h>
+#include <quick-lint-js/container/vector.h>
 #include <quick-lint-js/logging/log.h>
 #include <quick-lint-js/logging/logger.h>
+#include <quick-lint-js/port/memory-resource.h>
 #include <quick-lint-js/port/process.h>
-#include <quick-lint-js/port/thread.h>
 #include <quick-lint-js/port/warning.h>
 #include <quick-lint-js/util/algorithm.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
+#include <quick-lint-js/util/synchronized.h>
 #include <string.h>
-#include <vector>
 
 QLJS_WARNING_IGNORE_CLANG("-Wformat-nonliteral")
 QLJS_WARNING_IGNORE_GCC("-Wformat-security")
@@ -30,29 +31,32 @@ QLJS_WARNING_IGNORE_GCC("-Wsuggest-attribute=format")
 
 namespace quick_lint_js {
 namespace {
-mutex global_loggers_mutex;
-std::vector<logger*> global_loggers;
-bool global_loggers_initialized = false;
+struct Global_Loggers {
+  Vector<Logger*> loggers{"Global_Loggers::loggers", new_delete_resource()};
+  bool initialized = false;
 
-void initialize_global_loggers_if_needed(std::lock_guard<mutex>&) {
-  if (global_loggers_initialized) {
-    return;
-  }
+  void initialize_if_needed() {
+    if (this->initialized) {
+      return;
+    }
 #if defined(QLJS_DEBUG_LOGGING_FILE)
-  static file_logger default_logger(QLJS_DEBUG_LOGGING_FILE);
-  global_loggers.push_back(&default_logger);
+    static File_Logger default_logger(QLJS_DEBUG_LOGGING_FILE);
+    this->loggers.push_back(&default_logger);
 #endif
-  global_loggers_initialized = true;
-}
+    this->initialized = true;
+  }
+};
+
+Synchronized<Global_Loggers> loggers;
 }
 
-logger::~logger() = default;
+Logger::~Logger() = default;
 
-file_logger::file_logger(const char* path) : file_(std::fopen(path, "a")) {
+File_Logger::File_Logger(const char* path) : file_(std::fopen(path, "a")) {
   // TODO(strager): Report fopen failures.
 }
 
-void file_logger::log(std::string_view message) {
+void File_Logger::log(std::string_view message) {
   FILE* file = this->file_.get();
   if (!file) {
     // File didn't open. Don't try to log anything.
@@ -67,39 +71,40 @@ void file_logger::log(std::string_view message) {
   std::fflush(file);
 }
 
-void file_logger::file_deleter::operator()(FILE* file) {
+void File_Logger::File_Deleter::operator()(FILE* file) {
   if (file) {
     std::fclose(file);
     // TODO(strager): Report fclose failures.
   }
 }
 
-void enable_logger(logger* l) {
-  std::lock_guard lock(global_loggers_mutex);
-  initialize_global_loggers_if_needed(lock);
+void enable_logger(Logger* l) {
+  Lock_Ptr<Global_Loggers> locked_loggers = loggers.lock();
+  locked_loggers->initialize_if_needed();
 
-  QLJS_ASSERT(!contains(global_loggers, l));
-  global_loggers.push_back(l);
+  QLJS_ASSERT(!contains(locked_loggers->loggers, l));
+  locked_loggers->loggers.push_back(l);
 }
 
-void disable_logger(logger* l) {
-  std::lock_guard lock(global_loggers_mutex);
-  initialize_global_loggers_if_needed(lock);
+void disable_logger(Logger* l) {
+  Lock_Ptr<Global_Loggers> locked_loggers = loggers.lock();
+  locked_loggers->initialize_if_needed();
 
-  global_loggers.erase(find_unique_existing(global_loggers, l));
+  locked_loggers->loggers.erase(
+      find_unique_existing(locked_loggers->loggers, l));
 }
 
-bool is_logging_enabled() noexcept {
-  std::lock_guard lock(global_loggers_mutex);
-  initialize_global_loggers_if_needed(lock);
-  return !global_loggers.empty();
+bool is_logging_enabled() {
+  Lock_Ptr<Global_Loggers> locked_loggers = loggers.lock();
+  locked_loggers->initialize_if_needed();
+  return !locked_loggers->loggers.empty();
 }
 
 namespace {
 void debug_log_v(const char* format, std::va_list args) {
-  std::lock_guard lock(global_loggers_mutex);
-  initialize_global_loggers_if_needed(lock);
-  if (global_loggers.empty()) {
+  Lock_Ptr<Global_Loggers> locked_loggers = loggers.lock();
+  locked_loggers->initialize_if_needed();
+  if (locked_loggers->loggers.empty()) {
     return;
   }
 
@@ -111,7 +116,7 @@ void debug_log_v(const char* format, std::va_list args) {
       narrow_cast<std::size_t>(full_message_length), message.size() - 1);
   std::string_view message_view(message.data(), message_length);
 
-  for (logger* l : global_loggers) {
+  for (Logger* l : locked_loggers->loggers) {
     l->log(message_view);
   }
 }

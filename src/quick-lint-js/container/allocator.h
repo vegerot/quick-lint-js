@@ -1,32 +1,32 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_ALLOCATOR_H
-#define QUICK_LINT_JS_CONTAINER_ALLOCATOR_H
+#pragma once
 
+#include <quick-lint-js/assert.h>
 #include <quick-lint-js/port/memory-resource.h>
+#include <quick-lint-js/port/unreachable.h>
 #include <quick-lint-js/port/warning.h>
 #include <utility>
 
 namespace quick_lint_js {
-QLJS_WARNING_PUSH
-QLJS_WARNING_IGNORE_GCC("-Wnull-dereference")
 template <class T, class... Args>
-T* new_object(memory_resource* memory, Args&&... args) {
+T* new_object(Memory_Resource* memory, Args&&... args) {
   T* result = reinterpret_cast<T*>(memory->allocate(sizeof(T), alignof(T)));
+  if (result == nullptr) {
+    QLJS_SLOW_ASSERT(result != nullptr);
+    QLJS_UNREACHABLE();  // Silence GCC warnings.
+  }
   result = new (result) T(std::forward<Args>(args)...);
   return result;
 }
-QLJS_WARNING_POP
 
 template <class T>
-void delete_object(memory_resource* memory, T* object) {
+void delete_object(Memory_Resource* memory, T* object) {
   object->~T();
   memory->deallocate(object, sizeof(T), alignof(T));
 }
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

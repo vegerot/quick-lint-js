@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CLI_VIM_LOCATION_H
-#define QUICK_LINT_JS_CLI_VIM_LOCATION_H
+#pragma once
 
 #include <cstddef>
 #include <iosfwd>
@@ -11,53 +10,50 @@
 #include <vector>
 
 namespace quick_lint_js {
-class source_code_span;
+class Source_Code_Span;
 
-struct vim_source_position {
+struct Vim_Source_Position {
   int lnum;
   int col;
 
-  bool operator==(const vim_source_position& other) const noexcept {
+  bool operator==(const Vim_Source_Position& other) const {
     return this->lnum == other.lnum && this->col == other.col;
   }
 
-  bool operator!=(const vim_source_position& other) const noexcept {
+  bool operator!=(const Vim_Source_Position& other) const {
     return !(*this == other);
   }
 };
 
-std::ostream& operator<<(std::ostream&, const vim_source_position&);
+std::ostream& operator<<(std::ostream&, const Vim_Source_Position&);
 
-struct vim_source_range {
-  vim_source_position begin;
-  vim_source_position end;
+struct Vim_Source_Range {
+  Vim_Source_Position begin;
+  Vim_Source_Position end;
 };
 
-class vim_locator {
+class Vim_Locator {
  public:
-  explicit vim_locator(padded_string_view input) noexcept;
+  explicit Vim_Locator(Padded_String_View input);
 
-  vim_source_range range(source_code_span) const;
-  vim_source_position position(const char8*) const noexcept;
+  Vim_Source_Range range(Source_Code_Span) const;
+  Vim_Source_Position position(const Char8*) const;
 
  private:
-  using offset_type = int;
+  using Offset_Type = int;
 
   void cache_offsets_of_lines() const;
 
-  int find_line_at_offset(offset_type offset) const;
+  int find_line_at_offset(Offset_Type offset) const;
 
-  offset_type offset(const char8*) const noexcept;
+  Offset_Type offset(const Char8*) const;
 
-  vim_source_position position(int line_number, offset_type offset) const
-      noexcept;
+  Vim_Source_Position position(int line_number, Offset_Type offset) const;
 
-  padded_string_view input_;
-  mutable std::vector<offset_type> offset_of_lines_;
+  Padded_String_View input_;
+  mutable std::vector<Offset_Type> offset_of_lines_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

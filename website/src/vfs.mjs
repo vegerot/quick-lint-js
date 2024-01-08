@@ -1,13 +1,14 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-import assert from "assert";
+import assert from "node:assert";
 import esbuild from "esbuild-wasm";
-import fs from "fs";
+import fs from "node:fs";
 import mime from "mime";
-import os from "os";
-import path from "path";
-import url from "url";
+import os from "node:os";
+import path from "node:path";
+import url from "node:url";
+import { Buffer } from "node:buffer";
 import { readFileAsync } from "./fs.mjs";
 import { renderEJSFileAsync } from "./router.mjs";
 import { substituteCustomHTMLComponentsAsync } from "./custom-component.mjs";
@@ -71,11 +72,12 @@ export class VFS {
         } else if (fsChild.name === "index.ejs.html") {
           listing._addChild(
             "",
-            new EJSVFSFile(
-              path.join(dirPath, "index.ejs.html"),
-              uri,
-              await this._getCustomComponentsFromIndexScriptsAsync(uri)
-            )
+            new EJSVFSFile({
+              path: path.join(dirPath, "index.ejs.html"),
+              uri: uri,
+              customComponents:
+                await this._getCustomComponentsFromIndexScriptsAsync(uri),
+            })
           );
         } else if (fsChild.name === "index.mjs") {
           // Ignore. index.mjs is imported later.
@@ -171,11 +173,13 @@ export class VFS {
             case "build-ejs":
               // TODO(strager): The path should be relative to index.mjs's
               // parent directory instead.
-              // TODO(strager): Include custom components.
-              childEntry = new EJSVFSFile(
-                path.join(this._rootPath, route.path),
-                routeURI
-              );
+              childEntry = new EJSVFSFile({
+                path: path.join(this._rootPath, route.path),
+                uri: routeURI,
+                contentType: route.contentType ?? null,
+                // TODO(strager): Include custom components.
+                customComponents: {},
+              });
               break;
 
             case "esbuild":
@@ -261,7 +265,7 @@ export class StaticVFSFile extends VFSEntry {
   }
 
   async getContentsAsync() {
-    return await fs.promises.readFile(this._path);
+    return await readFileAsync(this._path);
   }
 
   getContentType() {
@@ -271,10 +275,11 @@ export class StaticVFSFile extends VFSEntry {
 
 // An template file (usually generating HTML).
 export class EJSVFSFile extends VFSEntry {
-  constructor(path, uri, customComponents = {}) {
+  constructor({ path, uri, customComponents = {}, contentType = null }) {
     super();
     this._path = path;
     this._uri = uri;
+    this._contentType = contentType ?? "text/html";
 
     this._customComponents = {};
     for (let name in customComponents) {
@@ -307,7 +312,7 @@ export class EJSVFSFile extends VFSEntry {
   }
 
   getContentType() {
-    return "text/html";
+    return this._contentType;
   }
 }
 

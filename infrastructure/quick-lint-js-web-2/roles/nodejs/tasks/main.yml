@@ -1,0 +1,51 @@
+---
+# Copyright (C) 2020  Matthew Glazar
+# See end of file for extended copyright information.
+
+# https://github.com/nodesource/distributions#ubuntu-versions
+- name: Install NodeSource GPG key
+  ansible.builtin.copy:
+    src: nodesource.gpg
+    dest: /etc/apt/keyrings/nodesource.gpg
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+# https://github.com/nodesource/distributions#ubuntu-versions
+- name: Install NodeSource apt repository (Node.js 20.x)
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main"
+    state: present
+    filename: nodesource
+  become: true
+
+- name: Install Node.js
+  ansible.builtin.apt:
+    name:
+      - nodejs
+    state: present
+  become: true
+
+- name: Install Yarn
+  ansible.builtin.command:
+    cmd: npm install --global --no-save yarn
+  become: true
+
+# quick-lint-js finds bugs in JavaScript programs.
+# Copyright (C) 2020  Matthew Glazar
+#
+# This file is part of quick-lint-js.
+#
+# quick-lint-js is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# quick-lint-js is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with quick-lint-js.  If not, see <https://www.gnu.org/licenses/>.

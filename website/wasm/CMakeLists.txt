@@ -1,7 +1,7 @@
 # Copyright (C) 2020  Matthew "strager" Glazar
 # See end of file for extended copyright information.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
 include(QuickLintJSCopyright)
 include(QuickLintJSNodeJS)
 include(QuickLintJSTarget)
@@ -10,7 +10,7 @@ set(VSCODE_DIST_DIR dist)
 
 if (EMSCRIPTEN)
   # TODO(strager): Rename.
-  quick_lint_js_add_executable(quick-lint-js-vscode empty.cpp)
+  quick_lint_js_add_empty_executable(quick-lint-js-vscode)
   target_link_libraries(
     quick-lint-js-vscode
     PRIVATE

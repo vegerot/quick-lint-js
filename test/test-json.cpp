@@ -1,83 +1,84 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#include <boost/json/parse.hpp>
-#include <boost/json/value.hpp>
 #include <gtest/gtest.h>
-#include <quick-lint-js/boost-json.h>
 #include <quick-lint-js/io/output-stream.h>
 #include <quick-lint-js/json.h>
 #include <quick-lint-js/port/char8.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
+#include <simdjson.h>
 
 namespace quick_lint_js {
 namespace {
-TEST(test_json, escapes_backslashes) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8R"(hello\world)"));
+TEST(Test_JSON, escapes_backslashes) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8R"(hello\world)"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\\world)");
 }
 
-TEST(test_json, escapes_double_quotes) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8R"(hello"world)"));
+TEST(Test_JSON, escapes_double_quotes) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8R"(hello"world)"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\"world)");
 }
 
-TEST(test_json, escapes_newlines) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8"hello\nworld"));
+TEST(Test_JSON, escapes_newlines) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8"hello\nworld"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\nworld)");
 }
 
-TEST(test_json, escapes_tabs) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8"hello\tworld"));
+TEST(Test_JSON, escapes_tabs) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8"hello\tworld"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\tworld)");
 }
 
-TEST(test_json, escapes_carriage_returns) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8"hello\rworld"));
+TEST(Test_JSON, escapes_carriage_returns) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8"hello\rworld"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\rworld)");
 }
 
-TEST(test_json, escapes_backspaces) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8"hello\bworld"));
+TEST(Test_JSON, escapes_backspaces) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8"hello\bworld"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\bworld)");
 }
 
-TEST(test_json, escapes_form_feeds) {
-  memory_output_stream json;
-  write_json_escaped_string(json, string8_view(u8"hello\fworld"));
+TEST(Test_JSON, escapes_form_feeds) {
+  Memory_Output_Stream json;
+  write_json_escaped_string(json, u8"hello\fworld"_sv);
   json.flush();
   EXPECT_EQ(json.get_flushed_string8(), u8R"(hello\fworld)");
 }
 
-TEST(test_json, ascii_characters_are_parsable_by_boost_json) {
+TEST(Test_JSON, ascii_characters_are_parsable_by_simdjson_ondemand) {
   for (int c = 0; c < 128; ++c) {
-    string8 string = string8(u8"hello") + narrow_cast<char8>(c) + u8"world";
+    String8 string = String8(u8"hello") + narrow_cast<Char8>(c) + u8"world";
     SCOPED_TRACE(out_string8(string));
 
-    memory_output_stream json;
+    Memory_Output_Stream json;
     json.append_copy(u8'"');
-    write_json_escaped_string(json, string8_view(string));
+    write_json_escaped_string(json, String8_View(string));
     json.append_copy(u8'"');
     json.flush();
     SCOPED_TRACE(out_string8(json.get_flushed_string8()));
 
-    ::boost::json::error_code error;
-    ::boost::json::value parsed = ::boost::json::parse(
-        to_boost_string_view(json.get_flushed_string8()), error);
-    EXPECT_FALSE(error);
-    EXPECT_EQ(parsed, to_boost_string_view(string));
+    ::simdjson::padded_string json_padded(
+        to_string_view(json.get_flushed_string8()));
+    ::simdjson::ondemand::parser parser;
+    ::simdjson::simdjson_result<::simdjson::ondemand::document> document =
+        parser.iterate(json_padded);
+    std::string_view parsed_string;
+    ASSERT_EQ(document.get_string().get(parsed_string), ::simdjson::SUCCESS);
+    EXPECT_EQ(parsed_string, to_string_view(string));
   }
 }
 }

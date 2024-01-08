@@ -1,20 +1,17 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FAILING_DIAG_REPORTER_H
-#define QUICK_LINT_JS_FAILING_DIAG_REPORTER_H
+#pragma once
 
-#include <quick-lint-js/fe/diag-reporter.h>
+#include <quick-lint-js/diag/diag-reporter.h>
 
 namespace quick_lint_js {
 // Fails the test if any error is reported.
-class failing_diag_reporter : public diag_reporter {
+class Failing_Diag_Reporter : public Diag_Reporter {
  public:
-  void report_impl(diag_type type, void *diag) override;
+  void report_impl(Diag_Type type, void *diag) override;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

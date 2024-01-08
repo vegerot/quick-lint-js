@@ -1,17 +1,21 @@
+<!---{
+"title": "Sometimes it *is* a compiler bug",
+"linkLabelHTML": "Sometimes it <em>is</em> a compiler bug",
+"description": "My journey in finding and fixing a bug in a C++ toolchain",
+"navTitle": "Compiler bug",
+"blogAuthor": "Matthew \"strager\" Glazar",
+"blogDate": "2022-05-25T21:04:02-07:00"
+}--->
+
 <!DOCTYPE html>
 <!-- Copyright (C) 2020  Matthew "strager" Glazar -->
 <!-- See end of file for extended copyright information. -->
 <html>
   <head>
-    <%- await include("../../common-head.ejs.html", { title: `Sometimes it *is*
-    a compiler bug`, description: `My journey in finding and fixing a bug in a
-    C++ toolchain` }) %>
+    <%- await include("../../common-head.ejs.html") %> <%- await
+    include("../blog-head.ejs.html") %>
     <link href="../../main.css" rel="stylesheet" />
     <style>
-      .subtitle {
-        font-style: italic;
-      }
-
       pre mark {
         background-color: #fcfca8;
       }
@@ -115,14 +119,14 @@
     <header><%- await include("../../common-nav.ejs.html") %></header>
 
     <main>
-      <h2>Sometimes, it <em>is</em> a compiler bug</h2>
-      <p class="subtitle">
-        My journey in finding and fixing a bug in a C++ toolchain.
-      </p>
+      <hgroup>
+        <h1>Sometimes, it <em>is</em> a compiler bug</h1>
+        <p>My journey in finding and fixing a bug in a C++ toolchain.</p>
+      </hgroup>
 
       <p>
         Written by <a href="https://strager.net/">strager</a> on
-        <time>2022-05-25</time>
+        <qljs-date datetime="<%= meta.blogDate %>" />
       </p>
 
       <section id="table-of-contents">
@@ -138,16 +142,13 @@
       </section>
 
       <section id="introduction">
-        <h3>Introduction</h3>
+        <h2>Introduction</h2>
         <p>
           I was watching a programming Twitch stream when I noticed the coder
           make a mistake. I quickly pointed them to the
           <a href="../../">quick-lint-js</a> VS Code extension which I knew
-          would highlight their mistake. My heart sank when
-          <a
-            href="https://clips.twitch.tv/SparklingDignifiedCougarResidentSleeper-RHRLrGb3lgZtUhVu"
-            >quick-lint-js reported an error that didn't exist</a
-          >:
+          would highlight their mistake. My heart sank when quick-lint-js
+          reported an error that didn't exist:
         </p>
         <figure>
           <img
@@ -160,10 +161,7 @@
             quick-lint-js reporting an error on line 1, despite there being no
             mistake<br />
             Source:
-            <a
-              href="https://clips.twitch.tv/SparklingDignifiedCougarResidentSleeper-RHRLrGb3lgZtUhVu"
-              >ryan_the_rhg</a
-            >
+            <a href="https://www.twitch.tv/ryan_the_rhg">ryan_the_rhg</a>
           </figcaption>
         </figure>
 
@@ -184,10 +182,7 @@
             quick-lint-js correctly says "'await' is only allowed in async
             functions" but in the wrong place<br />
             Source:
-            <a
-              href="https://clips.twitch.tv/SparklingDignifiedCougarResidentSleeper-RHRLrGb3lgZtUhVu"
-              >ryan_the_rhg</a
-            >
+            <a href="https://www.twitch.tv/ryan_the_rhg">ryan_the_rhg</a>
           </figcaption>
         </figure>
 
@@ -198,7 +193,7 @@
       </section>
 
       <section id="reproducing">
-        <h3>Reproducing the bug</h3>
+        <h2>Reproducing the bug</h2>
         <p>
           The first step I took is to make the bug happen on my computer. I
           started by doing exactly what the streamer did: introduce a mistake in
@@ -268,7 +263,7 @@
       </section>
 
       <section id="isolating">
-        <h3>Isolating the bug</h3>
+        <h2>Isolating the bug</h2>
         <p>
           To investigate further, I needed to build the extension from source.
           When I tried, the bug didn't happen. Hmm.
@@ -429,7 +424,7 @@ init test: 42 -&gt; 42</code></pre>
       </section>
 
       <section id="root-cause">
-        <h3>Finding the root cause</h3>
+        <h2>Finding the root cause</h2>
         <p>
           I now know that the first call to
           <code class="cxx function">napi_create_double</code> creates a broken
@@ -566,7 +561,7 @@ End of assembler dump.</code></pre>
       </section>
 
       <section id="fixing">
-        <h3>Fixing the bug</h3>
+        <h2>Fixing the bug</h2>
         <p>
           My current hypothesis: The implib code should have saved
           <code class="x86">xmm1</code>, but it didn't.
@@ -658,7 +653,7 @@ if test -r ../../../bfd/../mkinstalldirs; then \
   ../../../bfd/../mkinstalldirs /ucrt64/share; \
 else \
   ../../../bfd/mkinstalldirs /ucrt64/share; \
-fi 
+fi
 installing da.gmo as <mark>/ucrt64/share/locale/da/LC_MESSAGES/bfd.mo</mark>
 installing es.gmo as <mark>/ucrt64/share/locale/es/LC_MESSAGES/bfd.mo</mark>
 installing fi.gmo as <mark>/ucrt64/share/locale/fi/LC_MESSAGES/bfd.mo</mark>
@@ -811,7 +806,7 @@ installing fr.gmo as <mark>/ucrt64/share/locale/fr/LC_MESSAGES/bfd.mo</mark></co
       </section>
 
       <section id="cleanup">
-        <h3>Finishing up</h3>
+        <h2>Finishing up</h2>
         <p>
           Now that I had a proven fix in dlltool, there's a problem: How can I
           make quick-lint-js' CI builds use the patched dlltool? I want to avoid
@@ -858,7 +853,7 @@ installing fr.gmo as <mark>/ucrt64/share/locale/fr/LC_MESSAGES/bfd.mo</mark></co
       </section>
 
       <section id="conclusion">
-        <h3>Conclusion</h3>
+        <h2>Conclusion</h2>
         <p>
           I've hit compiler bugs before, but this bug was the hardest I've
           squashed. Investigating and fixing it took a few days and spanned

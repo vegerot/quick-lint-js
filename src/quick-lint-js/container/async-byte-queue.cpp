@@ -7,41 +7,43 @@
 #include <cstring>
 #include <quick-lint-js/container/async-byte-queue.h>
 #include <quick-lint-js/port/memory-resource.h>
+#include <quick-lint-js/port/span.h>
 #include <quick-lint-js/port/thread.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <quick-lint-js/util/pointer.h>
 #include <utility>
 
 namespace quick_lint_js {
-async_byte_queue::async_byte_queue()
-    : async_byte_queue(new_delete_resource()) {}
+Async_Byte_Queue::Async_Byte_Queue()
+    : Async_Byte_Queue(new_delete_resource()) {}
 
-async_byte_queue::async_byte_queue(memory_resource* memory) : memory_(memory) {}
+Async_Byte_Queue::Async_Byte_Queue(Memory_Resource* memory) : memory_(memory) {}
 
-async_byte_queue::~async_byte_queue() {
-  chunk* c = this->reader_chunk_;
+Async_Byte_Queue::~Async_Byte_Queue() {
+  Chunk* c = this->reader_chunk_;
   while (c) {
-    chunk::deallocate(this->memory_, std::exchange(c, c->next));
+    Chunk::destroy_header_and_deallocate(this->memory_,
+                                         std::exchange(c, c->next));
   }
 }
 
-void* async_byte_queue::append(size_type byte_count) {
+void* Async_Byte_Queue::append(Size_Type byte_count) {
   this->reserve(byte_count);
   return std::exchange(this->writer_cursor_, this->writer_cursor_ + byte_count);
 }
 
-void async_byte_queue::append_copy(char8 data) {
+void Async_Byte_Queue::append_copy(Char8 data) {
   return this->append_copy(&data, sizeof(data));
 }
 
-void async_byte_queue::append_copy(const void* data, size_type byte_count) {
+void Async_Byte_Queue::append_copy(const void* data, Size_Type byte_count) {
   void* out = this->append(byte_count);
   std::memcpy(out, data, byte_count);
 }
 
-void async_byte_queue::commit() {
+void Async_Byte_Queue::commit() {
   {
-    std::lock_guard<mutex> lock(this->mutex_);
+    std::lock_guard<Mutex> lock(this->mutex_);
     this->update_current_chunk_size(lock);
     this->writer_last_chunk_->committed_index =
         this->writer_last_chunk_->data_size;
@@ -49,24 +51,25 @@ void async_byte_queue::commit() {
   this->writer_first_chunk_ = this->writer_last_chunk_;
 }
 
-string8 async_byte_queue::take_committed_string8() {
-  string8 result;
+String8 Async_Byte_Queue::take_committed_string8() {
+  String8 result;
   this->take_committed(
-      [&result](const std::byte* data, std::size_t size) -> void {
-        result.append(reinterpret_cast<const char8*>(data), size);
+      [&result](Span<const std::byte> data) -> void {
+        result.append(reinterpret_cast<const Char8*>(data.data()),
+                      narrow_cast<std::size_t>(data.size()));
       },
       []() {});
   return result;
 }
 
-void async_byte_queue::reserve(size_type extra_byte_count) {
+void Async_Byte_Queue::reserve(Size_Type extra_byte_count) {
   if (this->bytes_remaining_in_current_chunk() < extra_byte_count) {
     this->grow(extra_byte_count);
   }
 }
 
-void async_byte_queue::reserve_aligned(size_type extra_byte_count,
-                                       size_type alignment) {
+void Async_Byte_Queue::reserve_aligned(Size_Type extra_byte_count,
+                                       Size_Type alignment) {
   if (!is_aligned(this->writer_cursor_, alignment) ||
       this->bytes_remaining_in_current_chunk() < extra_byte_count) {
     this->grow(extra_byte_count);
@@ -74,60 +77,40 @@ void async_byte_queue::reserve_aligned(size_type extra_byte_count,
   }
 }
 
-void async_byte_queue::grow(size_type extra_byte_count) {
+void Async_Byte_Queue::grow(Size_Type extra_byte_count) {
   {
-    std::lock_guard<mutex> lock(this->mutex_);
+    std::lock_guard<Mutex> lock(this->mutex_);
     this->update_current_chunk_size(lock);
   }
   this->add_new_chunk(std::max(default_chunk_size, extra_byte_count));
 }
 
-void async_byte_queue::add_new_chunk(size_type chunk_size) {
-  chunk* new_chunk = chunk::allocate(this->memory_, chunk_size);
+void Async_Byte_Queue::add_new_chunk(Size_Type chunk_size) {
+  Chunk* new_chunk =
+      Chunk::allocate_and_construct_header(this->memory_, chunk_size);
   {
-    std::lock_guard<mutex> lock(this->mutex_);
+    std::lock_guard<Mutex> lock(this->mutex_);
     this->writer_last_chunk_->next = new_chunk;
   }
   this->writer_last_chunk_ = new_chunk;
-  this->writer_cursor_ = new_chunk->capacity_begin();
-  this->writer_chunk_end_ = new_chunk->capacity_end();
+  this->writer_cursor_ = new_chunk->flexible_capacity_begin();
+  this->writer_chunk_end_ = new_chunk->flexible_capacity_end();
 }
 
-void async_byte_queue::update_current_chunk_size(
-    std::lock_guard<mutex>&) noexcept {
+void Async_Byte_Queue::update_current_chunk_size(std::lock_guard<Mutex>&) {
   this->writer_last_chunk_->data_size = this->bytes_used_in_current_chunk();
 }
 
-async_byte_queue::size_type async_byte_queue::bytes_remaining_in_current_chunk()
-    const noexcept {
-  return narrow_cast<size_type>(this->writer_chunk_end_ - this->writer_cursor_);
+Async_Byte_Queue::Size_Type Async_Byte_Queue::bytes_remaining_in_current_chunk()
+    const {
+  return narrow_cast<Size_Type>(this->writer_chunk_end_ - this->writer_cursor_);
 }
 
-async_byte_queue::size_type async_byte_queue::bytes_used_in_current_chunk()
-    const noexcept {
-  return narrow_cast<size_type>(this->writer_cursor_ -
-                                this->writer_last_chunk_->capacity_begin());
-}
-
-async_byte_queue::chunk* async_byte_queue::chunk::allocate(
-    memory_resource* memory, size_type data_size) {
-  void* c = memory->allocate(chunk::allocation_size(data_size), alignof(chunk));
-  return new (c) chunk(data_size);
-}
-
-void async_byte_queue::chunk::deallocate(memory_resource* memory, chunk* c) {
-  std::size_t byte_size = c->allocation_size();
-  c->~chunk();
-  memory->deallocate(c, byte_size, alignof(chunk));
-}
-
-std::size_t async_byte_queue::chunk::allocation_size(
-    size_type capacity) noexcept {
-  return sizeof(chunk) + capacity;
-}
-
-std::size_t async_byte_queue::chunk::allocation_size() const noexcept {
-  return chunk::allocation_size(this->capacity);
+Async_Byte_Queue::Size_Type Async_Byte_Queue::bytes_used_in_current_chunk()
+    const {
+  return narrow_cast<Size_Type>(
+      this->writer_cursor_ -
+      this->writer_last_chunk_->flexible_capacity_begin());
 }
 }
 

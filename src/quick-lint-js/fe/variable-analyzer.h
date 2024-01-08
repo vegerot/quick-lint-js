@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_VARIABLE_ANALYZER_H
-#define QUICK_LINT_JS_FE_VARIABLE_ANALYZER_H
+#pragma once
 
 #include <optional>
 #include <quick-lint-js/assert.h>
@@ -13,12 +12,12 @@
 #include <vector>
 
 namespace quick_lint_js {
-class diag_reporter;
-class global_declared_variable_set;
-struct global_declared_variable;
+class Diag_Reporter;
+class Global_Declared_Variable_Set;
+struct Global_Declared_Variable;
 
 // TODO(strager): Accept parser options from quick-lint-js.config.
-struct variable_analyzer_options {
+struct Variable_Analyzer_Options {
   // If true, 'delete somevar;' is legal (but might be still issue a warning).
   //
   // If false, 'delete somevar;' is invalid, and variable_analyzer will report a
@@ -29,6 +28,21 @@ struct variable_analyzer_options {
   //
   // If false, eval is not supposed to declare variables, like in TypeScript.
   bool eval_can_declare_variables = true;
+
+  // If true, assigning to a 'class'-declared variable is legal, like in vanilla
+  // JavaScript.
+  //
+  // If false, assigning to a 'class'-declared variable is invalid, like in
+  // TypeScript.
+  bool can_assign_to_class = true;
+
+  // If true, imported variables can be run-time variables (e.g. function, let)
+  // or type-only variables (e.g. TypeScript type alias or interface) or both
+  // (e.g. class).
+  //
+  // If false, imported variables can only be run-time variables, like in
+  // vanilla JavaScript.
+  bool import_variable_can_be_runtime_or_type = false;
 };
 
 // A variable_analyzer is a parse_visitor which implements variable lookup
@@ -39,148 +53,198 @@ struct variable_analyzer_options {
 // * Assignments to const-declared variables
 // * Assignments to let-declared variables before their initialization
 // * Use of undeclared variables
-class variable_analyzer final : public parse_visitor_base {
+class Variable_Analyzer final : public Parse_Visitor_Base {
  public:
-  explicit variable_analyzer(
-      diag_reporter *diag_reporter,
-      const global_declared_variable_set *global_variables,
-      variable_analyzer_options options);
+  explicit Variable_Analyzer(
+      Diag_Reporter *diag_reporter,
+      const Global_Declared_Variable_Set *global_variables,
+      Variable_Analyzer_Options options);
 
   void visit_enter_block_scope() override;
   void visit_enter_with_scope() override;
+  void visit_enter_class_construct_scope() override;
   void visit_enter_class_scope() override;
   void visit_enter_class_scope_body(
-      const std::optional<identifier> &class_name) override;
+      const std::optional<Identifier> &class_name) override;
+  void visit_enter_conditional_type_scope() override;
+  void visit_enter_declare_global_scope() override;
+  void visit_enter_declare_scope() override;
   void visit_enter_enum_scope() override;
   void visit_enter_for_scope() override;
   void visit_enter_function_scope() override;
   void visit_enter_function_scope_body() override;
   void visit_enter_index_signature_scope() override;
   void visit_enter_interface_scope() override;
-  void visit_enter_named_function_scope(identifier) override;
+  void visit_enter_named_function_scope(Identifier) override;
   void visit_enter_namespace_scope() override;
-  void visit_enter_type_alias_scope() override;
+  void visit_enter_type_scope() override;
   void visit_exit_block_scope() override;
   void visit_exit_with_scope() override;
+  void visit_exit_class_construct_scope() override;
   void visit_exit_class_scope() override;
+  void visit_exit_conditional_type_scope() override;
+  void visit_exit_declare_global_scope() override;
+  void visit_exit_declare_scope() override;
   void visit_exit_enum_scope() override;
   void visit_exit_for_scope() override;
   void visit_exit_function_scope() override;
   void visit_exit_index_signature_scope() override;
   void visit_exit_interface_scope() override;
   void visit_exit_namespace_scope() override;
-  void visit_exit_type_alias_scope() override;
-  void visit_keyword_variable_use(identifier name) override;
-  void visit_property_declaration(const std::optional<identifier> &) override;
-  void visit_variable_declaration(identifier name, variable_kind kind,
-                                  variable_init_kind init_kind) override;
-  void visit_variable_assignment(identifier name) override;
-  void visit_variable_delete_use(identifier name,
-                                 source_code_span delete_keyword) override;
-  void visit_variable_export_use(identifier name) override;
-  void visit_variable_namespace_use(identifier name) override;
-  void visit_variable_type_predicate_use(identifier name) override;
-  void visit_variable_type_use(identifier name) override;
-  void visit_variable_typeof_use(identifier name) override;
-  void visit_variable_use(identifier name) override;
+  void visit_exit_type_scope() override;
+  void visit_keyword_variable_use(Identifier name) override;
+  void visit_property_declaration(const std::optional<Identifier> &) override;
+  void visit_variable_declaration(Identifier name, Variable_Kind kind,
+                                  Variable_Declaration_Flags flags) override;
+  void visit_variable_assignment(Identifier name,
+                                 Variable_Assignment_Flags flags) override;
+  void visit_variable_assertion_signature_use(Identifier name) override;
+  void visit_variable_delete_use(Identifier name,
+                                 Source_Code_Span delete_keyword) override;
+  void visit_variable_export_default_use(Identifier name) override;
+  void visit_variable_export_use(Identifier name) override;
+  void visit_variable_namespace_use(Identifier name) override;
+  void visit_variable_type_predicate_use(Identifier name) override;
+  void visit_variable_type_use(Identifier name) override;
+  void visit_variable_typeof_use(Identifier name) override;
+  void visit_variable_use(Identifier name) override;
   void visit_end_of_module() override;
 
  private:
-  enum class declared_variable_scope {
+  enum class Declared_Variable_Scope {
     declared_in_current_scope,
     declared_in_descendant_scope,
   };
 
-  struct declared_variable {
-    identifier declaration;
-    variable_kind kind;
-    declared_variable_scope declaration_scope;
+  struct Declared_Variable {
+    Identifier declaration;
+    Variable_Kind kind;
+    Declared_Variable_Scope declaration_scope;
     // If false, this variable was declared and possibly initialized, but not
     // used or assigned to after declaration. If true, this variable was used or
     // assigned (or both) after its declaration.
     bool is_used;
-    // If true, the programmer might have intended the variable declaration to
-    // be an assignment to an existing variable instead. This happens iff the
-    // variable has an initializer with '='. See
-    // variable_init_kind::initialized_with_equals.
-    bool declaration_possibly_looks_like_assignment;
+    // If Variable_Init_Kind::initialized_with_equals is set, the programmer
+    // might have intended the variable declaration to be an assignment to an
+    // existing variable instead. This happens iff the variable has an
+    // initializer with '='.
+    Variable_Declaration_Flags flags;
+    // If true, this variable was declared in a TypeScript ambient context, i.e.
+    // with the 'declare' keyword directly or inside a 'declare' block.
+    //
+    // declare var x;          // ambient==true
+    // var y;                  // ambient==false
+    // declare namespace ns {
+    //    var z;               // ambient==true
+    //    function f(          // ambient==true
+    //      myParameter);      // ambient==true
+    // };
+    bool ambient;
 
     // Returns true if this variable can be used in expressions.
     //
     // Returns false if this variable can only be used in TypeScript type
     // signatures and module exports.
-    bool is_runtime() const noexcept;
+    bool is_runtime() const;
 
     // Returns true if this variable can be used in TypeScript type signatures
     // or module exports.
     //
     // Returns false if this variable can only be used at run-time.
-    bool is_type() const noexcept;
+    bool is_type() const;
   };
 
-  enum class used_variable_kind {
+  enum class Used_Variable_Kind {
     _delete,
     _export,
+    _export_default,
     _typeof,
     assignment,
     type,  // TypeScript only.
     use,
+    // A run-time variable was used in a type. For example:
+    //
+    //    let x: string;
+    //    let y: typeof x;  // use_in_type for 'x'.
+    //
+    // TypeScript only.
+    use_in_type,
   };
 
-  struct used_variable {
-    explicit used_variable(identifier name, used_variable_kind kind) noexcept
+  static Is_Runtime_Or_Type is_runtime_or_type(Used_Variable_Kind);
+
+  struct Used_Variable {
+    explicit Used_Variable(Identifier name, Used_Variable_Kind kind)
         : name(name), kind(kind) {
-      QLJS_ASSERT(kind != used_variable_kind::_delete);
+      QLJS_ASSERT(kind != Used_Variable_Kind::assignment);
+      QLJS_ASSERT(kind != Used_Variable_Kind::_delete);
     }
 
-    // kind must be used_variable_kind::_delete.
-    explicit used_variable(identifier name, used_variable_kind kind,
-                           const char8 *delete_keyword_begin) noexcept
-        : name(name), delete_keyword_begin(delete_keyword_begin), kind(kind) {
-      QLJS_ASSERT(kind == used_variable_kind::_delete);
+    // kind must be Used_Variable_Kind::_delete.
+    explicit Used_Variable(Identifier name, Used_Variable_Kind kind,
+                           const Char8 *delete_keyword_begin)
+        : name(name), kind(kind), delete_keyword_begin(delete_keyword_begin) {
+      QLJS_ASSERT(kind == Used_Variable_Kind::_delete);
+    }
+
+    // kind must be Used_Variable_Kind::assignment.
+    explicit Used_Variable(Identifier name, Used_Variable_Kind kind,
+                           Variable_Assignment_Flags flags)
+        : name(name), kind(kind), variable_assignment_flags(flags) {
+      QLJS_ASSERT(kind == Used_Variable_Kind::assignment);
     }
 
     // Returns true if this variable was used in an expression or in a module
     // export.
     //
     // Returns false if this variable was used in a TypeScript type signature.
-    bool is_runtime() const noexcept;
+    bool is_runtime() const;
 
     // Returns true if this variable was used in a TypeScript type signature.
     //
     // Returns false if this variable was used in a run-time expression.
-    bool is_type() const noexcept;
+    bool is_type() const;
 
-    identifier name;
-    const char8 *delete_keyword_begin;  // used_variable_kind::_delete only
-    used_variable_kind kind;
+    Is_Runtime_Or_Type is_runtime_or_type() const;
+
+    Identifier name;
+    Used_Variable_Kind kind;
+
+    union {
+      // Used_Variable_Kind::_delete only:
+      const Char8 *delete_keyword_begin;
+      // Used_Variable_Kind::assignment only:
+      Variable_Assignment_Flags variable_assignment_flags;
+    };
   };
 
-  class declared_variable_set {
+  class Declared_Variable_Set {
    public:
-    using found_variable_type = declared_variable *;
+    using Found_Variable_Type = Declared_Variable *;
 
-    declared_variable *add_variable_declaration(
-        identifier name, variable_kind, declared_variable_scope,
-        bool declaration_possibly_looks_like_assignment);
+    Declared_Variable *add_variable_declaration(const Declared_Variable &);
 
-    const declared_variable *find(identifier name) const noexcept;
-    declared_variable *find(identifier name) noexcept;
+    // Find a variable, if any, which matches the given filter.
+    //
+    // * Ignores types-only variables (e.g. interfaces) if options.is_type is
+    //   false.
+    // * Ignores runtime-only variables (e.g. functions) if options.is_runtime
+    //   is false.
+    const Declared_Variable *find(Identifier name,
+                                  Is_Runtime_Or_Type options) const;
+    Declared_Variable *find(Identifier name, Is_Runtime_Or_Type options);
 
-    // Like find, but ignores type-only variables (e.g. interfaces).
-    declared_variable *find_runtime(identifier name) noexcept;
+    // Like find(name, {.is_runtime = true, .is_type = false}).
+    Declared_Variable *find_runtime(Identifier name);
 
-    // Like find, but ignores runtime-only variables (e.g. functions).
-    declared_variable *find_type(identifier name) noexcept;
+    void clear();
 
-    void clear() noexcept;
-
-    bool empty() const noexcept;
-    std::vector<declared_variable>::const_iterator begin() const noexcept;
-    std::vector<declared_variable>::const_iterator end() const noexcept;
+    bool empty() const;
+    std::vector<Declared_Variable>::const_iterator begin() const;
+    std::vector<Declared_Variable>::const_iterator end() const;
 
    private:
-    std::vector<declared_variable> variables_;
+    std::vector<Declared_Variable> variables_;
   };
 
   // A scope tracks variable declarations and references in a lexical JavaScript
@@ -192,11 +256,11 @@ class variable_analyzer final : public parse_visitor_base {
   // * function f() {} (function declaration)
   // * () => {} (arrow function)
   // * for(let x of y)
-  struct scope {
-    declared_variable_set declared_variables;
-    std::vector<used_variable> variables_used;
-    std::vector<used_variable> variables_used_in_descendant_scope;
-    std::optional<declared_variable> function_expression_declaration;
+  struct Scope {
+    Declared_Variable_Set declared_variables;
+    std::vector<Used_Variable> variables_used;
+    std::vector<Used_Variable> variables_used_in_descendant_scope;
+    std::optional<Declared_Variable> function_expression_declaration;
 
     // If true, the magic 'eval' function was used in this scope or in a
     // descendant non-function scope.
@@ -209,20 +273,20 @@ class variable_analyzer final : public parse_visitor_base {
     void clear();
   };
 
-  struct global_scope {
-    explicit global_scope(
-        const global_declared_variable_set *declared_variables)
+  struct Global_Scope {
+    explicit Global_Scope(
+        const Global_Declared_Variable_Set *declared_variables)
         : declared_variables(*declared_variables) {}
 
-    const global_declared_variable_set &declared_variables;
-    std::vector<used_variable> variables_used;
-    std::vector<used_variable> variables_used_in_descendant_scope;
+    const Global_Declared_Variable_Set &declared_variables;
+    std::vector<Used_Variable> variables_used;
+    std::vector<Used_Variable> variables_used_in_descendant_scope;
   };
 
   // A stack of scope objects.
-  class scopes {
+  class Scopes {
    public:
-    explicit scopes();
+    explicit Scopes();
 
     // The module scope which holds properties not on the globalThis object.
     //
@@ -233,86 +297,128 @@ class variable_analyzer final : public parse_visitor_base {
     // and '__filename'.
     //
     // The module scope always exists, except possibly at the end of linting.
-    scope &module_scope() noexcept;
+    Scope &module_scope();
 
-    scope &current_scope() noexcept;
-    scope &parent_scope() noexcept;
+    // An augmentation of Variable_Analyzer::global_scope_ which is modifiable
+    // by the user's code.
+    //
+    // Variables are declared into the shadow global scope using TypeScript's
+    // 'declare global' feature.
+    //
+    // Variables in the shadow global scope shadow/override global variables,
+    // hence its name.
+    //
+    // The shadow global scope always exists, except possibly at the end of
+    // linting.
+    Scope &shadow_global_scope();
 
-    scope &push();
+    Scope &current_scope();
+    Scope &parent_scope();
+
+    Scope &push();
     void pop();
 
-    bool empty() const noexcept;
-    int size() const noexcept;
+    bool empty() const;
+    int size() const;
 
    private:
     int scope_count_ = 0;
-    std::vector<scope> scopes_;
+    std::vector<Scope> scopes_;
   };
 
-  void declare_variable(scope &, identifier name, variable_kind kind,
-                        declared_variable_scope declared_scope,
-                        bool declaration_possibly_looks_like_assignment);
-  void visit_variable_use(identifier name, used_variable_kind);
+  void declare_variable(Scope &, Identifier name, Variable_Kind kind,
+                        Declared_Variable_Scope declared_scope,
+                        Variable_Declaration_Flags flags);
+  void visit_variable_use(Identifier name, Used_Variable_Kind);
+
+  void add_variable_use_to_current_scope(Used_Variable &&);
+
+  // Mark all run-time variable uses within the scope as use_in_type. This
+  // silences use-before-declaration diagnostics.
+  void mark_variable_uses_as_uses_in_type(Scope &);
 
   void propagate_variable_uses_to_parent_scope(
       bool allow_variable_use_before_declaration, bool consume_arguments);
-  template <class Scope>
+  template <class Parent_Scope>
   void propagate_variable_uses_to_parent_scope(
-      Scope &parent_scope, bool allow_variable_use_before_declaration,
+      Parent_Scope &parent_scope, bool allow_variable_use_before_declaration,
       bool consume_arguments);
 
   void propagate_variable_declarations_to_parent_scope();
 
   void report_error_if_assignment_is_illegal(
-      const declared_variable *var, const identifier &assignment,
-      bool is_assigned_before_declaration) const;
+      const Declared_Variable *var, const Identifier &assignment,
+      bool is_assigned_before_declaration,
+      Variable_Assignment_Flags flags) const;
   void report_error_if_assignment_is_illegal(
-      const declared_variable &var, const identifier &assignment,
-      bool is_assigned_before_declaration) const;
+      const Declared_Variable &var, const Identifier &assignment,
+      bool is_assigned_before_declaration,
+      Variable_Assignment_Flags flags) const;
   void report_error_if_assignment_is_illegal(
-      const global_declared_variable &var, const identifier &assignment,
-      bool is_assigned_before_declaration) const;
+      const Global_Declared_Variable &var, const Identifier &assignment,
+      bool is_assigned_before_declaration,
+      Variable_Assignment_Flags flags) const;
   void report_error_if_assignment_is_illegal(
-      variable_kind kind, bool is_global_variable,
-      const identifier *declaration, const identifier &assignment,
-      bool is_assigned_before_declaration) const;
+      Variable_Kind kind, bool is_global_variable,
+      const Identifier *declaration, const Identifier &assignment,
+      bool is_assigned_before_declaration,
+      Variable_Assignment_Flags flags) const;
 
-  template <class DeclaredVariableType>
-  void report_errors_for_variable_use(const used_variable &,
-                                      const DeclaredVariableType &,
+  template <class Declared_Variable_Type>
+  void report_errors_for_variable_use(const Used_Variable &,
+                                      const Declared_Variable_Type &,
                                       bool use_is_before_declaration) const;
 
-  void report_error_if_variable_declaration_conflicts_in_scope(
-      const scope &scope, identifier name, variable_kind kind,
-      declared_variable_scope declaration_scope) const;
-  void report_error_if_variable_declaration_conflicts_in_scope(
-      const global_scope &scope, const declared_variable &var) const;
-  void report_error_if_variable_declaration_conflicts(
-      const identifier *already_declared, variable_kind already_declared_kind,
-      declared_variable_scope already_declared_declaration_scope,
-      bool already_declared_is_global_variable, identifier newly_declared_name,
-      variable_kind newly_declared_kind,
-      declared_variable_scope newly_declared_declaration_scope) const;
+  struct Declared_Variable_Options {
+    // If nullptr, the variable is a global variable.
+    const Identifier *name;
+    // See Declared_Variable::kind.
+    Variable_Kind kind;
+    // See Declared_Variable::declaration_scope.
+    Declared_Variable_Scope declaration_scope;
+    // See Declared_Variable::flags.
+    Variable_Declaration_Flags flags;
+    // See Declared_Variable::ambient;
+    bool ambient;
+  };
 
-  scope &current_scope() noexcept { return this->scopes_.current_scope(); }
-  scope &parent_scope() noexcept { return this->scopes_.parent_scope(); }
+  void report_error_if_variable_declaration_conflicts_in_scope(
+      const Scope &scope, const Declared_Variable &var) const;
+  void report_error_if_variable_declaration_conflicts_in_scope(
+      const Global_Scope &scope, const Declared_Variable &var) const;
+  // Returns true if the variable did conflict (thus a diagnostic was reported).
+  bool report_error_if_variable_declaration_conflicts(
+      const Declared_Variable_Options &already_declared_var,
+      const Declared_Variable &newly_declared_var) const;
 
-  scopes scopes_;
+  Scope &current_scope() { return this->scopes_.current_scope(); }
+  Scope &parent_scope() { return this->scopes_.parent_scope(); }
+
+  // Returns true if this is a TypeScript ambient context introduced with the
+  // 'declare' keyword.
+  bool in_typescript_ambient_context() const;
+
+  // Returns true if we are inside a TypeScript 'declare global' scope.
+  bool in_typescript_declare_global_scope() const;
+
+  Scopes scopes_;
 
   // The scope which holds properties of the globalThis object.
   //
   // The global scope cannot be modified lexically by user programs. Variables
   // declared with 'let', 'class', etc. at the top level of the program are
   // declared in the module scope, not the global scope.
-  global_scope global_scope_;
+  Global_Scope global_scope_;
 
-  diag_reporter *diag_reporter_;
+  // If greater than zero, this is a TypeScript ambient context introduced
+  // with the 'declare' keyword.
+  unsigned typescript_ambient_context_depth_ = 0;
 
-  variable_analyzer_options options_;
+  Diag_Reporter *diag_reporter_;
+
+  Variable_Analyzer_Options options_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

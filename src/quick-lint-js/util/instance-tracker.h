@@ -1,64 +1,65 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_INSTANCE_TRACKER_H
-#define QUICK_LINT_JS_UTIL_INSTANCE_TRACKER_H
+#pragma once
 
 #include <memory>
-#include <quick-lint-js/port/thread.h>
+#include <quick-lint-js/container/vector.h>
 #include <quick-lint-js/port/vector-erase.h>
-#include <vector>
+#include <quick-lint-js/util/synchronized.h>
 
 namespace quick_lint_js {
 // Maintains a global list of instances of Tracked. Each Tracked must be managed
 // using std::shared_ptr. Instances are manually tracked and automatically
 // untracked.
 //
-// instance_tracker is thread-safe.
+// Instance_Tracker is thread-safe.
 template <class Tracked>
-class instance_tracker {
+class Instance_Tracker {
  public:
   static void track(std::shared_ptr<Tracked> instance) {
-    std::lock_guard lock(mutex_);
-    sanitize_instances(lock);
-    weak_instances_.push_back(std::move(instance));
+    Lock_Ptr<Vector<std::weak_ptr<Tracked>>> weak_instances =
+        weak_instances_.lock();
+    sanitize_instances(weak_instances);
+    weak_instances->push_back(std::move(instance));
   }
 
-  static std::vector<std::shared_ptr<Tracked>> instances() {
-    std::vector<std::shared_ptr<Tracked>> instances;
+  static Vector<std::shared_ptr<Tracked>> instances() {
+    Vector<std::shared_ptr<Tracked>> instances("instances",
+                                               new_delete_resource());
     {
-      std::lock_guard lock(mutex_);
-      sanitize_instances(lock);
-      instances.reserve(weak_instances_.size());
-      for (const std::weak_ptr<Tracked>& weak_instance : weak_instances_) {
+      Lock_Ptr<Vector<std::weak_ptr<Tracked>>> weak_instances =
+          weak_instances_.lock();
+      sanitize_instances(weak_instances);
+      instances.reserve(weak_instances->size());
+      for (const std::weak_ptr<Tracked>& weak_instance : *weak_instances) {
         std::shared_ptr<Tracked> instance = weak_instance.lock();
         if (instance) {
           instances.emplace_back(std::move(instance));
         }
       }
     }
+    // NOTE(strager): We cannot wink (e.g. use Linked_Bump_Allocator and return
+    // a Span) because std::shared_ptr destructors need to be called.
     return instances;
   }
 
  private:
-  static void sanitize_instances(std::lock_guard<mutex>&) {
-    erase_if(weak_instances_, [](const std::weak_ptr<Tracked>& weak_instance) {
+  static void sanitize_instances(
+      Lock_Ptr<Vector<std::weak_ptr<Tracked>>>& weak_instances) {
+    erase_if(*weak_instances, [](const std::weak_ptr<Tracked>& weak_instance) {
       return weak_instance.expired();
     });
   }
 
   static void sanitize_instances() {
-    std::lock_guard lock(mutex_);
-    sanitize_instances(lock);
+    sanitize_instances(weak_instances_.lock());
   }
 
-  static inline mutex mutex_;
-  // Protected by mutex_:
-  static inline std::vector<std::weak_ptr<Tracked>> weak_instances_;
+  static inline Synchronized<Vector<std::weak_ptr<Tracked>>> weak_instances_{
+      "weak_instances_", new_delete_resource()};
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

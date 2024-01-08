@@ -88,13 +88,14 @@ function getExtraIconAttributes(attributes) {
 let icons = {
   chocolatey: { path: "chocolatey.svg", alt: "Chocolatey" },
   "arch-linux": { path: "arch-linux.svg", alt: "Arch Linux" },
-  atom: { path: "atom.svg", alt: "Atom" },
+  biome: { path: "biome.svg", alt: "Biome" },
   "cli-and-lsp-server": {
     path: "gnome-terminal.svg",
     alt: "CLI and LSP server",
   },
   codespaces: { path: "codespaces.png", alt: "GitHub Codespaces" },
   debian: { path: "debian.svg", alt: "Debian" },
+  deno: { path: "deno.svg", alt: "Deno" },
   emacs: { path: "emacs.svg", alt: "Emacs", disableSpritesheet: true },
   github: { path: "github.svg", alt: "GitHub" },
   homebrew: { path: "homebrew.svg", alt: "Homebrew" },
@@ -106,6 +107,7 @@ let icons = {
   "notepad-plus-plus": { path: "notepad-plus-plus.svg", alt: "Notepad++" },
   npm: { path: "npm.svg", alt: "npm" },
   "open-vsx": { path: "open-vsx.svg", alt: "Open VSX" },
+  oxc: { path: "oxc.png", alt: "Oxc" },
   "quick-lint-js": { path: "dusty.svg", alt: "quick-lint-js" },
   "quick-lint-js-small": { path: "favicon-32x32.png", alt: "quick-lint-js" },
   "sublime-text": {
@@ -113,6 +115,7 @@ let icons = {
     alt: "Sublime Text",
     disableSpritesheet: true,
   },
+  typescript: { path: "typescript.svg", alt: "TypeScript" },
   ubuntu: { path: "ubuntu.svg", alt: "Ubuntu" },
   vim: { path: "vim.gif", alt: "Vim" },
   vscode: { path: "vscode.png", alt: "Visual Studio Code" },
@@ -125,8 +128,11 @@ for (let [iconName, icon] of Object.entries(icons)) {
   let spriteSheetItem = null;
   if (path.extname(icon.path) === ".svg") {
     // HACK(#818): Some SVGs are broken in Chrome and Safari when spritesheeted.
-    // This might be a bug in the svg-sprite library. Remove these offending
-    // SVGs from the spritesheet as a workaround.
+    // This appears to be a bug in both WebKit and Chromium:
+    // https://bugs.webkit.org/show_bug.cgi?id=65344
+    // https://bugs.chromium.org/p/chromium/issues/detail?id=109212
+    //
+    // Remove these offending SVGs from the spritesheet as a workaround.
     if (!icon.disableSpritesheet) {
       spriteSheetItem = iconsSpriteSheet.addSVG(
         path.join(__dirname, icon.path)

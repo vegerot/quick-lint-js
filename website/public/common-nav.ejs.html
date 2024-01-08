@@ -229,44 +229,14 @@
     },
     { uri: "/benchmarks/", title: "Benchmarks" },
     {
-      uri: "https://github.com/quick-lint/quick-lint-js",
-      title: "Code on GitHub",
+      uri: "/contribute/",
+      title: "Contribute",
+      subpages: await loadContributeSubpagesIfNeededAsync(),
     },
     {
       uri: "/blog/",
       title: "Blog",
-      subpages: [
-        {
-          uri: "/blog/syntax-errors-2021/",
-          title: "JS errors",
-          hidden: true
-        },
-        {
-          uri: "/blog/version-1.0/",
-          title: "Release 1.0",
-          hidden: true
-        },
-        {
-          uri: "/blog/version-2.0/",
-          title: "Release 2.0",
-          hidden: true
-        },
-        {
-          uri: "/blog/show-js-errors-neovim-macos/",
-          title: "Neovim for JS",
-          hidden: true
-        },
-        {
-          uri: "/blog/bug-journey/",
-          title: "Compiler bug",
-          hidden: true
-        },
-        {
-          uri: "/blog/cpp-vs-rust-build-times/",
-          title: "C++ vs Rust",
-          hidden: true
-        },
-      ]
+      subpages: await loadBlogSubpagesIfNeededAsync(),
     },
   ];
 
@@ -278,7 +248,7 @@
       }
       let titleHTML = ejs.escapeXML(page.title);
       if (page.uri === currentURI) {
-        return html`<li class="${classes}"><span class="current-page">${titleHTML}</span></li>`;
+        return html`<li class="${classes}"><span aria-current="page">${titleHTML}</span></li>`;
       } else {
         return html`<li class="${classes}">
           <a href="${ejs.escapeXML(makeRelativeURI(page.uri))}">${titleHTML}</a>
@@ -288,9 +258,32 @@
     if (page.pattern instanceof RegExp) {
       assert.match(currentURI, page.pattern, "Linkifying pattern subpages only supported for current URI");
       let titleHTML = ejs.escapeXML(page.makeTitle(currentURI, currentURI.match(page.pattern)));
-      return html`<li><span class="current-page">${titleHTML}</span></li>`;
+      return html`<li><span aria-current="page">${titleHTML}</span></li>`;
     }
     throw new Error("Malformed page or subpage: " + JSON.stringify(subpage));
+  }
+
+  async function loadBlogSubpagesIfNeededAsync() {
+    if (currentURI.startsWith("/blog/")) {
+      let { loadBlogPostsAsync } = await importFileAsync("./blog/index.mjs");
+      let blogPosts = await loadBlogPostsAsync();
+      return blogPosts.map(post => ({
+        uri: `/blog/${post.dir}/`,
+        title: post.meta.navTitle ?? post.meta.title,
+        hidden: true,
+      }));
+    } else {
+      return [];
+    }
+  }
+
+  async function loadContributeSubpagesIfNeededAsync() {
+    if (currentURI.startsWith("/contribute/")) {
+      let { loadNavSubpagesAsync } = await importFileAsync("./contribute/index.mjs");
+      return await loadNavSubpagesAsync();
+    } else {
+      return [];
+    }
   }
 
   function isOnPageOrSubpage(page) {
@@ -310,9 +303,9 @@
 </script>
 
 <% if (currentURI === "/") { %>
-<h1>quick-lint-js</h1>
+<h1 id="title">quick-lint-js</h1>
 <% } else { %>
-<h1><a href="<%= makeRelativeURI('/') %>">quick-lint-js</a></h1>
+<div id="title"><a href="<%= makeRelativeURI('/') %>">quick-lint-js</a></div>
 <% } %>
 <p class="tag-line">Find bugs in JavaScript programs.</p>
 <% if (currentURI !== "/") { %><a

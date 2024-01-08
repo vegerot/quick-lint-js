@@ -1,19 +1,18 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_OPTIONAL_H
-#define QUICK_LINT_JS_CONTAINER_OPTIONAL_H
+#pragma once
 
 #include <optional>
 
 namespace quick_lint_js {
 template <class T>
-T *get(std::optional<T> &o) noexcept {
+T *get(std::optional<T> &o) {
   return o.has_value() ? &*o : nullptr;
 }
 
 template <class T>
-const T *get(const std::optional<T> &o) noexcept {
+const T *get(const std::optional<T> &o) {
   return o.has_value() ? &*o : nullptr;
 }
 
@@ -22,10 +21,8 @@ const T *get(const std::optional<T> &o) noexcept {
 //   std::optional<int> get_thing();
 //   int *x = get(get_thing());  // ERROR
 template <class T>
-T *get(std::optional<T> &&) noexcept = delete;
+T *get(std::optional<T> &&) = delete;
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

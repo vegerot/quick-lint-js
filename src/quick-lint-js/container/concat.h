@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_CONCAT_H
-#define QUICK_LINT_JS_CONTAINER_CONCAT_H
+#pragma once
 
 #include <quick-lint-js/port/char8.h>
 #include <string>
@@ -65,43 +64,113 @@ std::basic_string<Char> concat_impl(std::basic_string_view<Char> a,
   return concat_impl(a, b, c, d, e, f, g);
 }
 
+// Discourage using string literals.
+// clang-format off
+std::string concat(const char*, std::string_view) = delete;
+std::string concat(std::string_view, const char*) = delete;
+
+std::string concat(const char*, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, const char*, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, const char*) = delete;
+
+std::string concat(const char*, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, const char*, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, const char*, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, const char*) = delete;
+
+std::string concat(const char*, std::string_view, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, const char*, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, const char*, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, const char*, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, std::string_view, const char*) = delete;
+
+std::string concat(const char*, std::string_view, std::string_view, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, const char*, std::string_view, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, const char*, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, const char*, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, std::string_view, const char*, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, std::string_view, std::string_view, const char*) = delete;
+
+std::string concat(const char*, std::string_view, std::string_view, std::string_view, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, const char*, std::string_view, std::string_view, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, const char*, std::string_view, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, const char*, std::string_view, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, std::string_view, const char*, std::string_view, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, std::string_view, std::string_view, const char*, std::string_view) = delete;
+std::string concat(std::string_view, std::string_view, std::string_view, std::string_view, std::string_view, std::string_view, const char*) = delete;
+// clang-format on
+
 #if QLJS_HAVE_CHAR8_T
-[[gnu::always_inline]] inline string8 concat(string8_view a, string8_view b) {
+[[gnu::always_inline]] inline String8 concat(String8_View a, String8_View b) {
   return concat_impl(a, b);
 }
 
-[[gnu::always_inline]] inline string8 concat(string8_view a, string8_view b,
-                                             string8_view c) {
+[[gnu::always_inline]] inline String8 concat(String8_View a, String8_View b,
+                                             String8_View c) {
   return concat_impl(a, b, c);
 }
 
-[[gnu::always_inline]] inline string8 concat(string8_view a, string8_view b,
-                                             string8_view c, string8_view d) {
+[[gnu::always_inline]] inline String8 concat(String8_View a, String8_View b,
+                                             String8_View c, String8_View d) {
   return concat_impl(a, b, c, d);
 }
 
-[[gnu::always_inline]] inline string8 concat(string8_view a, string8_view b,
-                                             string8_view c, string8_view d,
-                                             string8_view e) {
+[[gnu::always_inline]] inline String8 concat(String8_View a, String8_View b,
+                                             String8_View c, String8_View d,
+                                             String8_View e) {
   return concat_impl(a, b, c, d, e);
 }
 
-[[gnu::always_inline]] inline string8 concat(string8_view a, string8_view b,
-                                             string8_view c, string8_view d,
-                                             string8_view e, string8_view f) {
+[[gnu::always_inline]] inline String8 concat(String8_View a, String8_View b,
+                                             String8_View c, String8_View d,
+                                             String8_View e, String8_View f) {
   return concat_impl(a, b, c, d, e, f);
 }
 
-[[gnu::always_inline]] inline string8 concat(string8_view a, string8_view b,
-                                             string8_view c, string8_view d,
-                                             string8_view e, string8_view f,
-                                             string8_view g) {
+[[gnu::always_inline]] inline String8 concat(String8_View a, String8_View b,
+                                             String8_View c, String8_View d,
+                                             String8_View e, String8_View f,
+                                             String8_View g) {
   return concat_impl(a, b, c, d, e, f, g);
 }
+
+// Discourage using string literals.
+// clang-format off
+String8 concat(const Char8*, String8_View) = delete;
+String8 concat(String8_View, const Char8*) = delete;
+
+String8 concat(const Char8*, String8_View, String8_View) = delete;
+String8 concat(String8_View, const Char8*, String8_View) = delete;
+String8 concat(String8_View, String8_View, const Char8*) = delete;
+
+String8 concat(const Char8*, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, const Char8*, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, const Char8*, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, const Char8*) = delete;
+
+String8 concat(const Char8*, String8_View, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, const Char8*, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, const Char8*, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, const Char8*, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, String8_View, const Char8*) = delete;
+
+String8 concat(const Char8*, String8_View, String8_View, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, const Char8*, String8_View, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, const Char8*, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, const Char8*, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, String8_View, const Char8*, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, String8_View, String8_View, const Char8*) = delete;
+
+String8 concat(const Char8*, String8_View, String8_View, String8_View, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, const Char8*, String8_View, String8_View, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, const Char8*, String8_View, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, const Char8*, String8_View, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, String8_View, const Char8*, String8_View, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, String8_View, String8_View, const Char8*, String8_View) = delete;
+String8 concat(String8_View, String8_View, String8_View, String8_View, String8_View, String8_View, const Char8*) = delete;
+// clang-format on
 #endif
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONFIGURATION_CONFIGURATION_LOADER_H
-#define QUICK_LINT_JS_CONFIGURATION_CONFIGURATION_LOADER_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No filesystem on web.
@@ -11,94 +10,120 @@
 #include <optional>
 #include <quick-lint-js/configuration/configuration.h>
 #include <quick-lint-js/container/hash-map.h>
+#include <quick-lint-js/container/monotonic-allocator.h>
 #include <quick-lint-js/container/result.h>
-#include <quick-lint-js/fe/buffering-diag-reporter.h>
+#include <quick-lint-js/container/vector.h>
+#include <quick-lint-js/diag/buffering-diag-reporter.h>
 #include <quick-lint-js/io/file-canonical.h>
 #include <quick-lint-js/io/file.h>
+#include <quick-lint-js/port/memory-resource.h>
+#include <quick-lint-js/port/span.h>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace quick_lint_js {
-struct file_to_lint;
+struct File_To_Lint;
 
-class configuration_filesystem {
+class Configuration_Filesystem {
  public:
-  virtual ~configuration_filesystem() = default;
+  virtual ~Configuration_Filesystem() = default;
 
-  virtual result<canonical_path_result, canonicalize_path_io_error>
+  virtual Result<Canonical_Path_Result, Canonicalize_Path_IO_Error>
   canonicalize_path(const std::string&) = 0;
-  virtual result<padded_string, read_file_io_error> read_file(
-      const canonical_path&) = 0;
+  virtual Result<Padded_String, Read_File_IO_Error> read_file(
+      const Canonical_Path&) = 0;
 };
 
-struct loaded_config_file {
-  explicit loaded_config_file();
+struct Loaded_Config_File {
+  explicit Loaded_Config_File();
 
-  configuration config;
+  Configuration config;
 
   // The content of the quick-lint-js.config file.
-  padded_string file_content;
+  Padded_String file_content;
 
   // Errors discovered while parsing file_content.
-  buffering_diag_reporter errors;
+  Buffering_Diag_Reporter errors;
 
   // The path to the quick-lint-js.config file. Never nullptr.
-  const canonical_path* config_path;
+  const Canonical_Path* config_path;
 };
 
-// Returned by configuration_loader::refresh.
-struct configuration_change {
-  // The path given to configuration_loader::watch_and_load_for_file or
-  // configuration_loader::watch_and_load_config_file. Never nullptr.
+struct Configuration_Load_IO_Error {
+  /*implicit*/ Configuration_Load_IO_Error(Canonicalize_Path_IO_Error&&);
+  /*implicit*/ Configuration_Load_IO_Error(const Canonicalize_Path_IO_Error&);
+
+  /*implicit*/ Configuration_Load_IO_Error(Read_File_IO_Error&&);
+  /*implicit*/ Configuration_Load_IO_Error(const Read_File_IO_Error&);
+
+  std::string message;
+  Platform_File_IO_Error io_error;
+
+  // Read_File_IO_Error::path or Canonicalize_Path_IO_Error::input_path
+  std::string path;
+
+  // Empty if Read_File_IO_Error.
+  std::string canonicalizing_path;
+
+  const std::string& to_string() const;
+
+  friend bool operator==(const Configuration_Load_IO_Error&,
+                         const Configuration_Load_IO_Error&);
+  friend bool operator!=(const Configuration_Load_IO_Error&,
+                         const Configuration_Load_IO_Error&);
+};
+
+// Returned by Configuration_Loader::refresh.
+struct Configuration_Change {
+  // The path given to Configuration_Loader::watch_and_load_for_file or
+  // Configuration_Loader::watch_and_load_config_file. Never nullptr.
   const std::string* watched_path;
 
   // If config_file is nullptr, then no configuration file exists.
-  loaded_config_file* config_file;
+  Loaded_Config_File* config_file;
 
   // If error is not nullptr, then error points to an I/O error which prevented
   // a configuration file from being determined at all.
   //
   // Invariant: (error == nullptr) || (config_file == nullptr)
-  // Invariant: (error == nullptr) || !error->ok()
-  result<void, canonicalize_path_io_error, read_file_io_error>*
-      error;  // Sometimes nullptr.
+  Configuration_Load_IO_Error* error;  // Sometimes nullptr.
 
   // token is the pointer given to
-  // configuration_loader::watch_and_load_for_file or
-  // configuration_loader::watch_and_load_config_file.
+  // Configuration_Loader::watch_and_load_for_file or
+  // Configuration_Loader::watch_and_load_config_file.
   void* token;
 };
 
-// A configuration_loader has a few responsibilities:
+// A Configuration_Loader has a few responsibilities:
 //
 // * Load the configuration file for a .js file (watch_and_load_for_file(),
 //   watch_and_load_config_file(), load_for_file()).
 // * Minimize reloading and reparsing of configuration files if many .js files
 //   share a configuration file.
 // * Query when a configuration file has changed (refresh()).
-class configuration_loader {
+class Configuration_Loader {
  public:
-  explicit configuration_loader(configuration_filesystem*);
-  ~configuration_loader();
+  explicit Configuration_Loader(Configuration_Filesystem*);
+  ~Configuration_Loader();
 
-  configuration_filesystem* fs() noexcept { return this->fs_; }
+  Configuration_Filesystem* fs() { return this->fs_; }
 
   // Returns nullptr if there is no config file.
-  result<loaded_config_file*, canonicalize_path_io_error, read_file_io_error>
+  Result<Loaded_Config_File*, Configuration_Load_IO_Error>
   watch_and_load_for_file(const std::string& file_path, const void* token);
 
   // Fails if the config file does not exist.
-  result<loaded_config_file*, canonicalize_path_io_error, read_file_io_error>
+  Result<Loaded_Config_File*, Configuration_Load_IO_Error>
   watch_and_load_config_file(const std::string& file_path, const void* token);
 
   // Returns nullptr if there is no config file.
-  result<loaded_config_file*, canonicalize_path_io_error, read_file_io_error>
-  load_for_file(const std::string& file_path);
+  Result<Loaded_Config_File*, Configuration_Load_IO_Error> load_for_file(
+      const std::string& file_path);
 
   // Returns nullptr if there is no config file.
-  result<loaded_config_file*, canonicalize_path_io_error, read_file_io_error>
-  load_for_file(const file_to_lint&);
+  Result<Loaded_Config_File*, Configuration_Load_IO_Error> load_for_file(
+      const File_To_Lint&);
 
   // Undo a call to watch_and_load_for_file or watch_and_load_config_file.
   void unwatch_file(const std::string& file_path);
@@ -117,7 +142,7 @@ class configuration_loader {
   //   quick-lint-js.config's content changed.
   // * A quick-lint-js.config file didn't exist, and now one does.
   // * A quick-lint-js.config file was moved into an ancestor directory.
-  std::vector<configuration_change> refresh();
+  Span<Configuration_Change> refresh(Monotonic_Allocator*);
 
   // Returns true if the path might possibly be a configuration file detected by
   // load_for_file or watch_and_load_for_file.
@@ -126,54 +151,54 @@ class configuration_loader {
   bool is_config_file_path(const std::string& file_path) const;
 
  private:
-  struct found_config_file {
-    std::optional<canonical_path> path;
-    loaded_config_file* already_loaded = nullptr;
-    padded_string file_content{};
+  struct Found_Config_File {
+    std::optional<Canonical_Path> path;
+    Loaded_Config_File* already_loaded = nullptr;
+    Padded_String file_content{};
   };
 
-  struct watched_config_path {
+  struct Watched_Config_Path {
     std::string input_config_path;
-    std::optional<canonical_path> actual_config_path;
-    result<void, canonicalize_path_io_error, read_file_io_error> error;
+    std::optional<Canonical_Path> actual_config_path;
+    std::optional<Configuration_Load_IO_Error> error;
     void* token;
   };
 
-  struct watched_input_path {
+  struct Watched_Input_Path {
     std::string input_path;
-    std::optional<canonical_path> config_path;
-    result<void, canonicalize_path_io_error, read_file_io_error> error;
+    std::optional<Canonical_Path> config_path;
+    std::optional<Configuration_Load_IO_Error> error;
     void* token;
   };
 
-  result<loaded_config_file*, canonicalize_path_io_error, read_file_io_error>
-  load_config_file(const char* config_path);
-  result<loaded_config_file*, canonicalize_path_io_error, read_file_io_error>
+  Result<Loaded_Config_File*, Configuration_Load_IO_Error> load_config_file(
+      const char* config_path);
+  Result<Loaded_Config_File*, Configuration_Load_IO_Error>
   find_and_load_config_file_for_input(const char* input_path);
 
-  result<loaded_config_file*, read_file_io_error>
-  find_and_load_config_file_in_directory_and_ancestors(canonical_path&&,
+  Result<Loaded_Config_File*, Read_File_IO_Error>
+  find_and_load_config_file_in_directory_and_ancestors(Canonical_Path&&,
                                                        const char* input_path);
-  result<found_config_file, read_file_io_error>
-  find_config_file_in_directory_and_ancestors(canonical_path&&);
+  Result<Found_Config_File, Read_File_IO_Error>
+  find_config_file_in_directory_and_ancestors(Canonical_Path&&);
 
-  result<canonical_path_result, canonicalize_path_io_error>
+  Result<Canonical_Path_Result, Canonicalize_Path_IO_Error>
   get_parent_directory(const char* input_path);
 
-  loaded_config_file* get_loaded_config(const canonical_path& path) noexcept;
+  Loaded_Config_File* get_loaded_config(const Canonical_Path& path);
 
-  configuration_filesystem* fs_;
+  Configuration_Filesystem* fs_;
 
   // Key: config file path
   // Value: cached parsed configuration
-  hash_map<canonical_path, loaded_config_file> loaded_config_files_;
+  Hash_Map<Canonical_Path, Loaded_Config_File> loaded_config_files_;
 
-  std::vector<watched_config_path> watched_config_paths_;
-  std::vector<watched_input_path> watched_input_paths_;
+  Vector<Watched_Config_Path> watched_config_paths_{
+      "Configuration_Loader::watched_config_paths_", new_delete_resource()};
+  Vector<Watched_Input_Path> watched_input_paths_{
+      "Configuration_Loader::watched_input_paths_", new_delete_resource()};
 };
 }
-
-#endif
 
 #endif
 

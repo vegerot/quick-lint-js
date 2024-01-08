@@ -6,15 +6,594 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 quick-lint-js' version numbers are arbitrary. quick-lint-js does *not* adhere to
 Semantic Versioning.
 
-## Unreleased
+## 3.0.0 (2024-01-01)
+
+[Downloads](https://c.quick-lint-js.com/releases/3.0.0/)
+
+### Added
+
+* TypeScript is now supported by default in the CLI and in all editor plugins.
+  * Exception: [Emacs with Eglot](https://github.com/quick-lint/quick-lint-js/issues/1146)
+  * Exception: [Emacs with Flycheck](https://github.com/quick-lint/quick-lint-js/issues/1148)
+  * Exception: [Emacs with LSP Mode](https://github.com/quick-lint/quick-lint-js/issues/1147)
+  * Exception: [Kate](https://github.com/quick-lint/quick-lint-js/issues/1149)
+
+### Fixed
+
+* TypeScript support:
+  * Assigning to a variable with the same name as an `import`ed type no longer
+    falsely reports [E0185][] ("assignment to imported variable").
+  * Interface index signature variables can now be named contextual keywords
+    such as `type`.
+  * Writing `++x` inside `? :` no longer falsely reports [E0254][] ("unexpected
+    ':' in expression; did you mean 'as'?").
+  * Hypthenated JSX attribute names following generic JSX component names, such
+    as in `<MyComponent<T> aria-label="..." />`, now parse correctly and no
+    longer report [E0054][] ("unexpected token").
+
+## 2.19.0 (2023-12-30)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.19.0/)
+
+### Added
+
+* Unicode 15.1 is now supported, including new CJK code points in identifiers.
+* Missing `break;` (or `return;` or `throw ...;` or `// fallthrough`) after a
+  clause in `switch` statement now reports [E0427][] ("missing 'break;' or '//
+  fallthrough' comment between statement and 'case'"). (Implemented by [Yash
+  Masani][].)
+* Detection of multiple `export default` statements ([E0715][]) now also applies
+  to `export {... as default};` statements.
+* JSX elements and fragments are now allowed in JSX attributes without
+  surrounding them in `{` and `}` (e.g.
+  `<List header=<ListHeader />>{items}</List>`).
+* TypeScript support (still experimental):
+  * `export as namespace` statements are now parsed.
+  * Const generic parameters (`<const T>`) are now parsed.
+  * Assertion signatures (`function f(param): asserts param`) are now parsed.
+  * If a type predicate appears outside a return type, quick-lint-js now reports
+    [E0426][] ("type predicates are only allowed as function return types").
+  * `export default` now supports separately-declared TypeScript interfaces and
+    types.
+  * `cond ? (param): ReturnType => body : f` is now correctly parsed as a
+    conditional expression with a function in the truthy branch.
+    (`cond ? (t) : param => body` continues to be parsed as a conditional
+    expression with a function in the falsy branch.)
+  * Using `<<` in an interface's `extends` clause, in a class's `implements`
+    clause, or in a `typeof` type now reports [E0429][] instead of misleading
+    diagnostics. (Implemented by [strager][] and [Ariel Don][].)
+  * Properties in object literal types can now be named with number and string
+    literals.
+  * Repeating `in` or `out` generic parameter modifiers now reports [E0432][]
+    ("'in' or 'out' variance specifier cannot be listed twice").
+  * Writing a newline after an `in`, `out`, or `const` generic parameter
+    modifier now reports [E0440][] ("newline is not allowed after 'in' modifier
+    in generic parameter"). (Implemented by [Ariel Don][].)
+  * Negative number literals are now parsed in types.
+  * Parameter decorators are now parsed.
+  * Overload signatures are now allowed on exported functions.
+  * Assigning to a class now reports [E0003][] ("cannot assign to class").
+  * Definite assignment assertions (`!` after a variable name in `let` or `var`)
+    is now supported.
+  * `override` is now supported in classes.
+  * Abstract constructor types (such as `abstract new () => C`) are now
+    supported.
+  * `export class { m(); }` in a .d.ts file no longer falsely reports [E0172][]
+    ("missing body for function").
+  * `import()` type assertions are now allowed in TypeScript types.
+  * U+0085 (Next Line) is now interpreted as whitespace.
+
+### Fixed
+
+* Class decorators may now reference the class by name.
+* Decorators are now parsed correctly when using a semicolon-free coding style.
+* Properties named 'private', 'declare', or similar names are now parsed
+  correctly when using a semicolon-free coding style.
+* A newline between an arrow function and a parenthesized expression (e.g.
+  `let f = () => {} /*newline*/ (console.log('x'));` no longer falsely reports
+  [E0211][] ("missing parentheses around self-invoked function").
+* `for await (async of []);` no longer falsely reports [E0082][] ("assigning to
+  'async' in a for-of loop requires parentheses"). (`for (async of []);` still
+  reports the diagnostic.)
+* A `return` statement inside a nested `switch` no longer falsely repots
+  [E0427][] ("missing 'break;' or '// fallthrough' comment between " "statement
+  and 'case'").
+* TypeScript support (still experimental):
+  * Types named `await`, `implements`, `interface`, `let`, `package`, `private`,
+    `protected`, `public`, `static`, and `yield` are now recognized in type
+    signatures.
+  * `export default` with a class and an interface (triggering declaration
+    merging) no longer fasely reports [E0715][] ("cannot use multiple `export
+    default` statements in one module").
+  * `class C<T extends U, U> {}` no longer falsely reports [E0058][] ("variable
+    used before declaration").
+  * `case await x:` no longer treats `:` as if it was a type annotation colon in
+    an arrow function parameter list.
+  * Fixed a crash if certain diagnostics are reported after a TypeScript
+    interface. (Implemented by [Rui Serra][].)
+  * `import("modulename").Class<<T>(params) => ReturnType>` in a type is now
+    parsed correctly.
+  * `import("modulename")` in a type is now allowed and no longer falsely
+    reports a diagnostic.
+  * `import type * from 'othermodule';` no longer crashes quick-lint-js with an
+    assertion failure.
+  * Generic call signatures are now parsed correctly when using a semicolon-free
+    coding style.
+  * Interface index signatures and computed property names in interfaces are now
+    parsed correctly when using a semicolon-free coding style.
+  * Properties named 'extends' or 'is' are now parsed correctly when using a
+    semicolon-free coding style.
+  * Types named 'asserts' are parsed correctly when using a semicolon-free
+    coding style.
+  * `declare const x = 42;` no longer falsely reports [E0351][] or [E0385][].
+  * `type T = T.thing;` no longer falsely reports [E0384][] ("cannot use type
+    directly in its own definition").
+  * Interface methods and index signatures can now end in `,` (in addition to
+    `;`).
+  * Parsing of `;` and `,` between and after properties in object types is much
+    less buggy.
+  * quick-lint-js no longer incorrectly reports [E0384][] ("cannot use type
+    directly in its own definition") when using `extends ? :`.
+  * Making a type alias and a function with the same name no longer falsely
+    reports [E0034][] ("redeclaration of variable").
+  * Importing a type then declaring a function or variable with the same name no
+    longer falsely reports [E0034][] ("redeclaration of variable").
+  * Importing a function or variable then declaring a type with the same name no
+    longer falsely reports [E0034][] ("redeclaration of variable").
+  * `T extends () => RT ? A : B` no longer falsely reports [E0348][]
+    ("unexpected '?' in type; use '| void' to make an optional type").
+  * `<T extends />` is now correctly parsed as a JSX element.
+  * `interface I { get: any; }` (field named `get` with a type annotation) no
+    longer reports [E0054][] ("unexpected token"). (Implemented by [Rui
+    Serra][].)
+  * In type assertions, certain types such as in `<string[]>expr` and
+    `< <T>() => RT>expr`, are no longer incorrectly interpreted as JSX.
+  * Assigning to an enum or namespace no longer crashes quick-lint-js with an
+    assertion failure.
+  * Subnamespaces can now be named contextual keywords such as `string`.
+  * Import aliases can now be named contextual keywords such as `implements`.
+  * Optional function parameters can now be named contextual keywords such as
+    `readonly`.
+  * Import aliases can now be declared with `import type`.
+  * Namespace aliases can now reference variables named contextual keywords such as
+    `yield` inside namespaces.
+  * Type annotations can now reference types inside namespaces named contextual
+    keywords such as `string`.
+  * `import A = ns; class A {}` no longer crashes or falsely reports that `A`
+    was redeclared.
+  * `import {type A from 'mod'}; let A;` no longer crashes or falsely reports
+    that `A` was redeclared.
+  * `extends` checks with multiple `infer`s no longer crash or falsely report
+    that the inferred variable was redeclared.
+  * `class implements I {}` is now parsed as a class with no name rather than a
+    class with the name `implements`.
+  * `class C extends Base<T> implements I {}` now correctly parses `Base<T>` as
+    a type with generic arguments rather than logical comparisons.
+  * Variables declared inside a `declare global` block are now correctly
+    declared as global variables instead of module variables. This means that
+    variables inside a `declare global` block can be shadowed by module
+    variables without diagnostics.
+  * Fixed false negatives for [E0196][] if a type has the same name as a
+    variable.
+  * Using a variable in a type or interface (e.g. with `typeof`) no longer
+    falsely reports [E0058][] ("variable used before declaration").
+  * Type predicates in function types no longer falsely report [E0315][]
+    ("'param' is not the name of a parameter").
+  * Arrow functions with return type annotations such as `(42)` or `(string[])`
+    are now parsed correctly.
+  * `f<T>?.()` (optional chaining function call with generic function arguments)
+    is now parsed correctly.
+  * In a .d.ts file, `declare module` without a body no longer falsely reports
+    errors.
+  * `export default` inside a `declare module` no longer falsely reports
+    [E0715][] ("cannot use multiple `export default` statements in one module").
+  * `typeof` in types now supports variables named `boolean`, `string`, and some
+    other names.
+  * An optional parameter with `?` followed by an optional parameter with `=` no
+    longer falsely reports [E0379][] ("optional parameter cannot be followed by
+    a required parameter").
+  * `extends` in some cases is no longer incorrectly interpreted as an `infer`
+    constraint, such as in
+    `MyType extends (infer T extends U ? T1 : F1) ? T2 : F2;`.
+  * Nested `extends`, such as in `A extends () => B extends C ? D : E ? F : G`,
+    no longer falsely reports [E0348][] ("unexpected '?' in type; use '| void'
+    to make an optional type").
+  * `class T<T> {}` no longer falsely reports [E0034][] ("redeclaration of
+    variable").
+  * `await <T>() => {}` no longer does confusing things.
+
+## 2.18.0 (2023-11-03)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.18.0/)
+
+### Added
+
+* Mixing `&` and `<<` such as in `a & 0x1 << 3` now reports [E0716][]
+  ("unintuitive operator precedence when using & and << or >>"). (Implemented by
+  [toastin0][].)
+
+### Fixed
+
+* A missing operator in an `if` condition (such as in `if (x y)`) no longer
+  causes [E0065][] ("'else' has no corresponding 'if'") to be reported.
+  (Implemented by [Ariel Don][].)
+* `cmake --install` with `--component build-tools` now installs the build
+  tools. (This is a regression introduced in quick-lint-js version 2.16.0.)
+* Windows: The installer and executables are now signed with a non-expired
+  certificate chain.
+
+## 2.17.0 (2023-10-25)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.17.0/)
+
+### Known issues
+
+* `cmake --install` with `--component build-tools` does not install the build
+  tools. (This is a regression introduced in quick-lint-js version 2.16.0.)
+  Fix: [Git commit
+  3923f0df76d24b73d57f15eec61ab190ea048093][cmake-install-component-build-tools-patch]
+* Windows: Code signing does not validate on some machines. [Workaround: follow
+  SSL.com's instructions for removing the expired "Certum Trusted Network CA"
+  certificate.](https://www.ssl.com/blogs/ssl-com-legacy-cross-signed-root-certificate-expiring-on-september-11-2023/#ftoc-heading-7)
+
+### Added
+
+* quick-lint-js now understands decorators.
+* quick-lint-js now understands `accessor` fields.
+* `class C { myField, }` now reports better diagnostics.
+* quick-lint-js now compiles correctly on big-endian architectures such as
+  S/390 (Linux s390x).
+* Missing commas in array literals now reports [E0712][]. (Implemented by
+  [koopiehoop][].)
+* `get *prop()` and `set *prop()` in classes now report [E0713][] ("getters and
+  setters cannot be generators"). (Implemented by [koopiehoop][].)
+* `async get` and `async set` in classes now report [E0714][] ("'async' keyword
+  is not allowed on getters or setters"). (Implemented by [koopiehoop][].)
+* Multiple `export default` statements now report [E0715][] ("cannot use
+  multiple `export default` statements in one module"). (Implemented by
+  [Ariel Don][].)
+* Emacs: The Debian/Ubuntu package now installs the Emacs plugin. Manual
+  installation of the .el files is no longer required.
+* CLI: The new `--stdin-path` CLI option allows users of the `--stdin` option
+  (primarily text editors) to have quick-lint-js detect the language
+  automatically via `--language=default` or `--language=experimental-default`.
+* TypeScript support (still experimental):
+  * CLI: The new `--language=experimental-default` option auto-detects the
+    language based on the file's extension (`.ts`, `.tsx`, `.d.ts`, or `.js`).
+  * Emacs: Flymake plugin users can now opt into TypeScript support. See the
+    [Flymake configuration instructions][emacs-configure-flymake].
+  * Class method overload signatures are now parsed.
+  * [E0398][] is now reported when using both `abstract` and `static` on a
+    single class property.
+  * `,` is now allowed after interface fields. (Previously only `;` or a newline
+    was allowed.)
+  * `if (cond);` now reports [E0064][] ("missing body for 'if' statement").
+    (Implemented by [Samir Hamud][].)
+  * Type predicates are now supported in function types (e.g.
+    `(param) => param is Type`).
+  * `declare` fields are now parsed inside classes.
+  * `declare global` blocks are now parsed.
+
+### Fixed
+
+* [E0072][] is no longer falsely reported if `function` has a newline after it.
+* [E0196][] is no longer falsely reported if the shadowing variable is declared
+  in the head of a `for` loop. For example, quick-lint-js no longer warns about
+  `let x; for (let x = 0;;);`.
+* Emacs: .el files are now installed in the correct place on Arch Linux, btw.
+* Emacs: The Flymake plugin now reliably clears out diagnostics after issues are
+  fixed. Sticky diagnostics are no more.
+* TypeScript support (still experimental):
+  * A newline after `public`, `protected`, `private`, or `readonly` inside a
+    class is now interpreted correctly.
+  * `<T>(T: T) => {}` (a generic arrow function with the same name for a
+    run-time parameter and a generic parameter) no longer falsely reports
+    [E0034][] ("redeclaration of variable").
+  * A namespace with the same name as an interface or type alias no longer
+    falsely reports [E0034][] ("redeclaration of variable").
+  * `declare class` and `function` with the same name no longer falsely reports
+    [E0034][] ("redeclaration of variable").
+  * `(a?, ...b) => ReturnType` in a TypeScript type no longer falsely reports
+    [E0379][] ("optional parameter cannot be followed by a required parameter").
+  * LSP: A file named `a.tsxbanana.ts` is no longer recognized as a
+    TypeScript JSX file. It is now recognized as a non-JSX TypeScript
+    file.
+  * Nested `module` declarations no longer falsely report [E0361][]. E0361's
+    message has been changed:
+    * Before: "module with string name is only allowed at the top level"
+    * After: "TypeScript 'declare module' with string name is not allowed in
+      namespaces"
+
+## 2.16.0 (2023-09-06)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.16.0/)
+
+### Known issues
+
+* `cmake --install` with `--component build-tools` does not install the build
+  tools. Fix: [Git commit
+  3923f0df76d24b73d57f15eec61ab190ea048093][cmake-install-component-build-tools-patch]
+
+### Added
+
+* `2 ^ 8` now reports [E0710][] ("'^' is the XOR operator; to exponentiate, use
+  '\*\*' instead"). (Implemented by [pedrobl1718][].)
+* A missing `}` in a function parameter list now reports [E0161][] ("unclosed
+  object literal; expected '}'"). (Implemented by [Yash Masani][].)
+* quick-lint-js now builds on Alpine Linux and other musl-based distributions.
+* TypeScript support (still experimental):
+  * Invalid recursive type definitions such as `type T = T;` now report
+    [E0384][] ("cannot use type directly in its own definition").
+  * quick-lint-js now recognizes `import` types.
+  * quick-lint-js now recognizes `.d.ts` files:
+    * CLI: `--language=experimental-typescript-definition`
+    * LSP server: `typescriptdefinition`; `typescript` will detect from the URI,
+      and `typescriptsource` prevents detection from the URI
+    * Visual Studio Code extension: detected from the file name
+
+### Fixed
+
+* LSP: On macOS, quick-lint-js no longer hangs if a file has too many
+  diagnostics.
+* `#property in object` expressions are now parsed correctly and do not report
+  [E0155][].
+* `({k = defaultValue} = o);` no longer incorrectly reports [E0253][] ("use ':'
+  instead of '=' in object literals").
+* Class property initializers no longer incorrectly report [E0058][] ("variable
+  used before declaration"). Example:
+  `class C { myProperty = f(); }  const f = () => {};`
+* TypeScript support (still experimental):
+  * quick-lint-js no longer falsely reports [E0058][] ("variable used before
+    declaration") for code such as `function f<T extends T[]>() {}`.
+  * Declaring a type alias or an interface inside a `declare namespace` no
+    longer reports [E0357][] ("'declare namespace' cannot contain statements,
+    only declarations").
+  * `const enum E {}` no longer causes [E0150][].
+  * Using a `declare`-ed variable prior to its declaration is now allowed.
+    Example: `new C(); declare class C { }`
+  * Using a variable in a `declare class`'s `extends` clause prior to the
+    variable's declaration is now allowed.
+    Example: `declare class Derived extends Base { } class Base { }`
+  * VS Code: The extension now loads when only opening a TypeScript file.
+    (Previously, the extension would only load when you opened a JavaScript or
+    JSON file.) The `quick-lint-js.experimental-typescript` setting is still
+    required.
+  * Vim ALE: JSX syntax is now recognized inside `.tsx` files.
+
+### Changed
+
+* quick-lint-js no longer depends on the Boost third-party library. The
+  `QUICK_LINT_JS_USE_BUNDLED_BOOST` CMake variable now has no effect.
+
+## 2.15.0 (2023-07-18)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.15.0/)
+
+### Added
+
+* LSP server: quick-lint-js can now receive configuration options via the
+  `initialize` request. See [LSP configuration
+  documentation](https://quick-lint-js.com/docs/lsp/#_configuration) for
+  details.
+* `x = x;` now reports [E0383][]. (Implemented by [Austin Garcia][].)
+* `...` without something following it now reports either [E0708][] ("unexpected
+  '...'; expected expression") or [E0709][] ("expected variable name after
+  '...'"). (Implemented by [Isaac Nonato][].)
+* TypeScript support (still experimental):
+  * `namespace A.B {}` syntax (with `.`) is now supported.
+  * `static public myMethod() {}` now reports [E0380][] ("'public' access
+    specifier must precede 'static'"). (Implemented by [Leszek Nowicki][].)
+  * `class C { \u{63}onstructor() {} }` now reports [E0381][] ("Typescript does
+    not allow keywords to contain escape sequence"). (Implemented by [Jait
+    Jacob][].)
+  * `export declare` is now supported.
+
+### Fixed
+
+* Emacs (Flycheck): Using `C-x C-;` to comment a line now runs quick-lint-js
+  (instead of leaving old diagnostics on the screen). This requires that you
+  update your Emacs file: add `new-line` to the
+  `flycheck-check-syntax-automatically` variable.
+* `export default abstract;` is now parsed correctly as the export of a variable
+  named `abstract`.
+* `export default async (newline) function f() {}` is now parsed correctly as
+  the export of a variable named `async` followed by the declaration of a
+  non-async function named `f`.
+* TypeScript support (still experimental):
+  * [E0034][] ("redeclaration of variable") is no longer incorrectly reported
+    in various cases, including the following:
+      * `class A {} namespace A {}`
+      * `function f<T>(T) {}`
+      * `type X = null; var X;`
+      * `namespace ns{} namespace ns{}`
+  * `export = a b` now reports [E0027][] ("missing semicolon after statement").
+  * `module 'name' { import ... }` no longer falsely reports [E0362][] ("cannot
+    import a module from inside a 'declare namespace'").
+  * `module 'name';` no longer falsely reports [E0356][] ("missing body for
+    TypeScript namespace").
+
+## 2.14.0 (2023-05-22)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.14.0/)
+
+### Added
+
+* Missing props in JSX tags now report [E0376][] ("JSX prop is missing an
+  expression"). (Implemented by [James Moles][].)
+* `! ==` (with a space) now reports [E0373][] or [E0374][]. (Implemented by
+  [daethtech][].)
+* `x == y ?? true` now reports [E0369][]. (Implemented by [Kate Conkright][].)
+* `apt install quick-lint-js` now works on ARM64 (AArch64) Debian and Ubuntu
+  installations.
+* TypeScript support (still experimental):
+    * Certain invalid parameter properties (such as in `constructor(public {id,
+      name})`) now report diagnostics.
+    * `function f(a?, b) {}` now reports [E0379][]. (Implemented by [Alek
+      Lefebvre][].)
+
+### Fixed
+
+* Arrow functions with TypeScript parameter type annotations no longer report
+  confusing diagnostics in JavaScript mode. (Implemented by [Leszek Nowicki][].)
+* TypeScript support (still experimental):
+  * '\`hello${world}\` as const' no longer falsely reports [E0291][].
+    (Fixed by [Leszek Nowicki][].)
+* Windows: Fixed a build failure with MinGW GCC 13.1.0.
+* Shell completions are now up to date with the CLI. (Fixed by [Jake
+  Castelli][].)
+* FreeBSD: quick-lint-js no longer fails to build.
+
+### Changed
+
+* Ubuntu 18.04 LTS Bionic is no longer supported. It might happen to work, but it
+  is not extensively tested. Canonical is itself ending support for Bionic on
+  May 31, 2023, so please upgrade to Ubuntu 20.04 LTS or newer.
+
+## 2.13.0 (2023-04-13)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.13.0/)
+
+### Known issues
+
+* Building quick-lint-js on [FreeBSD is
+  broken](https://github.com/quick-lint/quick-lint-js/issues/999).
+
+### Added
+
+* quick-lint-js now recognizes [Deno][]'s global variables, including `Deno`.
+  This suppresses undesired [E0057][] ("use of undeclared variable") warnings.
+  This is controlled by the [`deno` global group][config-global-groups].
+* `if () {}` (without a condition) now reports [E0452][] ("empty parenthesis
+  after control statement"). (Implemented by [Yunus][].)
+* `return x,` now reports [E0026][] ("missing operand for operator").
+  (Implemented by [Tom Binford][].)
+* TypeScript support (still experimental):
+    * The `satisfies` operator is now recognized.
+    * The `infer` operator is now recognized.
+    * The `in` and `out` keywords for generic parameter variance are now
+      recognized.
+    * Parameter properties (`constructor(public readonly name: string, public
+      age: number)`) are now recognized.
+    * `C<T>=y;` now reports [E0365][] ("TypeScript requires whitespace between
+      '>' and '=' here").
+    * `extends` in `interface` now allows generic arguments, such as in
+      `interface I extends T<U> {}`.
+    * `extends` in `interface` now allows nested namespaces, such as in
+      `interface I extends ns1.ns2.ns3.I {}`.
+* FreeBSD: `quick-lint-js --debug-apps` now works. (Implemented by [Nico
+  Sonack][].)
+
+### Fixed
+
+* Fixed several false errors:
+  * `do while (x); while (y);` no longer falsely reports [E0101][] ("missing
+    body for do-while loop").
+  * `{ var async; async }` no longer falsely reports [E0054][] ("unexpected
+    token").
+  * `async[x]` no longer falsely reports [E0054][] ("unexpected token").
+  * `await x ? y : z` no longer falsely reports [E0311][] ("missing parentheses
+    around parameter").
+  * `if (c) async () => {}; else {}` no longer falsely reports [E0065][]
+    ("'else' has no corresponding 'if'").
+  * `class A extends await {}` no longer falsely reports [E0111][] ("missing
+    body for class").
+  * `class A extends await() {}` no longer falsely reports [E0176][] ("missing
+    arrow operator for arrow function").
+  * `do if (c) {} else (b); while (d);` no longer falsely reports [E0103][]
+    ("missing 'while (condition)' for do-while statement").
+* `if (c) {} else (b) d;` now correctly reports [E0027][] ("missing semicolon
+  after statement").
+* The CLI's `--output-format=gnu-like` output (default) no longer prints
+  terminal escape sequences for "dumb" terminals (where `TERM=dumb`). (Fixed by
+  [wagner riffel][].)
+* FreeBSD: The quick-lint-js-licenses.txt file is now populated correctly.
+* TypeScript support (still experimental):
+    * `let x: C<T>=y;` no longer falsely reports an error.
+    * `class A extends B<C> {}` no longer falsely reports an error.
+    * `T extends keyof O ? A : B` no longer falsely reports an error.
+
+### Changed
+
+* Cross compiling now requires you to build with
+  `QUICK_LINT_JS_ENABLE_BUILD_TOOLS` for the build machine then with
+  `QUICK_LINT_JS_USE_BUILD_TOOLS` for the target machine. See the
+  [cross-compiling documentation][cross-compiling-quick-lint-js] for details.
+* Code signing certificate has been refreshed. The old certificate expires on
+  April 18, 2023 (PDT) and the new certificate expires on April 17, 2024 (PDT).
+  The public key is the same between the two certificates:
+  `7ea531a42cd3e7161b6951f93d83449546e90722` (SHA1).
+
+## 2.12.0 (2023-03-08)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.12.0/)
+
+### Added
+
+* `array[i, j]` now reports [E0450][] ("misleading use of ',' operator in
+  index") (implemented by [Yunus][]).
+* `while (x > 0, y > 0)` now reports [E0451][] ("misleading use of ',' operator
+  in conditional statement") (implemented by [Yunus][]).
+* Improvements to experimental TypeScript support:
+  * Type variables such as `Readonly<T>` and `IArguments` are now recognized by
+    the new `typescript` global group which is enabled by default.
+  * `declare` is now supported.
+  * The old-style `module` syntax for namespaces is now supported.
+
+### Fixed
+
+* Fixed [E0062][] being reported when [E0061][] should be reported instead
+  (fixed by [Yunus][]).
+* TypeScript `namespace` without a body now reports [E0356][] instead of
+  crashing with an assertion failure.
+
+### Changed
+
+* quick-lint-js' build system now optionally creates executes and runs them
+  during the build. This behavior is controlled by the
+  `QUICK_LINT_JS_ENABLE_BUILD_TOOLS` and `QUICK_LINT_JS_USE_BUILD_TOOLS` CMake
+  variables.
+  * For most people, `QUICK_LINT_JS_ENABLE_BUILD_TOOLS` is enabled by default
+    and should work without extra configuration. No action is needed.
+  * When cross-compiling, `QUICK_LINT_JS_ENABLE_BUILD_TOOLS` is disabled.
+    Currently, `QUICK_LINT_JS_ENABLE_BUILD_TOOLS` is optional, so this should
+    behave as before. However, in the future, either
+    `QUICK_LINT_JS_ENABLE_BUILD_TOOLS` or `QUICK_LINT_JS_USE_BUILD_TOOLS` will
+    be required.
+  * If you need to configure the build tools specially, or if you want to build
+    the build tools when cross-compiling, you must use the
+    `QUICK_LINT_JS_USE_BUILD_TOOLS` CMake variable. See the [cross-compiling
+    documentation][cross-compiling-quick-lint-js] for instructions on using
+    `QUICK_LINT_JS_USE_BUILD_TOOLS` correctly.
+
+## 2.11.0 (2023-01-31)
+
+[Downloads](https://c.quick-lint-js.com/releases/2.11.0/)
+
+### Changed
+
+* Debian: The apt repository signing key expired on (2023-01-21). This causes
+  `apt-get update` to fail. To fix this issue, add the latest signing key by
+  running the following command:
+
+      $ curl https://c.quick-lint-js.com/quick-lint-js-release.key | sudo apt-key add -
+
+* LSP: The quick-lint-js LSP server no longer accepts JSON-RPC 2.0 batch
+  messages. In practice, LSP clients don't use this feature, so this breaking
+  change should do no harm. The LSP specification recently started
+  [prohibiting batch
+  messages](https://github.com/microsoft/language-server-protocol/pull/1651) to
+  match the status quo.
 
 ### Added
 
 * LSP: The LSP server now recognizes and lints TypeScript and TypeScript JSX
-  code. However, the editor plugins currently do **not** use this feature.
-* Vim: ALE only: You can opt into TypeScript support with the
-  `g:ale_javascript_quick_lint_js_experimental_typescript` setting (disabled by
-  default).
+  code. However, the editor plugins currently do **not** use this feature by
+  default.
+* Vim: You can opt into TypeScript support. Search for `EXPERIMENTAL` in
+  `:help quick-lint-js`. (Disabled by default.)
+* VS Code: You can now opt into experimental TypeScript support. Set the
+  `quick-lint-js.experimental-typescript` setting to `true`. (Disabled by
+  default.)
 * `switch (c) { case A: break; case A: break; }` now reports [E0347][]
   ("duplicated case clause in switch statement") (implemented by [Rebraws][]).
 * Translations: Brazilian Portuguese (implemented by [Guilherme Vasconcelos][]).
@@ -26,6 +605,8 @@ Semantic Versioning.
   parameter cannot be parenthesized) (implemented by [Harshit Aghera][]).
 * QuickJS's global variables are now recognized by default via the new `quickjs`
   global group (implemented by [wagner riffel]).
+* [E0190][] is now reported if the literal is `undefined`, not only `null`,
+  strings, and numbers (implemented by [Harshit Aghera][]).
 
 ### Fixed
 
@@ -38,6 +619,9 @@ Semantic Versioning.
   [E0048][].
 * Using a variable called `async`, then exporting something, no longer reports
   an unexpected token error (implemented by [Alek Lefebvre][]).
+* `class C { x = 0, y; }` now reports [E0330][] ("',' should be ';' instead")
+  instead of [E0057][] ("use of undeclared variable: y") (implemented by
+  [clegoz][]).
 
 ## 2.10.0 (2022-10-14)
 
@@ -718,11 +1302,20 @@ Beta release.
 [Downloads](https://c.quick-lint-js.com/releases/0.2.0/)
 
 [Bun]: https://bun.sh/
+[Deno]: https://deno.land/
 [cli-language]: ../cli/#language
+[cmake-install-component-build-tools-patch]: https://github.com/quick-lint/quick-lint-js/commit/3923f0df76d24b73d57f15eec61ab190ea048093.patch
+[coc.nvim]: https://github.com/neoclide/coc.nvim
+[config-global-groups]: https://quick-lint-js.com/config/#global-groups
+[cross-compiling-quick-lint-js]: https://quick-lint-js.com/contribute/build-from-source/cross-compiling/
+[emacs-configure-flymake]: https://quick-lint-js.com/install/emacs/configure/#flymake
+[install-powershell-completions]: https://github.com/quick-lint/quick-lint-js/blob/master/completions/README.md#powershell
 
 [AidenThing]: https://github.com/AidenThing
 [Alek Lefebvre]: https://github.com/AlekLefebvre
 [Amir]: https://github.com/ahmafi
+[Ariel Don]: https://github.com/arieldon
+[Austin Garcia]: https://github.com/holychowders
 [Christian Mund]: https://github.com/kkkrist
 [Daniel La Rocque]: https://github.com/dlarocque
 [Dave Churchill]: https://www.cs.mun.ca/~dchurchill/
@@ -731,27 +1324,40 @@ Beta release.
 [Guilherme Vasconcelos]: https://github.com/Guilherme-Vasconcelos
 [Harshit Aghera]: https://github.com/HarshitAghera
 [Himanshu]: https://github.com/singalhimanshu
+[Isaac Nonato]: https://github.com/isaacnonato
+[Jait Jacob]: https://github.com/jaitjacob
+[Jake Castelli]: https://github.com/jakecastelli
+[James Moles]: https://github.com/JPMoles
 [Jenny "Jennipuff" Wheat]: https://twitter.com/jennipaff
 [Jimmy Qiu]: https://github.com/lifeinData
+[Kate Conkright]: https://github.com/applepie23
 [Kim "Linden"]: https://github.com/Lindenbyte
 [Lee Wannacott]: https://github.com/LeeWannacott
+[Leszek Nowicki]: https://github.com/leszek888
 [Matheus de Sousa]: https://github.com/keyehzy
 [Nico Sonack]: https://github.com/herrhotzenplotz
 [Piotr Dąbrowski]: https://github.com/yhnavein
 [Rebraws]: https://github.com/Rebraws
 [Rob Miner]: https://github.com/robminer6
 [Roland Strasser]: https://github.com/rol1510
+[Rui Serra]: https://github.com/ruipserra
+[Samir Hamud]: https://github.com/samir-hamud
 [Sarah Schulte]: https://github.com/cgsdev0
 [Shivam Mehta]: https://github.com/maniac-en
+[Tom Binford]: https://github.com/TomBinford
 [Tony Sathre]: https://github.com/tonysathre
+[Yash Masani]: https://github.com/yashmasani
+[Yunus]: https://github.com/yunusey
 [clegoz]: https://github.com/clegoz
-[coc.nvim]: https://github.com/neoclide/coc.nvim
-[config-global-groups]: https://quick-lint-js.com/config/#global-groups
+[daethtech]: https://github.com/daethtech
 [david doroz]: https://github.com/DaviddHub
-[install-powershell-completions]: https://github.com/quick-lint/quick-lint-js/blob/master/completions/README.md#powershell
+[koopiehoop]: https://github.com/koopiehoop
 [mirabellier]: https://github.com/mirabellierr
 [ooblegork]: https://github.com/ooblegork
+[pedrobl1718]: https://github.com/pedrobl85
+[strager]: https://github.com/strager
 [tiagovla]: https://github.com/tiagovla
+[toastin0]: https://github.com/toastin0
 [wagner riffel]: https://github.com/wgrr
 
 [E0001]: https://quick-lint-js.com/errors/E0001/
@@ -762,6 +1368,7 @@ Beta release.
 [E0020]: https://quick-lint-js.com/errors/E0020/
 [E0026]: https://quick-lint-js.com/errors/E0026/
 [E0027]: https://quick-lint-js.com/errors/E0027/
+[E0034]: https://quick-lint-js.com/errors/E0034/
 [E0036]: https://quick-lint-js.com/errors/E0036/
 [E0038]: https://quick-lint-js.com/errors/E0038/
 [E0040]: https://quick-lint-js.com/errors/E0040/
@@ -771,12 +1378,20 @@ Beta release.
 [E0053]: https://quick-lint-js.com/errors/E0053/
 [E0054]: https://quick-lint-js.com/errors/E0054/
 [E0057]: https://quick-lint-js.com/errors/E0057/
+[E0058]: https://quick-lint-js.com/errors/E0058/
 [E0059]: https://quick-lint-js.com/errors/E0059/
 [E0060]: https://quick-lint-js.com/errors/E0060/
+[E0061]: https://quick-lint-js.com/errors/E0061/
+[E0062]: https://quick-lint-js.com/errors/E0062/
+[E0064]: https://quick-lint-js.com/errors/E0064/
+[E0065]: https://quick-lint-js.com/errors/E0065/
 [E0069]: https://quick-lint-js.com/errors/E0069/
+[E0072]: https://quick-lint-js.com/errors/E0072/
 [E0073]: https://quick-lint-js.com/errors/E0073/
 [E0086]: https://quick-lint-js.com/errors/E0086/
 [E0094]: https://quick-lint-js.com/errors/E0094/
+[E0101]: https://quick-lint-js.com/errors/E0101/
+[E0103]: https://quick-lint-js.com/errors/E0103/
 [E0104]: https://quick-lint-js.com/errors/E0104/
 [E0106]: https://quick-lint-js.com/errors/E0106/
 [E0108]: https://quick-lint-js.com/errors/E0108/
@@ -788,6 +1403,8 @@ Beta release.
 [E0149]: https://quick-lint-js.com/errors/E0149/
 [E0150]: https://quick-lint-js.com/errors/E0150/
 [E0151]: https://quick-lint-js.com/errors/E0151/
+[E0155]: https://quick-lint-js.com/errors/E0155/
+[E0161]: https://quick-lint-js.com/errors/E0161/
 [E0173]: https://quick-lint-js.com/errors/E0173/
 [E0176]: https://quick-lint-js.com/errors/E0176/
 [E0177]: https://quick-lint-js.com/errors/E0177/
@@ -831,12 +1448,45 @@ Beta release.
 [E0279]: https://quick-lint-js.com/errors/E0279/
 [E0286]: https://quick-lint-js.com/errors/E0286/
 [E0287]: https://quick-lint-js.com/errors/E0287/
+[E0291]: https://quick-lint-js.com/errors/E0291/
+[E0311]: https://quick-lint-js.com/errors/E0311/
 [E0325]: https://quick-lint-js.com/errors/E0325/
 [E0326]: https://quick-lint-js.com/errors/E0326/
 [E0327]: https://quick-lint-js.com/errors/E0327/
+[E0330]: https://quick-lint-js.com/errors/E0330/
 [E0341]: https://quick-lint-js.com/errors/E0341/
 [E0344]: https://quick-lint-js.com/errors/E0344/
 [E0345]: https://quick-lint-js.com/errors/E0345/
 [E0347]: https://quick-lint-js.com/errors/E0347/
 [E0348]: https://quick-lint-js.com/errors/E0348/
+[E0349]: https://quick-lint-js.com/errors/E0349/
+[E0356]: https://quick-lint-js.com/errors/E0356/
+[E0357]: https://quick-lint-js.com/errors/E0357/
+[E0361]: https://quick-lint-js.com/errors/E0361/
+[E0362]: https://quick-lint-js.com/errors/E0362/
+[E0365]: https://quick-lint-js.com/errors/E0365/
+[E0369]: https://quick-lint-js.com/errors/E0369/
+[E0373]: https://quick-lint-js.com/errors/E0373/
+[E0374]: https://quick-lint-js.com/errors/E0374/
+[E0376]: https://quick-lint-js.com/errors/E0376/
+[E0379]: https://quick-lint-js.com/errors/E0379/
+[E0380]: https://quick-lint-js.com/errors/E0380/
+[E0381]: https://quick-lint-js.com/errors/E0381/
+[E0383]: https://quick-lint-js.com/errors/E0383/
+[E0384]: https://quick-lint-js.com/errors/E0384/
+[E0398]: https://quick-lint-js.com/errors/E0398/
+[E0426]: https://quick-lint-js.com/errors/E0426/
+[E0427]: https://quick-lint-js.com/errors/E0427/
+[E0429]: https://quick-lint-js.com/errors/E0429/
+[E0450]: https://quick-lint-js.com/errors/E0450/
+[E0451]: https://quick-lint-js.com/errors/E0451/
+[E0452]: https://quick-lint-js.com/errors/E0452/
 [E0707]: https://quick-lint-js.com/errors/E0707/
+[E0708]: https://quick-lint-js.com/errors/E0708/
+[E0709]: https://quick-lint-js.com/errors/E0709/
+[E0710]: https://quick-lint-js.com/errors/E0710/
+[E0712]: https://quick-lint-js.com/errors/E0712/
+[E0713]: https://quick-lint-js.com/errors/E0713/
+[E0714]: https://quick-lint-js.com/errors/E0714/
+[E0715]: https://quick-lint-js.com/errors/E0715/
+[E0716]: https://quick-lint-js.com/errors/E0716/

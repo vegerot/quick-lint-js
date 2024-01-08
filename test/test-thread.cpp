@@ -1,33 +1,119 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
+#include <atomic>
+#include <chrono>
 #include <gtest/gtest.h>
 #include <iostream>
 #include <quick-lint-js/port/have.h>
 #include <quick-lint-js/port/thread.h>
+#include <thread>
+
+#if defined(_WIN32)
+#include <quick-lint-js/port/windows-error.h>
+#include <quick-lint-js/port/windows.h>
+#endif
+
+using namespace std::literals::chrono_literals;
 
 namespace quick_lint_js {
 namespace {
-TEST(test_thread, print_thread_id) {
+TEST(Test_Thread, print_thread_id) {
   // This is a manual test.
   std::cerr << "main thread ID: " << get_current_thread_id() << '\n';
 }
 
-TEST(test_thread, thread_id_is_stable) {
+TEST(Test_Thread, thread_id_is_stable) {
   std::uint64_t id = get_current_thread_id();
   std::uint64_t id2 = get_current_thread_id();
   EXPECT_EQ(id, id2) << "thread ID should not change between calls";
 }
 
 #if QLJS_HAVE_THREADS
-TEST(test_thread, thread_ids_differ_between_threads) {
+TEST(Test_Thread, thread_ids_differ_between_threads) {
   std::uint64_t main_id = get_current_thread_id();
   std::uint64_t other_id;
 
-  thread other_thread([&] { other_id = get_current_thread_id(); });
+  Thread other_thread([&] { other_id = get_current_thread_id(); });
   other_thread.join();
 
   EXPECT_NE(main_id, other_id) << "thread IDs should differ";
+}
+
+TEST(Test_Thread, start_thread_after_construction) {
+  static std::atomic<bool> other_thread_routine_started;
+  other_thread_routine_started = false;
+
+  Thread other_thread;
+  other_thread.start([] { other_thread_routine_started = true; });
+  other_thread.join();
+
+  EXPECT_TRUE(other_thread_routine_started);
+}
+
+TEST(Test_Thread, move_assign_started_thread) {
+  static std::atomic<bool> other_thread_routine_started;
+  other_thread_routine_started = false;
+
+  // TODO(strager): Discourage this style. You should use .start instead.
+  Thread other_thread;
+  other_thread = Thread([] { other_thread_routine_started = true; });
+  other_thread.join();
+
+  EXPECT_TRUE(other_thread_routine_started);
+}
+#endif
+
+#if defined(_WIN32)
+TEST(Test_Thread, terminate_interrupts_wait_for_single_object_SLOW) {
+  Windows_Handle_File event(::CreateEventA(
+      /*lpEventAttributes=*/nullptr,
+      /*bManualReset=*/true, /*bInitialState=*/false,
+      /*lpName=*/nullptr));
+  ASSERT_TRUE(event.valid()) << windows_error_message(::GetLastError());
+
+  std::atomic<bool> thread_started = false;
+  std::atomic<bool> wait_returned = false;
+  Thread other_thread([&] {
+    thread_started = true;
+    (void)::WaitForSingleObject(event.get(), INFINITE);
+    wait_returned = true;
+  });
+
+  // Wait for other_thread to call WaitForSingleObject.
+  while (!thread_started) {
+    std::this_thread::sleep_for(1ms);
+  }
+  std::this_thread::sleep_for(1ms);
+
+  other_thread.terminate();
+  other_thread.join();
+  EXPECT_FALSE(wait_returned) << "thread should have stopped without returning "
+                                 "from WaitForSingleObject";
+}
+
+TEST(Test_Thread, terminate_does_nothing_for_a_stopped_thread_SLOW) {
+  Windows_Handle_File event(::CreateEventA(
+      /*lpEventAttributes=*/nullptr,
+      /*bManualReset=*/true, /*bInitialState=*/false,
+      /*lpName=*/nullptr));
+  ASSERT_TRUE(event.valid()) << windows_error_message(::GetLastError());
+
+  std::atomic<bool> thread_routine_finished = false;
+  Thread other_thread([&] { thread_routine_finished = true; });
+
+  // Wait for other_thread to finish.
+  while (!thread_routine_finished) {
+    std::this_thread::sleep_for(1ms);
+  }
+  // Wait for possibly-expensive thread cleanup by the OS.
+  std::this_thread::sleep_for(10ms);
+
+  // Thread::terminate should not crash internally.
+  other_thread.terminate();
+  EXPECT_TRUE(other_thread.joinable());
+  // Thread::join should not crash internally.
+  other_thread.join();
 }
 #endif
 }

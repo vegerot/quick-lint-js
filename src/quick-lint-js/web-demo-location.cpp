@@ -3,25 +3,23 @@
 
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/port/char8.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <quick-lint-js/util/utf-8.h>
 #include <quick-lint-js/web-demo-location.h>
 
 namespace quick_lint_js {
-web_demo_locator::web_demo_locator(padded_string_view input) noexcept
-    : input_(input) {}
+Web_Demo_Locator::Web_Demo_Locator(Padded_String_View input) : input_(input) {}
 
-web_demo_source_range web_demo_locator::range(source_code_span span) const {
-  return web_demo_source_range{
+Web_Demo_Source_Range Web_Demo_Locator::range(Source_Code_Span span) const {
+  return Web_Demo_Source_Range{
       .begin = this->position(span.begin()),
       .end = this->position(span.end()),
   };
 }
 
-web_demo_source_offset web_demo_locator::position(const char8* c) const
-    noexcept {
+Web_Demo_Source_Offset Web_Demo_Locator::position(const Char8* c) const {
   int byte_offset = narrow_cast<int>(c - this->input_.data());
-  return narrow_cast<web_demo_source_offset>(
+  return narrow_cast<Web_Demo_Source_Offset>(
       count_lsp_characters_in_utf_8(this->input_, byte_offset));
 }
 }

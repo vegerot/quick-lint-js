@@ -1,8 +1,11 @@
 # Copyright (C) 2020  Matthew "strager" Glazar
 # See end of file for extended copyright information.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
+include(GNUInstallDirs)
 include(QuickLintJSTarget)
+
+add_subdirectory(test-typescript)
 
 if (NOT EMSCRIPTEN) # We don't support tools targeting Emscripten.
   quick_lint_js_add_executable(quick-lint-js-analyze-trace analyze-trace.cpp)
@@ -10,6 +13,67 @@ if (NOT EMSCRIPTEN) # We don't support tools targeting Emscripten.
     quick-lint-js-analyze-trace
     PRIVATE
     quick-lint-js-lib
+  )
+endif ()
+
+set(QUICK_LINT_JS_BUILD_TOOL_EXECUTABLE_SUFFIX "")
+if (CMAKE_HOST_SYSTEM_NAME STREQUAL Windows)
+  set(QUICK_LINT_JS_BUILD_TOOL_EXECUTABLE_SUFFIX .exe)
+endif ()
+
+set(QUICK_LINT_JS_BUILD_TOOL_TARGETS)
+function (quick_lint_js_add_build_tool_executable NAME)
+  set(SOURCES "${ARGN}")
+  if (QUICK_LINT_JS_USE_BUILD_TOOLS)
+    add_executable("${NAME}" IMPORTED GLOBAL)
+    set_target_properties(
+      "${NAME}"
+      PROPERTIES
+      IMPORTED_LOCATION "${QUICK_LINT_JS_USE_BUILD_TOOLS}/${NAME}${QUICK_LINT_JS_BUILD_TOOL_EXECUTABLE_SUFFIX}"
+    )
+  elseif (QUICK_LINT_JS_ENABLE_BUILD_TOOLS)
+    quick_lint_js_add_executable("${NAME}" ${SOURCES})
+    set_target_properties("${NAME}" PROPERTIES RUNTIME_OUTPUT_DIRECTORY ..)
+    target_link_libraries("${NAME}" PRIVATE quick-lint-js-tool-lib)
+    target_include_directories("${NAME}" PRIVATE .)
+  endif ()
+
+  list(APPEND QUICK_LINT_JS_BUILD_TOOL_TARGETS "${NAME}")
+  set(QUICK_LINT_JS_BUILD_TOOL_TARGETS "${QUICK_LINT_JS_BUILD_TOOL_TARGETS}" PARENT_SCOPE)
+endfunction ()
+
+quick_lint_js_add_build_tool_executable(
+  quick-lint-js-compile-translations
+  compile-translations.cpp
+)
+
+quick_lint_js_add_build_tool_executable(
+  quick-lint-js-generate-diagnostic-metadata
+  generate-diagnostic-metadata.cpp
+)
+
+quick_lint_js_add_build_tool_executable(
+  quick-lint-js-generate-lex-keyword
+  generate-lex-keyword.cpp
+)
+
+quick_lint_js_add_build_tool_executable(
+  quick-lint-js-generate-trace-sources
+  generate-trace-sources.cpp
+)
+
+if (QUICK_LINT_JS_ENABLE_BUILD_TOOLS)
+  add_custom_target(
+    quick-lint-js-build-tools
+    COMMENT "Building all quick-lint-js build-time tools"
+    DEPENDS ${QUICK_LINT_JS_BUILD_TOOL_TARGETS}
+  )
+  install(
+    TARGETS ${QUICK_LINT_JS_BUILD_TOOL_TARGETS}
+    COMPONENT build-tools
+    EXCLUDE_FROM_ALL
+    RUNTIME
+    DESTINATION "${CMAKE_INSTALL_BINDIR}"
   )
 endif ()
 

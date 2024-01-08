@@ -9,6 +9,7 @@ include::../version[lines=1]
 :reproducible:
 :stylesheet: ../main.css
 :linkcss:
+:table-caption!:
 
 ifdef::backend-manpage[]
 
@@ -57,39 +58,59 @@ quick-lint-js sends the following LSP requests and notifications:
 * `window/showMessage`
 * `workspace/configuration`
 
-quick-lint-js interprets documents with the following document language IDs as if they were JavaScript+JSX files (like the
+== Document languageId
+
+quick-lint-js uses `languageId` from a `textDocument/didOpen` notification to determine the language of that LSP document according to the following table:
+
+.quick-lint-js's interpretation of languageId
+[%autowidth,%header,cols="h,"]
+|===
+|LSP languageId
+|Equivalent
 ifdef::backend-html5[]
-link:../../cli/#language[*--language=javascript-jsx* command line option]):
+link:../../cli/#language[*--language=*] +
 endif::[]
 ifndef::backend-html5[]
-*--language=javascript-jsx* command-line option):
+*--language* +
 endif::[]
+command-line option
 
-* `javascript`
-* `javascriptreact`
-* `js-jsx`
-* `js`
+|`javascript`
+|`javascript-jsx`
 
-quick-lint-js interprets documents with the following document language IDs as if they were TypeScript files (like the
-ifdef::backend-html5[]
-link:../../cli/#language[*--language=experimental-typescript* command line option]):
-endif::[]
-ifndef::backend-html5[]
-*--language=experimental-typescript* command-line option):
-endif::[]
+|`javascriptreact`
+|`javascript-jsx`
 
-* `typescript`
+|`js-jsx`
+|`javascript-jsx`
 
-quick-lint-js interprets documents with the following document language IDs as if they were TypeScript JSX files (like the
-ifdef::backend-html5[]
-link:../../cli/#language[*--language=experimental-typescript-jsx* command line option]):
-endif::[]
-ifndef::backend-html5[]
-*--language=experimental-typescript-jsx* command-line option):
-endif::[]
+|`js`
+|`javascript-jsx`
 
-* `tsx`
-* `typescriptreact`
+|`tsx`
+|`typescript-jsx`
+
+|`typescript`
+|See below
+
+|`typescriptsource`
+|`typescript`
+
+|`typescriptdefinition`
+|`typescript-definition`
+
+|`typescriptreact`
+|`typescript-jsx`
+
+|(any)
+|See below
+|===
+
+If the `languageId` is equal to `typescript`, then quick-lint-js inspects the base name of that document's URI to determine the language of that document:
+
+* If the base name contains ".d.", then quick-lint-js interprets the document as if `languageId` was instead `typescriptdefinition`.
+* Otherwise, if the base name ends with ".tsx", then quick-lint-js interprets the document as if `languageId` was instead `typescriptreact`.
+* Otherwise, quick-lint-js interprets the document as if `languageId` was instead `typescriptsource`.
 
 quick-lint-js interprets documents with a base name of `quick-lint-js.config` as a JSON config file.
 The document's language ID is ignored.
@@ -104,6 +125,26 @@ communicated through `workspace/configuration`:
   Log raw LSP messages between the editor and quick-lint-js.
   A timestamped subdirectory is created inside the tracing directory containing binary log files.
   If null or an empty string, tracing is disabled.
+
+It is also possible to configure quick-lint-js using the `initialize` request.
+To do so, set `initializationOptions` to an object containing a `configuration` object containing the settings.
+For example, the following `initialize` request sets `quick-lint-js.tracing-directory`:
+
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "initialize",
+      "params": {
+        "processId": null,
+        "rootUri": null,
+        "capabilities": {},
+        "initializationOptions": {
+          "configuration": {
+            "quick-lint-js.tracing-directory": "/tmp/quick-lint-js-logs"
+          }
+        }
+      }
+    }
 
 ifdef::backend-manpage[]
 

@@ -1,32 +1,42 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_UTF_8_H
-#define QUICK_LINT_JS_UTIL_UTF_8_H
+#pragma once
 
 #include <cstddef>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/port/char8.h>
 
 namespace quick_lint_js {
-char8* encode_utf_8(char32_t code_point, char8* out);
+Char8* encode_utf_8(char32_t code_point, Char8* out);
 
-struct decode_utf_8_result {
+// There are three cases with Decode_UTF8_Result:
+//
+// 1. The input string is empty. In this case, .size == 0 && .ok == false.
+//    .code_point is unspecified.
+//
+// 2. The input string starts with a valid character sequence.
+//    .ok == true && .size > 0. .code_point refers to the first Unicode code
+//    point in the input. .size is the number of Char8-s in the first character
+//    sequence.
+//
+// 3. The input string starts with an invalid character sequence.
+//    .ok == false && .size > 0. .code_point is unspecified. .size is the number
+//    of Char8-s you should skip.
+struct Decode_UTF8_Result {
+  // Invariant: !(this->ok && this->size == 0)
   std::ptrdiff_t size;
+  // Valid only if this->ok == true.
   char32_t code_point;
   bool ok;
 };
 
-decode_utf_8_result decode_utf_8(padded_string_view) noexcept;
-std::size_t count_utf_8_characters(padded_string_view, std::size_t) noexcept;
+Decode_UTF8_Result decode_utf_8(Padded_String_View);
+std::size_t count_utf_8_characters(Padded_String_View, std::size_t);
 
-const char8* advance_lsp_characters_in_utf_8(string8_view,
-                                             int character_count) noexcept;
-std::ptrdiff_t count_lsp_characters_in_utf_8(padded_string_view,
-                                             int offset) noexcept;
+const Char8* advance_lsp_characters_in_utf_8(String8_View, int character_count);
+std::ptrdiff_t count_lsp_characters_in_utf_8(Padded_String_View, int offset);
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

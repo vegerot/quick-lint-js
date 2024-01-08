@@ -6,8 +6,6 @@
 set -e
 set -u
 
-cd "$(dirname "${0}")/../.."
-
 variant=default
 output_directory=
 orig_file=
@@ -16,8 +14,8 @@ sign=
 while [ "${#}" -gt 0 ]; do
   case "${1}" in
     --bionic) variant=bionic ;;
-    --orig) orig_file="${2}" ; shift ;;
-    --output-directory) output_directory="${2}" ; shift ;;
+    --orig) orig_file="$(realpath -- "${2}")" ; shift ;;
+    --output-directory) output_directory="$(realpath -- "${2}")" ; shift ;;
     --sign) sign=1 ;;
     *)
       printf 'error: unrecognized option: %s\n' >&2
@@ -31,6 +29,8 @@ if [ "${output_directory}" = "" ]; then
   exit 2
 fi
 
+cd "$(dirname "${0}")/../.."
+
 package_version="$(head -n1 version)"
 debian_package_version="$(dpkg-parsechangelog --file ./dist/debian/debian/changelog --show-field Version)"
 
@@ -43,7 +43,14 @@ if [ -n "${orig_file}" ]; then
     have_orig_signature=1
   fi
 else
-  git archive --format tar.gz --prefix "quick-lint-js-${package_version}/" --output "${temp_dir}/quick-lint-js_${package_version}.orig.tar.gz" HEAD
+  if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+    git archive --format tar.gz --prefix "quick-lint-js-${package_version}/" --output "${temp_dir}/quick-lint-js_${package_version}.orig.tar.gz" HEAD
+  elif sl root 2>/dev/null >&2; then
+    sl archive --include path:/ --type tgz --prefix "quick-lint-js-${package_version}/" "${temp_dir}/quick-lint-js_${package_version}.orig.tar.gz"
+  else
+    printf 'error: could not detect version control system\n' >&2
+    exit 1
+  fi
 fi
 
 tar xzf "${temp_dir}/quick-lint-js_${package_version}.orig.tar.gz" -C "${temp_dir}"

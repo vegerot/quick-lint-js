@@ -3,18 +3,18 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <quick-lint-js/fe/diag-reporter.h>
+#include <quick-lint-js/diag/diag-reporter.h>
 #include <quick-lint-js/fe/null-visitor.h>
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/port/char8.h>
 
 extern "C" {
 int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size) {
-  quick_lint_js::padded_string source(quick_lint_js::string8(
-      reinterpret_cast<const quick_lint_js::char8 *>(data), size));
-  quick_lint_js::parser p(&source,
-                          &quick_lint_js::null_diag_reporter::instance);
-  quick_lint_js::null_visitor visitor;
+  quick_lint_js::Padded_String source(quick_lint_js::String8(
+      reinterpret_cast<const quick_lint_js::Char8 *>(data), size));
+  quick_lint_js::Parser p(&source, &quick_lint_js::Null_Diag_Reporter::instance,
+                          quick_lint_js::Parser_Options());
+  quick_lint_js::Null_Visitor visitor;
   [[maybe_unused]] bool ok =
       p.parse_and_visit_module_catching_fatal_parse_errors(visitor);
 

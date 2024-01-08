@@ -16,7 +16,7 @@ namespace quick_lint_js {
 namespace {
 #if defined(QLJS_HAVE_UNISTD_H) && defined(_POSIX_VERSION) && \
     _POSIX_VERSION >= 200112L
-TEST(test_file_path, parent_path_posix) {
+TEST(Test_File_Path, parent_path_posix) {
   EXPECT_EQ(parent_path("x/y"), "x");
   EXPECT_EQ(parent_path("x/y/z"), "x/y");
 
@@ -46,10 +46,40 @@ TEST(test_file_path, parent_path_posix) {
   EXPECT_THAT(parent_path("//"), AnyOf("/", "//"))
       << "// is implementation-defined";
 }
+
+TEST(Test_File_Path, path_file_name_posix) {
+  EXPECT_EQ(path_file_name(""), "");
+  EXPECT_EQ(path_file_name("x"), "x");
+
+  EXPECT_EQ(path_file_name("x/y"), "y");
+  EXPECT_EQ(path_file_name("x/y/z"), "z");
+
+  EXPECT_EQ(path_file_name("x/"), "x") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name("x/y/"), "y") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name("x/y///"), "y")
+      << "trailing slashes should be ignored";
+
+  EXPECT_EQ(path_file_name("/x"), "x");
+  EXPECT_EQ(path_file_name("/x/y"), "y");
+
+  EXPECT_EQ(path_file_name("/x/"), "x") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name("/x/y/"), "y") << "trailing / should be ignored";
+
+  EXPECT_EQ(path_file_name("/"), "");
+
+  EXPECT_EQ(path_file_name("///"), "");
+  EXPECT_EQ(path_file_name("////"), "");
+
+  EXPECT_EQ(path_file_name("//x"), "x") << "// is implementation-defined";
+  EXPECT_THAT(path_file_name("//x/"), AnyOf("x", ""))
+      << "// is implementation-defined";
+  EXPECT_EQ(path_file_name("//x/y"), "y") << "// is implementation-defined";
+  EXPECT_EQ(path_file_name("//"), "") << "// is implementation-defined";
+}
 #endif
 
 #if defined(_WIN32)
-TEST(test_file_path, parent_path_windows) {
+TEST(Test_File_Path, parent_path_windows) {
   EXPECT_EQ(parent_path(R"(x/y)"), R"(x)");
   EXPECT_EQ(parent_path(R"(x/y/z)"), R"(x/y)");
   EXPECT_EQ(parent_path(R"(x\y)"), R"(x)");
@@ -124,6 +154,85 @@ TEST(test_file_path, parent_path_windows) {
 
   EXPECT_EQ(parent_path(R"(\\?\)"), R"(\\?\)") << "invalid path remains as-is";
   EXPECT_EQ(parent_path(R"(\\?)"), R"(\\?)") << "invalid path remains as-is";
+
+  // TODO(strager): Test \\.\ paths.
+  // TODO(strager): Test \??\ paths.
+  // TODO(strager): Test \\?\UNC\host\share paths.
+}
+
+TEST(Test_File_Path, path_file_name_windows) {
+  EXPECT_EQ(path_file_name(""), "");
+  EXPECT_EQ(path_file_name(R"(x)"), "x");
+
+  EXPECT_EQ(path_file_name(R"(x/y)"), "y");
+  EXPECT_EQ(path_file_name(R"(x/y/z)"), "z");
+  EXPECT_EQ(path_file_name(R"(x\y)"), "y");
+  EXPECT_EQ(path_file_name(R"(x\y\z)"), "z");
+
+  EXPECT_EQ(path_file_name(R"(x\y/z)"), "z");
+  EXPECT_EQ(path_file_name(R"(x/y\z)"), "z");
+
+  EXPECT_EQ(path_file_name(R"(x/y/)"), "y") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name(R"(x/y///)"), "y")
+      << "trailing slashes should be ignored";
+  EXPECT_EQ(path_file_name(R"(x\y\)"), "y") << "trailing \\ should be ignored";
+  EXPECT_EQ(path_file_name(R"(x\y\\\)"), "y")
+      << "trailing slashes should be ignored";
+
+  EXPECT_EQ(path_file_name(R"(x/)"), "x") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name(R"(x\)"), "x") << "trailing \\ should be ignored";
+
+  EXPECT_EQ(path_file_name(R"(/x)"), "x");
+  EXPECT_EQ(path_file_name(R"(/x/y)"), "y");
+  EXPECT_EQ(path_file_name(R"(\x)"), "x");
+  EXPECT_EQ(path_file_name(R"(\x\y)"), "y");
+
+  EXPECT_EQ(path_file_name(R"(/x/)"), "x") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name(R"(/x/y/)"), "y") << "trailing / should be ignored";
+  EXPECT_EQ(path_file_name(R"(\x\)"), "x") << "trailing \\ should be ignored";
+  EXPECT_EQ(path_file_name(R"(\x\y\)"), "y") << "trailing \\ should be ignored";
+
+  EXPECT_EQ(path_file_name(R"(//x)"), "") << "share host does not have a file";
+  EXPECT_EQ(path_file_name(R"(//x/)"), "") << "share host does not have a file";
+  EXPECT_EQ(path_file_name(R"(\\x)"), "") << "share host does not have a file";
+  EXPECT_EQ(path_file_name(R"(\\x\)"), "") << "share host does not have a file";
+
+  EXPECT_EQ(path_file_name(R"(\\host\share)"), "")
+      << "share does not have a file";
+  EXPECT_EQ(path_file_name(R"(\\host\share\)"), "")
+      << "share does not have a file";
+
+  EXPECT_EQ(path_file_name(R"(\\host\share\dir)"), "dir");
+
+  EXPECT_EQ(path_file_name(R"(/)"), "");
+  EXPECT_EQ(path_file_name(R"(//)"), "") << "// is a root";
+  EXPECT_EQ(path_file_name(R"(///)"), "") << "// is a root";
+  EXPECT_EQ(path_file_name(R"(/////)"), "") << "// is a root";
+  EXPECT_EQ(path_file_name(R"(\)"), "");
+  EXPECT_EQ(path_file_name(R"(\\)"), "") << R"(\\ is a root)";
+  EXPECT_EQ(path_file_name(R"(\\\)"), "") << R"(\\ is a root)";
+  EXPECT_EQ(path_file_name(R"(\\\\\)"), "") << R"(\\ is a root)";
+
+  EXPECT_EQ(path_file_name(R"(C:\)"), "");
+  EXPECT_EQ(path_file_name(R"(C:/)"), "");
+
+  EXPECT_EQ(path_file_name(R"(\\?\C:\)"), "");
+
+  EXPECT_EQ(path_file_name(R"(C:)"), "");
+  EXPECT_EQ(path_file_name(R"(z:)"), "");
+
+  EXPECT_EQ(path_file_name(R"(C:\x)"), "x");
+  EXPECT_EQ(path_file_name(R"(C:\x\)"), "x");
+
+  EXPECT_EQ(path_file_name(R"(C:x)"), "x");
+  EXPECT_EQ(path_file_name(R"(C:x\)"), "x");
+  EXPECT_EQ(path_file_name(R"(C:x\y)"), "y");
+
+  EXPECT_EQ(path_file_name(R"(\\?\C:\x)"), "x");
+  EXPECT_EQ(path_file_name(R"(\\?\C:\x\)"), "x");
+
+  EXPECT_EQ(path_file_name(R"(\\?\)"), "") << "invalid path";
+  EXPECT_EQ(path_file_name(R"(\\?)"), "") << "invalid path";
 
   // TODO(strager): Test \\.\ paths.
   // TODO(strager): Test \??\ paths.

@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_TRY_CATCH_STACK_H
-#define QUICK_LINT_JS_UTIL_TRY_CATCH_STACK_H
+#pragma once
 
 #include <csetjmp>
 #include <optional>
@@ -17,7 +16,7 @@ namespace quick_lint_js {
 //
 // * Might or might not call destructors of automatic variables.
 template <class Exception>
-class try_catch_stack {
+class Try_Catch_Stack {
  public:
   // Calls try_func().
   //
@@ -26,32 +25,66 @@ class try_catch_stack {
   //
   // If try_func() does not call this->raise(), returns the result of
   // try_func().
-  template <class ResultType, class TryFunc, class CatchFunc>
-  ResultType try_catch(TryFunc &&try_func, CatchFunc &&catch_func) {
+  template <class Result_Type, class Try_Func, class Catch_Func>
+  Result_Type try_catch(Try_Func &&try_func, Catch_Func &&catch_func) {
     this->catch_stack_.emplace_back();
     if (setjmp(this->catch_stack_.back().buf) == 0) {
-      ResultType result = std::move(try_func)();
+      Result_Type result = std::move(try_func)();
       // this->raise() was not called.
       this->catch_stack_.pop_back();
       return result;
     } else {
       // this->raise() was called.
-      catch_entry &c = this->catch_stack_.back();
+      Catch_Entry &c = this->catch_stack_.back();
       QLJS_ASSERT(c.exception.has_value());
-      ResultType result = std::move(catch_func)(std::move(*c.exception));
+      Exception exception = std::move(*c.exception);
       this->catch_stack_.pop_back();
+      Result_Type result = std::move(catch_func)(std::move(exception));
       return result;
     }
   }
 
-  // If this->try_raise(e) was called by t in this->try_catch(t, c), then this
-  // function unwinds the stack and calls c(e).
+  template <class Try_Func, class Finally_Func>
+  void try_finally(Try_Func &&try_func, Finally_Func &&finally_func) {
+    if (this->catch_stack_.empty()) {
+      // Because the catch stack is empty, a call to this->raise_if_have_handler
+      // should return. If we called this->try_catch here, then a call to
+      // this->raise_if_have_handler would not return. Therefore, avoid calling
+      // this->try_catch.
+      std::move(try_func)();
+      std::move(finally_func)();
+    } else {
+      bool try_finished = false;
+      // HACK(strager): Dummy int is because try_catch does not support void.
+      this->try_catch<int>(
+          [&]() -> int {
+            std::move(try_func)();
+            try_finished = true;
+            std::move(finally_func)();
+            return 0;
+          },
+          [&](Exception &&e) -> int {
+            QLJS_ASSERT(!try_finished &&
+                        "finally_func should not call raise_if_have_handler");
+            std::move(finally_func)();
+            QLJS_ASSERT(!this->catch_stack_.empty());
+            this->raise_if_have_handler(std::move(e));
+            // We had a handler, so raise_if_have_handler should raise and not
+            // return.
+            QLJS_UNREACHABLE();
+            return 0;
+          });
+    }
+  }
+
+  // If this->raise_if_have_handler(e) was called by t in this->try_catch(t, c),
+  // then this function unwinds the stack and calls c(e).
   //
   // Otherwise, this function does nothing and returns. The caller is
   // responsible for figuring out what to do in this case.
-  void try_raise(Exception &&e) {
+  void raise_if_have_handler(Exception &&e) {
     if (!this->catch_stack_.empty()) {
-      catch_entry &c = this->catch_stack_.back();
+      Catch_Entry &c = this->catch_stack_.back();
       c.exception.emplace(std::move(e));
       std::longjmp(c.buf, 1);
       QLJS_UNREACHABLE();
@@ -59,15 +92,13 @@ class try_catch_stack {
   }
 
  private:
-  struct catch_entry {
+  struct Catch_Entry {
     std::jmp_buf buf;
     std::optional<Exception> exception;
   };
-  std::vector<catch_entry> catch_stack_;
+  std::vector<Catch_Entry> catch_stack_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

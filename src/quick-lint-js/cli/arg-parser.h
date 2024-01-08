@@ -1,47 +1,118 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CLI_ARG_PARSER_H
-#define QUICK_LINT_JS_CLI_ARG_PARSER_H
+#pragma once
 
 #include <optional>
 #include <string_view>
 
 namespace quick_lint_js {
-class arg_parser {
+// The following macros form a DSL for using arg_parser.
+//
+// Example:
+//
+// bool show_help = true;
+// bool verbose_logging = true;
+// arg_parser parser(argc, argv);
+// QLJS_ARG_PARSER_LOOP(parser) {
+//   // QLJS_ARGUMENT is *required* and *must be first*.
+//   QLJS_ARGUMENT(const char* argument) {
+//     // argument has type const char* in this scope.
+//     std::printf("positional arg: %s\n", argument);
+//   }
+//
+//   // QLJS_FLAG is optional and can be specified any number of times.
+//   QLJS_FLAG('h', "--help"sv, "--help"sv) {
+//     show_help = true;
+//     // Loop control flow is allowed.
+//     break;
+//   }
+//
+//   // QLJS_OPTION is optional and can be specified any number of times.
+//   QLJS_OPTION(const char* arg_value, "--format"sv) {
+//     // arg_value has type const char* in this scope.
+//     std::printf("setting --format to %s\n", arg_value);
+//   }
+//
+//   // QLJS_FLAG and QLJS_OPTION can be interleaved arbitrarily.
+//   QLJS_FLAG("--verbose"sv, "--verbose"sv) {
+//     verbose_logging = true;
+//   }
+//
+//   // QLJS_UNRECOGNIZED_OPTION is optional and *must be last*.
+//   QLJS_UNRECOGNIZED_OPTION(const char* unrecognized) {
+//     // unrecognized has type const char* in this scope.
+//     std::printf("error: unrecognized option: %s\n", unrecognized);
+//   }
+// }
+
+// QLJS_ARGUMENT must always be present and come before any QLJS_FLAG-s or
+// QLJS_OPTION-s.
+#define QLJS_ARGUMENT(variable) if (variable = _arg_parser.match_argument())
+
+// QLJS_FLAG takes the same arguments as Arg_Parser::match_flag_option.
+#define QLJS_FLAG(...)                                                         \
+  /* 'if' is implied from a prior QLJS_ARGUMENT, QLJS_FLAG, or QLJS_OPTION. */ \
+  else if (_arg_parser.match_flag_option(__VA_ARGS__))
+
+// QLJS_OPTION takes the same arguments as Arg_Parser::match_option_with_value.
+#define QLJS_OPTION(variable, ...)                                             \
+  /* 'if' is implied from a prior QLJS_ARGUMENT, QLJS_FLAG, or QLJS_OPTION. */ \
+  else if (variable = _arg_parser.match_option_with_value(__VA_ARGS__))
+
+// QLJS_UNRECOGNIZED_OPTION, if present, must come after all QLJS_FLAG-s,
+// QLJS_OPTION-s, and QLJS_ARGUMENT.
+#define QLJS_UNRECOGNIZED_OPTION(variable)                                     \
+  /* 'if' is implied from a prior QLJS_ARGUMENT, QLJS_FLAG, or QLJS_OPTION. */ \
+  /* NOTE(strager): match_anything never returns nullptr. */                   \
+  else if (variable = _arg_parser.match_anything())
+
+#define QLJS_ARG_PARSER_LOOP(parser)                        \
+  for (::quick_lint_js::Arg_Parser& _arg_parser = (parser); \
+       !_arg_parser.done();)
+
+class Arg_Parser {
  public:
-  explicit arg_parser(int argc, char** argv) noexcept;
+  explicit Arg_Parser(int argc, char** argv);
 
-  arg_parser(const arg_parser&) = delete;
-  arg_parser& operator=(const arg_parser&) = delete;
+  Arg_Parser(const Arg_Parser&) = delete;
+  Arg_Parser& operator=(const Arg_Parser&) = delete;
 
-  const char* match_option_with_value(std::string_view option_name) noexcept;
+  const char* match_option_with_value(std::string_view option_name);
 
-  bool match_flag_shorthand(char option_shorthand) noexcept;
+  bool match_flag_shorthand(char option_shorthand);
 
   bool match_flag_option(std::string_view full_option_name,
-                         std::string_view partial_option_name) noexcept;
+                         std::string_view partial_option_name);
 
-  const char* match_argument() noexcept;
+  // Equivalent to:
+  //
+  // this->match_flag_option(full_option_name, partial_option_name)
+  // || this->match_flag_shorthand(option_shorthand)
+  bool match_flag_option(char option_shorthand,
+                         std::string_view full_option_name,
+                         std::string_view partial_option_name);
 
-  const char* match_anything() noexcept;
+  const char* match_argument();
 
-  bool done() const noexcept;
+  const char* match_anything();
+
+  bool done() const;
 
  private:
-  void parse_current_arg() noexcept;
+  void parse_current_arg();
 
-  void advance(int count) noexcept;
+  void advance(int count);
 
-  const char* current_arg() noexcept;
+  const char* current_arg();
 
-  struct option {
+  struct Option {
     std::string_view arg_key;
     const char* arg_value;
     bool arg_has_equal;
   };
 
-  std::optional<option> option_;
+  std::optional<Option> option_;
   bool is_ignoring_options_ = false;
   int current_arg_index_ = 1;
 
@@ -49,8 +120,6 @@ class arg_parser {
   char** argv_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

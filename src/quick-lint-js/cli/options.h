@@ -1,78 +1,91 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CLI_OPTIONS_H
-#define QUICK_LINT_JS_CLI_OPTIONS_H
+#pragma once
 
 #include <optional>
-#include <quick-lint-js/fe/diag-code-list.h>
-#include <vector>
+#include <quick-lint-js/container/monotonic-allocator.h>
+#include <quick-lint-js/diag/diag-code-list.h>
+#include <quick-lint-js/port/span.h>
+#include <quick-lint-js/util/cast.h>
 
 namespace quick_lint_js {
-class output_stream;
+class Output_Stream;
 
-enum class output_format {
+enum class Output_Format {
   default_format,
   gnu_like,
   vim_qflist_json,
   emacs_lisp,
 };
 
-enum class input_file_language : unsigned char {
+enum class Raw_Input_File_Language : unsigned char {
+  // Explicit (--language=default) or implicit (no --language).
+  default_,
+
   javascript,
   javascript_jsx,
   typescript,
+  typescript_definition,
   typescript_jsx,
 };
 
-enum class option_when { auto_, always, never };
+enum class Resolved_Input_File_Language : unsigned char {
+  javascript = enum_to_int_cast(Raw_Input_File_Language::javascript),
+  javascript_jsx = enum_to_int_cast(Raw_Input_File_Language::javascript_jsx),
+  typescript = enum_to_int_cast(Raw_Input_File_Language::typescript),
+  typescript_definition =
+      enum_to_int_cast(Raw_Input_File_Language::typescript_definition),
+  typescript_jsx = enum_to_int_cast(Raw_Input_File_Language::typescript_jsx),
+};
 
-struct file_to_lint {
+enum class Option_When { auto_, always, never };
+
+struct File_To_Lint {
   const char *path;
   const char *config_file = nullptr;
   const char *path_for_config_search = nullptr;
 
-  // nullopt means --language=default: the language should be derived from the
-  // file extension.
-  std::optional<input_file_language> language;
+  Raw_Input_File_Language language = Raw_Input_File_Language::default_;
 
   bool is_stdin = false;
   std::optional<int> vim_bufnr;
-
-  input_file_language get_language() const noexcept;
 };
 
-input_file_language get_language(
-    const char *config_file,
-    const std::optional<input_file_language> &language) noexcept;
-
-struct options {
+struct Options {
   bool help = false;
+  bool list_debug_apps = false;
   bool version = false;
   bool print_parser_visits = false;
   bool lsp_server = false;
   bool snarky = false;
-  quick_lint_js::output_format output_format =
-      quick_lint_js::output_format::default_format;
-  option_when diagnostic_hyperlinks = option_when::auto_;
-  std::vector<file_to_lint> files_to_lint;
-  compiled_diag_code_list exit_fail_on;
+  Output_Format output_format = Output_Format::default_format;
+  Option_When diagnostic_hyperlinks = Option_When::auto_;
+  Span<const File_To_Lint> files_to_lint;
+  Compiled_Diag_Code_List exit_fail_on;
+  const char *path_for_stdin = nullptr;
 
-  std::vector<const char *> error_unrecognized_options;
-  std::vector<const char *> warning_vim_bufnr_without_file;
-  std::vector<const char *> warning_language_without_file;
+  Span<const char *const> error_unrecognized_options;
+  Span<const char *const> warning_vim_bufnr_without_file;
+  Span<const char *const> warning_language_without_file;
   bool has_multiple_stdin = false;
   bool has_config_file = false;
   bool has_language = false;
   bool has_vim_file_bufnr = false;
 
-  bool dump_errors(output_stream &) const;
+  bool has_stdin() const;
+
+  bool dump_errors(Output_Stream &) const;
 };
 
-options parse_options(int argc, char **argv);
-}
+Resolved_Input_File_Language get_language(const File_To_Lint &file,
+                                          const Options &);
+Resolved_Input_File_Language get_language(const char *file,
+                                          Raw_Input_File_Language language);
 
-#endif
+// Returns portions of argv and memory allocated by allocator.
+Options parse_options(int argc, char **argv, Monotonic_Allocator *allocator);
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

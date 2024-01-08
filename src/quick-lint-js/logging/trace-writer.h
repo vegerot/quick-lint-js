@@ -1,244 +1,69 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_LOGGING_TRACE_WRITER_H
-#define QUICK_LINT_JS_LOGGING_TRACE_WRITER_H
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <quick-lint-js/assert.h>
 #include <quick-lint-js/container/async-byte-queue.h>
+#include <quick-lint-js/logging/trace-types.h>
+#include <quick-lint-js/logging/trace-writer-generated.h>
 #include <quick-lint-js/port/char8.h>
+#include <quick-lint-js/port/endian.h>
+#include <quick-lint-js/port/span.h>
 #include <quick-lint-js/util/binary-writer.h>
 #include <string_view>
 
 namespace quick_lint_js {
-struct trace_context {
-  std::uint64_t thread_id;
-};
+// Specialize this class to define writing for different string types.
+//
+// See Trace_String_Writer<std::u16string_view> for an example specialization.
+template <class String>
+struct Trace_String_Writer;
 
-struct trace_event_init {
-  static constexpr std::uint8_t id = 0x01;
-
-  std::uint64_t timestamp;
-  string8_view version;
-};
-
-struct trace_event_vscode_document_opened {
-  static constexpr std::uint8_t id = 0x02;
-
-  std::uint64_t timestamp;
-  std::uint64_t document_id;
-  void* uri;
-  void* language_id;
-  void* content;
-};
-
-struct trace_event_vscode_document_closed {
-  static constexpr std::uint8_t id = 0x03;
-
-  std::uint64_t timestamp;
-  std::uint64_t document_id;
-  void* uri;
-  void* language_id;
-};
-
-struct trace_vscode_document_position {
-  std::uint64_t line;
-  std::uint64_t character;
-};
-
-struct trace_vscode_document_range {
-  trace_vscode_document_position start;
-  trace_vscode_document_position end;
-};
-
-struct trace_vscode_document_change {
-  trace_vscode_document_range range;
-  std::uint64_t range_offset;
-  std::uint64_t range_length;
-  void* text;
-};
-
-struct trace_event_vscode_document_changed {
-  static constexpr std::uint8_t id = 0x04;
-
-  std::uint64_t timestamp;
-  std::uint64_t document_id;
-  const trace_vscode_document_change* changes;
-  std::uint64_t change_count;
-};
-
-struct trace_event_vscode_document_sync {
-  static constexpr std::uint8_t id = 0x05;
-
-  std::uint64_t timestamp;
-  std::uint64_t document_id;
-  void* uri;
-  void* language_id;
-  void* content;
-};
-
-struct trace_event_lsp_client_to_server_message {
-  static constexpr std::uint8_t id = 0x06;
-
-  std::uint64_t timestamp;
-  string8_view body;
-};
-
-struct trace_event_vector_max_size_histogram_by_owner {
-  static constexpr std::uint8_t id = 0x07;
-
-  std::uint64_t timestamp;
-  std::map<std::string_view, std::map<std::size_t, int>>* histogram;
-};
-
-struct trace_event_process_id {
-  static constexpr std::uint8_t id = 0x08;
-
-  std::uint64_t timestamp;
-  std::uint64_t process_id;
-};
-
-class trace_writer {
- public:
-  explicit trace_writer(async_byte_queue*);
-
-  // Calls async_byte_queue::commit.
-  void commit();
-
-  void write_header(const trace_context&);
-
-  void write_event_init(const trace_event_init&);
-
-  template <class StringWriter>
-  void write_event_vscode_document_opened(
-      const trace_event_vscode_document_opened&, StringWriter&&);
-
-  template <class StringWriter>
-  void write_event_vscode_document_closed(
-      const trace_event_vscode_document_closed&, StringWriter&&);
-
-  template <class StringWriter>
-  void write_event_vscode_document_changed(
-      const trace_event_vscode_document_changed&, StringWriter&&);
-
-  template <class StringWriter>
-  void write_event_vscode_document_sync(const trace_event_vscode_document_sync&,
-                                        StringWriter&&);
-
-  void write_event_lsp_client_to_server_message(
-      const trace_event_lsp_client_to_server_message&);
-
-  void write_event_vector_max_size_histogram_by_owner(
-      const trace_event_vector_max_size_histogram_by_owner&);
-
-  void write_event_process_id(const trace_event_process_id&);
-
- private:
-  template <class Func>
-  void append_binary(async_byte_queue::size_type size, Func&& callback);
-
-  template <class StringWriter>
-  void write_utf16le_string(void* string, StringWriter&);
-
-  async_byte_queue* out_;
-};
-
-template <class StringWriter>
-void trace_writer::write_event_vscode_document_opened(
-    const trace_event_vscode_document_opened& event,
-    StringWriter&& string_writer) {
-  this->append_binary(8 + 1 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.document_id);
-  });
-  this->write_utf16le_string(event.uri, string_writer);
-  this->write_utf16le_string(event.language_id, string_writer);
-  this->write_utf16le_string(event.content, string_writer);
-}
-
-template <class StringWriter>
-void trace_writer::write_event_vscode_document_closed(
-    const trace_event_vscode_document_closed& event,
-    StringWriter&& string_writer) {
-  this->append_binary(8 + 1 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.document_id);
-  });
-  this->write_utf16le_string(event.uri, string_writer);
-  this->write_utf16le_string(event.language_id, string_writer);
-}
-
-template <class StringWriter>
-void trace_writer::write_event_vscode_document_changed(
-    const trace_event_vscode_document_changed& event,
-    StringWriter&& string_writer) {
-  this->append_binary(8 + 1 + 8 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.document_id);
-    w.u64_le(event.change_count);
-  });
-  for (std::uint64_t i = 0; i < event.change_count; ++i) {
-    const trace_vscode_document_change* change = &event.changes[i];
-    this->append_binary(8 * 6, [&](binary_writer& w) {
-      w.u64_le(change->range.start.line);
-      w.u64_le(change->range.start.character);
-      w.u64_le(change->range.end.line);
-      w.u64_le(change->range.end.character);
-      w.u64_le(change->range_offset);
-      w.u64_le(change->range_length);
-    });
-    this->write_utf16le_string(change->text, string_writer);
+template <>
+struct Trace_String_Writer<std::u16string_view> {
+  static std::size_t string_size_u16(std::u16string_view string) {
+    return string.size();
   }
-}
+
+  static void copy_string_u16(std::u16string_view string, char16_t* out,
+                              std::size_t capacity) {
+    QLJS_ASSERT(capacity >= string.size());
+    std::copy(string.begin(), string.end(), out);
+  }
+};
 
 template <class Func>
-void trace_writer::append_binary(async_byte_queue::size_type size,
+void Trace_Writer::append_binary(Async_Byte_Queue::Size_Type size,
                                  Func&& callback) {
   std::uint8_t* data_begin =
       reinterpret_cast<std::uint8_t*>(this->out_->append(size));
-  binary_writer w(data_begin);
+  Binary_Writer w(data_begin);
   callback(w);
   QLJS_ASSERT(w.bytes_written_since(data_begin) == size);
 }
 
-template <class StringWriter>
-void trace_writer::write_utf16le_string(void* string,
-                                        StringWriter& string_writer) {
-  std::size_t code_unit_count = string_writer.string_size(string);
+template <class String>
+void Trace_Writer::write_utf16le_string(String string) {
+  using String_Writer = Trace_String_Writer<String>;
+  std::size_t code_unit_count = String_Writer::string_size_u16(string);
   // HACK(strager): Reserve an extra code unit for a null terminator. This is
   // required when interacting with N-API in the Visual Studio Code extension.
   std::size_t capacity = code_unit_count + 1;
-  this->append_binary(8, [&](binary_writer& w) { w.u64_le(code_unit_count); });
+  this->append_binary(8, [&](Binary_Writer& w) { w.u64_le(code_unit_count); });
   this->out_->append_aligned(
       capacity * sizeof(char16_t), alignof(char16_t), [&](void* data) {
-        string_writer.copy_string(string, reinterpret_cast<char16_t*>(data),
-                                  capacity);
+        Span<char16_t> buffer(reinterpret_cast<char16_t*>(data),
+                              narrow_cast<Span_Size>(capacity));
+        String_Writer::copy_string_u16(string, buffer.data(),
+                                       narrow_cast<std::size_t>(buffer.size()));
+        write_little_endian_in_place(buffer);
         return code_unit_count * sizeof(char16_t);
       });
 }
-
-template <class StringWriter>
-void trace_writer::write_event_vscode_document_sync(
-    const trace_event_vscode_document_sync& event,
-    StringWriter&& string_writer) {
-  this->append_binary(8 + 1 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.document_id);
-  });
-  this->write_utf16le_string(event.uri, string_writer);
-  this->write_utf16le_string(event.language_id, string_writer);
-  this->write_utf16le_string(event.content, string_writer);
 }
-}
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

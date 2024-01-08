@@ -1,12 +1,13 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_GTEST_H
-#define QUICK_LINT_JS_GTEST_H
+#pragma once
 
 #include <cstdint>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <quick-lint-js/port/have.h>
+#include <string>
 #include <string_view>
 
 namespace testing::internal {
@@ -38,9 +39,33 @@ inline void PrintTo(const std::basic_string_view<char8_t> &s,
           out);
 }
 #endif
+
+template <class Value>
+std::string get_matcher_message(::testing::Matcher<const Value &> matcher,
+                                const Value &value) {
+  ::testing::StringMatchResultListener listener;
+  ExplainMatchResult(matcher, value, &listener);
+  return listener.str();
 }
 
-#endif
+// Like EXPECT_THAT, but using the 'caller' variable for source locations.
+#define EXPECT_THAT_AT_CALLER(value, matcher)                                 \
+  GTEST_PRED_FORMAT1_(                                                        \
+      ::testing::internal::MakePredicateFormatterFromMatcher(matcher), value, \
+      ADD_FAILURE_AT_CALLER)
+
+// Like EXPECT_EQ, but using the 'caller' variable for source locations.
+#define EXPECT_EQ_AT_CALLER(lhs, rhs)                                   \
+  GTEST_PRED_FORMAT2_(::testing::internal::EqHelper::Compare, lhs, rhs, \
+                      ADD_FAILURE_AT_CALLER)
+
+#define ADD_FAILURE_AT_CALLER(message)                                   \
+  GTEST_MESSAGE_AT_(                                                     \
+      (caller.valid() ? caller.file_name() : __FILE__),                  \
+      (caller.valid() ? ::quick_lint_js::narrow_cast<int>(caller.line()) \
+                      : __LINE__),                                       \
+      message, ::testing::TestPartResult::kNonFatalFailure)
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

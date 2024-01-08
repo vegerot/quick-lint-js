@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_IO_PIPE_WRITER_H
-#define QUICK_LINT_JS_IO_PIPE_WRITER_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No pipe_writer on the web.
@@ -30,59 +29,59 @@
 
 namespace quick_lint_js {
 #if QLJS_PIPE_WRITER_SEPARATE_THREAD
-class background_thread_pipe_writer {
+class Background_Thread_Pipe_Writer {
  public:
   // Precondition: pipe is blocking
-  explicit background_thread_pipe_writer(platform_file_ref pipe);
+  explicit Background_Thread_Pipe_Writer(Platform_File_Ref pipe);
 
-  background_thread_pipe_writer(const background_thread_pipe_writer &) = delete;
-  background_thread_pipe_writer &operator=(
-      const background_thread_pipe_writer &) = delete;
+  Background_Thread_Pipe_Writer(const Background_Thread_Pipe_Writer &) = delete;
+  Background_Thread_Pipe_Writer &operator=(
+      const Background_Thread_Pipe_Writer &) = delete;
 
-  ~background_thread_pipe_writer();
+  ~Background_Thread_Pipe_Writer();
 
   // write is non-blocking. It will defer the work to a separate thread.
-  void write(byte_buffer &&);
+  void write(Byte_Buffer &&);
 
   // Block waiting for previous calls to send_message to fully complete. After
-  // flush returns, background_thread_pipe_writer won't write data to the pipe
+  // flush returns, Background_Thread_Pipe_Writer won't write data to the pipe
   // until send_message is called again.
   //
   // For testing purposes only.
   void flush();
 
  private:
-  void write_all_now_blocking(byte_buffer_iovec &);
+  void write_all_now_blocking(Byte_Buffer_IOVec &);
 
   void run_flushing_thread();
 
-  platform_file_ref pipe_;
+  Platform_File_Ref pipe_;
 
-  thread flushing_thread_;
-  mutex mutex_;
-  condition_variable data_is_pending_;
-  condition_variable data_is_flushed_;
+  Thread flushing_thread_;
+  Mutex mutex_;
+  Condition_Variable data_is_pending_;
+  Condition_Variable data_is_flushed_;
 
   // Protected by mutex_:
-  byte_buffer_iovec pending_;
+  Byte_Buffer_IOVec pending_;
   bool writing_ = false;
   bool stop_ = false;
 };
 #endif
 
 #if !QLJS_PIPE_WRITER_SEPARATE_THREAD
-class non_blocking_pipe_writer {
+class Non_Blocking_Pipe_Writer {
  public:
   // Precondition: pipe is non-blocking
-  explicit non_blocking_pipe_writer(platform_file_ref pipe);
+  explicit Non_Blocking_Pipe_Writer(Platform_File_Ref pipe);
 
-  non_blocking_pipe_writer(const non_blocking_pipe_writer &) = delete;
-  non_blocking_pipe_writer &operator=(const non_blocking_pipe_writer &) =
+  Non_Blocking_Pipe_Writer(const Non_Blocking_Pipe_Writer &) = delete;
+  Non_Blocking_Pipe_Writer &operator=(const Non_Blocking_Pipe_Writer &) =
       delete;
 
   // write is non-blocking. It writes as much data as possible immediately. Call
   // on_poll_event to write remaining data.
-  void write(byte_buffer &&);
+  void write(Byte_Buffer &&);
 
   // Block waiting for previous calls to send_message to fully complete. After
   // flush returns, non_blocking_pipe_writer won't write data to the pipe until
@@ -91,9 +90,10 @@ class non_blocking_pipe_writer {
   // For testing purposes only.
   void flush();
 
-#if QLJS_HAVE_KQUEUE || QLJS_HAVE_POLL
-  std::optional<posix_fd_file_ref> get_event_fd() noexcept;
-#endif
+  // Returns true if there is data which has not been written to the pipe yet.
+  bool has_pending_data() const;
+
+  Platform_File_Ref get_pipe_fd();
 
 #if QLJS_HAVE_KQUEUE
   void on_poll_event(const struct ::kevent &);
@@ -102,22 +102,23 @@ class non_blocking_pipe_writer {
   void on_poll_event(const ::pollfd &);
 #endif
 
- private:
-  void write_as_much_as_possible_now_non_blocking(byte_buffer_iovec &);
+  void on_pipe_write_ready();
+  void on_pipe_write_end();
 
-  platform_file_ref pipe_;
-  byte_buffer_iovec pending_;
+ private:
+  void write_as_much_as_possible_now_non_blocking(Byte_Buffer_IOVec &);
+
+  Platform_File_Ref pipe_;
+  Byte_Buffer_IOVec pending_;
 };
 #endif
 
 #if QLJS_PIPE_WRITER_SEPARATE_THREAD
-using pipe_writer = background_thread_pipe_writer;
+using Pipe_Writer = Background_Thread_Pipe_Writer;
 #else
-using pipe_writer = non_blocking_pipe_writer;
+using Pipe_Writer = Non_Blocking_Pipe_Writer;
 #endif
 }
-
-#endif
 
 #endif
 

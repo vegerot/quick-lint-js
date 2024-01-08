@@ -17,13 +17,14 @@
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/have.h>
 #include <quick-lint-js/port/unreachable.h>
+#include <quick-lint-js/port/warning.h>
 #include <quick-lint-js/util/utf-16.h>
 #include <random>
 #include <string>
 #include <string_view>
 
-#if QLJS_HAVE_FTS_H
-#include <fts.h>
+#if QLJS_HAVE_DIRENT_H
+#include <dirent.h>
 #endif
 
 #if QLJS_HAVE_STD_FILESYSTEM
@@ -47,6 +48,8 @@
 #include <quick-lint-js/port/windows.h>
 #endif
 
+QLJS_WARNING_IGNORE_GCC("-Wsuggest-final-methods")
+
 namespace quick_lint_js {
 #if QLJS_HAVE_WINDOWS_H
 namespace {
@@ -69,20 +72,20 @@ std::string get_temp_dir() {
 }
 #endif
 
-std::string create_directory_io_error::to_string() const {
+std::string Create_Directory_IO_Error::to_string() const {
   return this->io_error.to_string();
 }
 
 #if QLJS_HAVE_MKDTEMP
-result<void, platform_file_io_error> make_unique_directory(std::string &path) {
+Result<void, Platform_File_IO_Error> make_unique_directory(std::string &path) {
   path += ".XXXXXX";
   if (!::mkdtemp(path.data())) {
-    return failed_result(platform_file_io_error{.error = errno});
+    return failed_result(Platform_File_IO_Error{.error = errno});
   }
   return {};
 }
 #elif QLJS_HAVE_STD_FILESYSTEM
-result<void, platform_file_io_error> make_unique_directory(std::string &path) {
+Result<void, Platform_File_IO_Error> make_unique_directory(std::string &path) {
   std::string_view characters = "abcdefghijklmnopqrstuvwxyz";
   std::uniform_int_distribution<std::size_t> character_index_distribution(
       0, characters.size() - 1);
@@ -96,7 +99,7 @@ result<void, platform_file_io_error> make_unique_directory(std::string &path) {
       suffix += characters[character_index_distribution(rng)];
     }
 
-    result<void, create_directory_io_error> create_result =
+    Result<void, Create_Directory_IO_Error> create_result =
         create_directory(path + suffix);
     if (!create_result.ok()) {
       continue;
@@ -107,7 +110,7 @@ result<void, platform_file_io_error> make_unique_directory(std::string &path) {
   }
 
   // TODO(strager): Return the proper error code from 'create_result'.
-  return failed_result(platform_file_io_error{
+  return failed_result(Platform_File_IO_Error{
       .error = 0,
   });
 }
@@ -155,7 +158,7 @@ std::string make_temporary_directory() {
 #error "Unsupported platform"
 #endif
 
-result<void, create_directory_io_error> create_directory(
+Result<void, Create_Directory_IO_Error> create_directory(
     const std::string &path) {
 #if QLJS_HAVE_WINDOWS_H
   std::optional<std::wstring> wpath = mbstring_to_wstring(path.c_str());
@@ -171,9 +174,9 @@ result<void, create_directory_io_error> create_directory(
         directory_existed = attributes & FILE_ATTRIBUTE_DIRECTORY;
       }
     }
-    return failed_result(create_directory_io_error{
+    return failed_result(Create_Directory_IO_Error{
         .io_error =
-            windows_file_io_error{
+            Windows_File_IO_Error{
                 .error = error,
             },
         .is_directory_already_exists_error = directory_existed,
@@ -190,9 +193,9 @@ result<void, create_directory_io_error> create_directory(
         directory_existed = S_ISDIR(s.st_mode);
       }
     }
-    return failed_result(create_directory_io_error{
+    return failed_result(Create_Directory_IO_Error{
         .io_error =
-            posix_file_io_error{
+            POSIX_File_IO_Error{
                 .error = error,
             },
         .is_directory_already_exists_error = directory_existed,
@@ -205,7 +208,7 @@ result<void, create_directory_io_error> create_directory(
     // TODO(strager): Return the proper error code from 'error'.
     return failed_result(create_directory_io_error{
         .io_error =
-            platform_file_io_error{
+            Platform_File_IO_Error{
                 .error = 0,
             },
     });
@@ -225,7 +228,9 @@ void create_directory_or_exit(const std::string &path) {
   }
 }
 
-result<std::string, platform_file_io_error> make_timestamped_directory(
+QLJS_WARNING_PUSH
+QLJS_WARNING_IGNORE_GCC("-Wformat-nonliteral")
+Result<std::string, Platform_File_IO_Error> make_timestamped_directory(
     std::string_view parent_directory, const char *format) {
   std::time_t now = std::time(nullptr);
   std::tm *now_tm = std::localtime(&now);
@@ -249,6 +254,269 @@ retry:
     return result.propagate();
   }
   return directory;
+}
+QLJS_WARNING_POP
+
+namespace {
+template <class Char>
+bool is_dot_or_dot_dot(const Char *path) {
+  return path[0] == '.' &&
+         (path[1] == '\0' || (path[1] == '.' && path[2] == '\0'));
+}
+
+#if QLJS_HAVE_WINDOWS_H
+Result<void, Platform_File_IO_Error> list_directory_raw(
+    const char *directory,
+    Temporary_Function_Ref<void(::WIN32_FIND_DATAW &)> visit_entry) {
+  std::optional<std::wstring> search_pattern = mbstring_to_wstring(directory);
+  if (!search_pattern.has_value()) {
+    QLJS_UNIMPLEMENTED();
+  }
+  *search_pattern += L"\\*";
+
+  ::WIN32_FIND_DATAW entry;
+  ::HANDLE finder = ::FindFirstFileW(search_pattern->c_str(), &entry);
+  if (finder == INVALID_HANDLE_VALUE) {
+    return failed_result(Windows_File_IO_Error{
+        .error = ::GetLastError(),
+    });
+  }
+  do {
+    visit_entry(entry);
+  } while (::FindNextFileW(finder, &entry));
+
+  ::DWORD error = ::GetLastError();
+  if (error != ERROR_NO_MORE_FILES) {
+    return failed_result(Windows_File_IO_Error{
+        .error = error,
+    });
+  }
+
+  ::FindClose(finder);
+  return {};
+}
+#endif
+
+#if QLJS_HAVE_DIRENT_H
+Result<void, Platform_File_IO_Error> list_directory_raw(
+    const char *directory,
+    Temporary_Function_Ref<void(::dirent *)> visit_entry) {
+  ::DIR *d = ::opendir(directory);
+  if (d == nullptr) {
+    return failed_result(POSIX_File_IO_Error{
+        .error = errno,
+    });
+  }
+  for (;;) {
+    errno = 0;
+    ::dirent *entry = ::readdir(d);
+    if (!entry) {
+      if (errno != 0) {
+        return failed_result(POSIX_File_IO_Error{
+            .error = errno,
+        });
+      }
+      break;
+    }
+    visit_entry(entry);
+  }
+  ::closedir(d);
+  return {};
+}
+#endif
+}
+
+Result<void, Platform_File_IO_Error> list_directory(
+    const char *directory,
+    Temporary_Function_Ref<void(const char *)> visit_file) {
+#if QLJS_HAVE_WINDOWS_H
+  return list_directory_raw(directory, [&](::WIN32_FIND_DATAW &entry) -> void {
+    // TODO(strager): Reduce allocations.
+    std::optional<std::string> entry_name =
+        wstring_to_mbstring(entry.cFileName);
+    if (!entry_name.has_value()) {
+      QLJS_UNIMPLEMENTED();
+    }
+    if (!is_dot_or_dot_dot(entry_name->c_str())) {
+      visit_file(entry_name->c_str());
+    }
+  });
+#elif QLJS_HAVE_DIRENT_H
+  return list_directory_raw(directory, [&](::dirent *entry) -> void {
+    if (!is_dot_or_dot_dot(entry->d_name)) {
+      visit_file(entry->d_name);
+    }
+  });
+#else
+#error "Unsupported platform"
+#endif
+}
+
+Result<void, Platform_File_IO_Error> list_directory(
+    const char *directory,
+    Temporary_Function_Ref<void(const char *, bool is_directory)> visit_file) {
+#if QLJS_HAVE_WINDOWS_H
+  return list_directory_raw(directory, [&](::WIN32_FIND_DATAW &entry) -> void {
+    // TODO(strager): Reduce allocations.
+    std::optional<std::string> entry_name =
+        wstring_to_mbstring(entry.cFileName);
+    if (!entry_name.has_value()) {
+      QLJS_UNIMPLEMENTED();
+    }
+    if (!is_dot_or_dot_dot(entry_name->c_str())) {
+      bool is_directory = (entry.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ==
+                          FILE_ATTRIBUTE_DIRECTORY;
+      visit_file(entry_name->c_str(), is_directory);
+    }
+  });
+#elif QLJS_HAVE_DIRENT_H
+  std::string temp_path;
+  return list_directory_raw(directory, [&](::dirent *entry) -> void {
+    if (is_dot_or_dot_dot(entry->d_name)) {
+      return;
+    }
+    bool is_directory;
+    if (entry->d_type == DT_UNKNOWN) {
+      temp_path.clear();
+      temp_path += directory;
+      temp_path += QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR;
+      temp_path += entry->d_name;
+      struct stat s;
+      int lstat_rc = ::lstat(temp_path.c_str(), &s);
+      if (lstat_rc == -1) {
+        if (errno == ENOENT) {
+          return;
+        }
+        is_directory = false;
+      } else {
+        is_directory = S_ISDIR(s.st_mode);
+      }
+    } else {
+      is_directory = entry->d_type == DT_DIR;
+    }
+    visit_file(entry->d_name, is_directory);
+  });
+#else
+#error "Unsupported platform"
+#endif
+}
+
+void List_Directory_Visitor::visit_directory_pre(const std::string &) {
+  // Do nothing by default.
+}
+
+void List_Directory_Visitor::visit_directory_post(const std::string &) {
+  // Do nothing by default.
+}
+
+void list_directory_recursively(const char *directory,
+                                List_Directory_Visitor &visitor) {
+  struct Finder {
+    std::string path;
+    List_Directory_Visitor &visitor;
+
+    void recurse(int depth) {
+      std::size_t path_length = this->path.size();
+
+      auto visit_child = [&](const char *child_name,
+                             bool is_directory) -> void {
+        this->path.resize(path_length);
+        this->path += QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR;
+        this->path += child_name;
+        if (is_directory) {
+          this->recurse(depth + 1);
+        } else {
+          this->visitor.visit_file(path);
+        }
+      };
+
+      this->path.resize(path_length);
+      this->visitor.visit_directory_pre(this->path);
+
+      // TODO(strager): Reduce allocations on Windows. Windows uses wchar_t
+      // paths and also needs a "\*" suffix.
+      Result<void, Platform_File_IO_Error> list =
+          list_directory(this->path.c_str(), std::move(visit_child));
+      if (!list.ok()) {
+        this->visitor.on_error(list.error(), depth);
+      }
+
+      this->path.resize(path_length);
+      this->visitor.visit_directory_post(this->path);
+    }
+  };
+  Finder f = {directory, visitor};
+  f.recurse(0);
+}
+
+Result<std::string, Platform_File_IO_Error> get_current_working_directory() {
+  std::string cwd;
+  Result<void, Platform_File_IO_Error> r = get_current_working_directory(cwd);
+  if (!r.ok()) {
+    return r.propagate();
+  }
+  return cwd;
+}
+
+#if QLJS_HAVE_WINDOWS_H
+Result<void, Platform_File_IO_Error> get_current_working_directory(
+    std::string &out) {
+  std::wstring cwd;
+  Result<void, Platform_File_IO_Error> r = get_current_working_directory(cwd);
+  if (!r.ok()) {
+    return r.propagate();
+  }
+  std::optional<std::string> result = wstring_to_mbstring(cwd);
+  if (!result.has_value()) {
+    QLJS_UNIMPLEMENTED();
+  }
+  out = std::move(*result);
+  return {};
+}
+
+Result<void, Platform_File_IO_Error> get_current_working_directory(
+    std::wstring &out) {
+  // size includes the null terminator.
+  DWORD size = ::GetCurrentDirectoryW(0, nullptr);
+  if (size == 0) {
+    QLJS_UNIMPLEMENTED();
+  }
+  out.resize(size - 1);
+  // length excludes the null terminator.
+  DWORD length = ::GetCurrentDirectoryW(size, out.data());
+  if (length == 0) {
+    QLJS_UNIMPLEMENTED();
+  }
+  if (length != size - 1) {
+    QLJS_UNIMPLEMENTED();
+  }
+
+  return {};
+}
+#else
+Result<void, Platform_File_IO_Error> get_current_working_directory(
+    std::string &out) {
+  // TODO(strager): Is PATH_MAX sufficient? Do we need to keep growing our
+  // buffer?
+  out.resize(PATH_MAX);
+  if (!::getcwd(out.data(), out.size() + 1)) {
+    return failed_result(POSIX_File_IO_Error{errno});
+  }
+  out.resize(std::strlen(out.c_str()));
+  return {};
+}
+#endif
+
+void set_current_working_directory_or_exit(const char *path) {
+#if QLJS_HAVE_STD_FILESYSTEM
+  std::filesystem::current_path(path);
+#else
+  if (::chdir(path) != 0) {
+    std::fprintf(stderr, "error: failed to set current directory to %s: %s\n",
+                 path, std::strerror(errno));
+    std::terminate();
+  }
+#endif
 }
 }
 

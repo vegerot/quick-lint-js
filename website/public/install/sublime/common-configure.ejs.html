@@ -3,7 +3,7 @@
 <!-- See end of file for extended copyright information. -->
 %>
 
-<h3>Configure Sublime Text</h3>
+<h2><%= step %>. Configure Sublime Text</h2>
 <p>
   After installing quick-lint-js, you need to register quick-lint-js in Sublime
   Text's LSP package:
@@ -26,8 +26,7 @@
         "quick-lint-js": {
             "command": ["quick-lint-js", "--lsp-server"],
             "enabled": true,
-            "languageId": "javascript",
-            "syntaxes": ["Packages/JavaScript/JavaScript.sublime-syntax"]
+            "selector": "source.js | source.jsx | source.ts | source.tsx"
         }
     }
 }
@@ -40,8 +39,8 @@
   <img
     src="../lsp-config.png"
     alt="Sublime Text with LSP.sublime-settings open, showing closure-lsp and quick-lint-js settings"
-    width="1421"
-    height="571"
+    width="2292"
+    height="1066"
   />
   <figcaption>Example LSP settings for Sublime Text</figcaption>
 </figure>

@@ -1,19 +1,21 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_PORT_MATH_H
-#define QUICK_LINT_JS_PORT_MATH_H
+#pragma once
 
 namespace quick_lint_js {
 // On some compilers, std::max is not constexpr. Define our own which is
 // constexpr.
 template <class T, class U>
-constexpr auto maximum(T x, U y) noexcept {
+constexpr auto maximum(T x, U y) {
   return x < y ? y : x;
 }
-}
 
-#endif
+template <class T, class U>
+constexpr auto minimum(T x, U y) {
+  return x < y ? x : y;
+}
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

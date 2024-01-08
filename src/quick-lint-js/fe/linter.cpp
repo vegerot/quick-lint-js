@@ -13,32 +13,46 @@
 #include <quick-lint-js/io/output-stream.h>
 
 namespace quick_lint_js {
-void parse_and_lint(padded_string_view code, diag_reporter& reporter,
-                    const global_declared_variable_set& globals,
-                    linter_options options) {
-  parser p(code, &reporter,
-           parser_options{
+bool operator==(Linter_Options lhs, Linter_Options rhs) {
+  return lhs.jsx == rhs.jsx && lhs.typescript == rhs.typescript &&
+         lhs.typescript_definition == rhs.typescript_definition &&
+         lhs.print_parser_visits == rhs.print_parser_visits;
+}
+
+bool operator!=(Linter_Options lhs, Linter_Options rhs) {
+  return !(lhs == rhs);
+}
+
+void parse_and_lint(Padded_String_View code, Diag_Reporter& reporter,
+                    const Global_Declared_Variable_Set& globals,
+                    Linter_Options options) {
+  Parser p(code, &reporter,
+           Parser_Options{
                .jsx = options.jsx,
                .typescript = options.typescript,
+               .typescript_definition_file = options.typescript_definition,
            });
-  variable_analyzer var_analyzer(
+  Variable_Analyzer var_analyzer(
       &reporter, &globals,
-      variable_analyzer_options{
+      Variable_Analyzer_Options{
           .allow_deleting_typescript_variable = !options.typescript,
           .eval_can_declare_variables = !options.typescript,
+          // TODO(strager): Deduplicate with typescript_var_options in tests.
+          .can_assign_to_class = !options.typescript,
+          .import_variable_can_be_runtime_or_type = options.typescript,
       });
 
 #if defined(__EMSCRIPTEN__)
   // No file I/O on the web.
   QLJS_ALWAYS_ASSERT(!options.print_parser_visits);
-  parse_visitor_base& v = var_analyzer;
+  Parse_Visitor_Base& v = var_analyzer;
 #else
-  debug_parse_visitor logger(file_output_stream::get_stderr());
-  multi_parse_visitor logging_visitor(&logger, &var_analyzer);
+  Debug_Parse_Visitor logger(File_Output_Stream::get_stderr());
+  Multi_Parse_Visitor logging_visitor(&logger, &var_analyzer);
 
-  parse_visitor_base& v =
+  Parse_Visitor_Base& v =
       options.print_parser_visits
-          ? static_cast<parse_visitor_base&>(logging_visitor)
+          ? static_cast<Parse_Visitor_Base&>(logging_visitor)
           : var_analyzer;
 #endif
 

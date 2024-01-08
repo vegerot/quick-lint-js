@@ -1,0 +1,298 @@
+// Copyright (C) 2020  Matthew "strager" Glazar
+// See end of file for extended copyright information.
+
+#include <cstddef>
+#include <initializer_list>
+#include <iterator>
+#include <quick-lint-js/assert.h>
+#include <quick-lint-js/diag/diagnostic-formatter.h>
+#include <quick-lint-js/diag/diagnostic.h>
+#include <quick-lint-js/fe/language.h>
+#include <quick-lint-js/fe/lex.h>
+#include <quick-lint-js/fe/source-code-span.h>
+#include <quick-lint-js/i18n/translation.h>
+#include <quick-lint-js/port/char8.h>
+#include <quick-lint-js/port/unreachable.h>
+#include <quick-lint-js/util/cast.h>
+#include <type_traits>
+#include <utility>
+
+namespace quick_lint_js {
+String8_View headlinese_enum_kind(Enum_Kind ek) {
+  switch (ek) {
+  case Enum_Kind::const_enum:
+    return u8"const enum"_sv;
+  case Enum_Kind::declare_const_enum:
+    return u8"declare const enum"_sv;
+  case Enum_Kind::declare_enum:
+    return u8"declare enum"_sv;
+  case Enum_Kind::normal:
+    return u8"enum"_sv;
+  }
+  QLJS_UNREACHABLE();
+}
+
+Translatable_Message headlinese_statement_kind(Statement_Kind sk) {
+  switch (sk) {
+  case Statement_Kind::do_while_loop:
+    return QLJS_TRANSLATABLE("'do-while' loop");
+  case Statement_Kind::for_loop:
+    return QLJS_TRANSLATABLE("'for' loop");
+  case Statement_Kind::if_statement:
+    return QLJS_TRANSLATABLE("'if' statement");
+  case Statement_Kind::while_loop:
+    return QLJS_TRANSLATABLE("'while' loop");
+  case Statement_Kind::with_statement:
+    return QLJS_TRANSLATABLE("'with' statement");
+  case Statement_Kind::labelled_statement:
+    return QLJS_TRANSLATABLE("labelled statement");
+  case Statement_Kind::class_implements_clause:
+    return QLJS_TRANSLATABLE("class 'implements' clause");
+  case Statement_Kind::class_extends_clause:
+    return QLJS_TRANSLATABLE("class 'extends' clause");
+  case Statement_Kind::interface_extends_clause:
+    return QLJS_TRANSLATABLE("interface 'extends' clause");
+  case Statement_Kind::typeof_type:
+    return QLJS_TRANSLATABLE("'typeof' type");
+  }
+  QLJS_UNREACHABLE();
+}
+
+Translatable_Message singular_statement_kind(Statement_Kind sk) {
+  switch (sk) {
+  case Statement_Kind::do_while_loop:
+    return QLJS_TRANSLATABLE("a 'do-while' loop");
+  case Statement_Kind::for_loop:
+    return QLJS_TRANSLATABLE("a 'for' loop");
+  case Statement_Kind::if_statement:
+    return QLJS_TRANSLATABLE("an 'if' statement");
+  case Statement_Kind::while_loop:
+    return QLJS_TRANSLATABLE("a 'while' loop");
+  case Statement_Kind::with_statement:
+    return QLJS_TRANSLATABLE("a 'with' statement");
+  case Statement_Kind::labelled_statement:
+    return QLJS_TRANSLATABLE("a labelled statement");
+  case Statement_Kind::class_implements_clause:
+    return QLJS_TRANSLATABLE("a class's 'implements' clause");
+  case Statement_Kind::class_extends_clause:
+    return QLJS_TRANSLATABLE("a class's 'extends' clause");
+  case Statement_Kind::interface_extends_clause:
+    return QLJS_TRANSLATABLE("an interface's 'extends' clause");
+  case Statement_Kind::typeof_type:
+    return QLJS_TRANSLATABLE("a 'typeof' type");
+  }
+  QLJS_UNREACHABLE();
+}
+
+Translatable_Message headlinese_variable_kind(Variable_Kind vk) {
+  switch (vk) {
+  case Variable_Kind::_arrow_parameter:
+    return QLJS_TRANSLATABLE("parameter");
+  case Variable_Kind::_catch:
+    return QLJS_TRANSLATABLE("catch variable");
+  case Variable_Kind::_class:
+    return QLJS_TRANSLATABLE("class");
+  case Variable_Kind::_const:
+    return QLJS_TRANSLATABLE("const variable");
+  case Variable_Kind::_enum:
+    return QLJS_TRANSLATABLE("enum");
+  case Variable_Kind::_function:
+    return QLJS_TRANSLATABLE("function");
+  case Variable_Kind::_function_parameter:
+    return QLJS_TRANSLATABLE("parameter");
+  case Variable_Kind::_function_type_parameter:
+    return QLJS_TRANSLATABLE("parameter");
+  case Variable_Kind::_generic_parameter:
+    return QLJS_TRANSLATABLE("generic parameter");
+  case Variable_Kind::_import:
+    return QLJS_TRANSLATABLE("imported variable");
+  case Variable_Kind::_import_alias:
+    return QLJS_TRANSLATABLE("import alias");
+  case Variable_Kind::_import_type:
+    return QLJS_TRANSLATABLE("imported type");
+  case Variable_Kind::_index_signature_parameter:
+    return QLJS_TRANSLATABLE("index signature parameter");
+  case Variable_Kind::_infer_type:
+    return QLJS_TRANSLATABLE("type");
+  case Variable_Kind::_interface:
+    return QLJS_TRANSLATABLE("interface");
+  case Variable_Kind::_let:
+    return QLJS_TRANSLATABLE("let variable");
+  case Variable_Kind::_namespace:
+    return QLJS_TRANSLATABLE("namespace");
+  case Variable_Kind::_type_alias:
+    return QLJS_TRANSLATABLE("type alias");
+  case Variable_Kind::_var:
+    return QLJS_TRANSLATABLE("variable");
+  }
+  QLJS_UNREACHABLE();
+}
+
+Translatable_Message singular_variable_kind(Variable_Kind vk) {
+  switch (vk) {
+  case Variable_Kind::_arrow_parameter:
+    return QLJS_TRANSLATABLE("a parameter");
+  case Variable_Kind::_catch:
+    return QLJS_TRANSLATABLE("a catch variable");
+  case Variable_Kind::_class:
+    return QLJS_TRANSLATABLE("a class");
+  case Variable_Kind::_const:
+    return QLJS_TRANSLATABLE("a const variable");
+  case Variable_Kind::_enum:
+    return QLJS_TRANSLATABLE("an enum");
+  case Variable_Kind::_function:
+    return QLJS_TRANSLATABLE("a function");
+  case Variable_Kind::_function_parameter:
+    return QLJS_TRANSLATABLE("a parameter");
+  case Variable_Kind::_function_type_parameter:
+    return QLJS_TRANSLATABLE("a parameter");
+  case Variable_Kind::_generic_parameter:
+    return QLJS_TRANSLATABLE("a generic parameter");
+  case Variable_Kind::_import:
+    return QLJS_TRANSLATABLE("an imported variable");
+  case Variable_Kind::_import_alias:
+    return QLJS_TRANSLATABLE("an import alias");
+  case Variable_Kind::_import_type:
+    return QLJS_TRANSLATABLE("an imported type");
+  case Variable_Kind::_index_signature_parameter:
+    return QLJS_TRANSLATABLE("an index signature parameter");
+  case Variable_Kind::_infer_type:
+    return QLJS_TRANSLATABLE("a type");
+  case Variable_Kind::_interface:
+    return QLJS_TRANSLATABLE("an interface");
+  case Variable_Kind::_let:
+    return QLJS_TRANSLATABLE("a let variable");
+  case Variable_Kind::_namespace:
+    return QLJS_TRANSLATABLE("a namespace");
+  case Variable_Kind::_type_alias:
+    return QLJS_TRANSLATABLE("a type alias");
+  case Variable_Kind::_var:
+    return QLJS_TRANSLATABLE("a variable");
+  }
+  QLJS_UNREACHABLE();
+}
+
+Diagnostic_Formatter_Base::Diagnostic_Formatter_Base(Translator t)
+    : translator_(t) {}
+
+Source_Code_Span Diagnostic_Formatter_Base::get_argument_source_code_span(
+    const Diagnostic_Message_Args& args, const void* diagnostic,
+    int arg_index) {
+  auto [arg_data, arg_type] = get_arg(args, diagnostic, arg_index);
+  switch (arg_type) {
+  case Diagnostic_Arg_Type::source_code_span:
+    return *reinterpret_cast<const Source_Code_Span*>(arg_data);
+
+  case Diagnostic_Arg_Type::char8:
+  case Diagnostic_Arg_Type::enum_kind:
+  case Diagnostic_Arg_Type::invalid:
+  case Diagnostic_Arg_Type::statement_kind:
+  case Diagnostic_Arg_Type::string8_view:
+  case Diagnostic_Arg_Type::variable_kind:
+    QLJS_UNREACHABLE();
+  }
+  QLJS_UNREACHABLE();
+}
+
+String8_View Diagnostic_Formatter_Base::expand_argument(
+    const Diagnostic_Message_Args& args, const void* diagnostic,
+    int arg_index) {
+  auto [arg_data, arg_type] = get_arg(args, diagnostic, arg_index);
+  switch (arg_type) {
+  case Diagnostic_Arg_Type::char8:
+    return String8_View(reinterpret_cast<const Char8*>(arg_data), 1);
+
+  case Diagnostic_Arg_Type::source_code_span:
+    return reinterpret_cast<const Source_Code_Span*>(arg_data)->string_view();
+
+  case Diagnostic_Arg_Type::string8_view:
+    return *reinterpret_cast<const String8_View*>(arg_data);
+
+  case Diagnostic_Arg_Type::enum_kind:
+  case Diagnostic_Arg_Type::invalid:
+  case Diagnostic_Arg_Type::statement_kind:
+  case Diagnostic_Arg_Type::variable_kind:
+    QLJS_UNREACHABLE();
+  }
+  QLJS_UNREACHABLE();
+}
+
+String8_View Diagnostic_Formatter_Base::expand_argument_headlinese(
+    const Diagnostic_Message_Args& args, const void* diagnostic,
+    int arg_index) {
+  auto [arg_data, arg_type] = get_arg(args, diagnostic, arg_index);
+  switch (arg_type) {
+  case Diagnostic_Arg_Type::enum_kind:
+    return headlinese_enum_kind(*reinterpret_cast<const Enum_Kind*>(arg_data));
+
+  case Diagnostic_Arg_Type::statement_kind:
+    return this->translator_.translate(headlinese_statement_kind(
+        *reinterpret_cast<const Statement_Kind*>(arg_data)));
+
+  case Diagnostic_Arg_Type::variable_kind:
+    return this->translator_.translate(headlinese_variable_kind(
+        *reinterpret_cast<const Variable_Kind*>(arg_data)));
+
+  case Diagnostic_Arg_Type::char8:
+  case Diagnostic_Arg_Type::invalid:
+  case Diagnostic_Arg_Type::source_code_span:
+  case Diagnostic_Arg_Type::string8_view:
+    QLJS_UNREACHABLE();
+  }
+  QLJS_UNREACHABLE();
+}
+
+String8_View Diagnostic_Formatter_Base::expand_argument_singular(
+    const Diagnostic_Message_Args& args, const void* diagnostic,
+    int arg_index) {
+  auto [arg_data, arg_type] = get_arg(args, diagnostic, arg_index);
+  switch (arg_type) {
+  case Diagnostic_Arg_Type::statement_kind:
+    return this->translator_.translate(singular_statement_kind(
+        *reinterpret_cast<const Statement_Kind*>(arg_data)));
+
+  case Diagnostic_Arg_Type::enum_kind:
+    QLJS_UNIMPLEMENTED();
+    break;
+
+  case Diagnostic_Arg_Type::variable_kind:
+    return this->translator_.translate(singular_variable_kind(
+        *reinterpret_cast<const Variable_Kind*>(arg_data)));
+
+  case Diagnostic_Arg_Type::char8:
+  case Diagnostic_Arg_Type::invalid:
+  case Diagnostic_Arg_Type::source_code_span:
+  case Diagnostic_Arg_Type::string8_view:
+    QLJS_UNREACHABLE();
+  }
+  QLJS_UNREACHABLE();
+}
+
+std::pair<const void*, Diagnostic_Arg_Type> Diagnostic_Formatter_Base::get_arg(
+    const Diagnostic_Message_Args& args, const void* diagnostic,
+    int arg_index) {
+  const Diagnostic_Message_Arg_Info& arg_info =
+      args[narrow_cast<std::size_t>(arg_index)];
+  const void* arg_data =
+      reinterpret_cast<const char*>(diagnostic) + arg_info.offset();
+  return std::make_pair(arg_data, arg_info.type);
+}
+}
+
+// quick-lint-js finds bugs in JavaScript programs.
+// Copyright (C) 2020  Matthew "strager" Glazar
+//
+// This file is part of quick-lint-js.
+//
+// quick-lint-js is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// quick-lint-js is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with quick-lint-js.  If not, see <https://www.gnu.org/licenses/>.

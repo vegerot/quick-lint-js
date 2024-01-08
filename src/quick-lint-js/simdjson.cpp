@@ -9,9 +9,9 @@
 #include <simdjson.h>
 
 namespace quick_lint_js {
-string8_view get_raw_json(::simdjson::ondemand::value& value) {
+String8_View get_raw_json(::simdjson::ondemand::value& value) {
   ::simdjson::ondemand::json_type type;
-  if (value.type().get(type) != ::simdjson::error_code::SUCCESS) {
+  if (value.type().get(type) != ::simdjson::SUCCESS) {
     QLJS_UNIMPLEMENTED();
   }
   switch (type) {
@@ -69,7 +69,7 @@ bool get_string(::simdjson::simdjson_result<::simdjson::ondemand::value>& root,
 }
 
 bool get_string8(::simdjson::ondemand::object& root, const char* key,
-                 string8_view* out) {
+                 String8_View* out) {
   std::string_view sv;
   if (!get_string(root, key, &sv)) {
     return false;
@@ -79,7 +79,7 @@ bool get_string8(::simdjson::ondemand::object& root, const char* key,
 }
 
 bool get_string8(::simdjson::ondemand::object& root, const char* key1,
-                 const char* key2, const char* key3, string8_view* out) {
+                 const char* key2, const char* key3, String8_View* out) {
   std::string_view sv;
   if (!get_string(root, key1, key2, key3, &sv)) {
     return false;
@@ -89,7 +89,7 @@ bool get_string8(::simdjson::ondemand::object& root, const char* key1,
 }
 
 bool get_string8(::simdjson::simdjson_result<::simdjson::ondemand::value>& root,
-                 const char* key, string8_view* out) {
+                 const char* key, String8_View* out) {
   std::string_view sv;
   if (!get_string(root, key, &sv)) {
     return false;
@@ -100,7 +100,7 @@ bool get_string8(::simdjson::simdjson_result<::simdjson::ondemand::value>& root,
 
 bool get_int(::simdjson::ondemand::object& root, const char* key, int* out) {
   std::int64_t int64;
-  if (root[key].get(int64) != ::simdjson::error_code::SUCCESS) {
+  if (root[key].get(int64) != ::simdjson::SUCCESS) {
     return false;
   }
   if (!in_range<int>(int64)) {

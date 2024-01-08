@@ -12,10 +12,10 @@
 .\"    Author: [see the "AUTHOR(S)" section]
 .\" Generator: Asciidoctor 2.0.17
 .\"    Manual: \ \&
-.\"    Source: quick-lint-js version ﻿ 2.10.0
+.\"    Source: quick-lint-js version ﻿ 3.0.0
 .\"  Language: English
 .\"
-.TH "QUICK\-LINT\-JS\-LSP" "8" "" "quick\-lint\-js version ﻿ 2.10.0" "\ \&"
+.TH "QUICK\-LINT\-JS\-LSP" "8" "" "quick\-lint\-js version ﻿ 3.0.0" "\ \&"
 .ie \n(.g .ds Aq \(aq
 .el       .ds Aq '
 .ss \n[.ss] 0
@@ -184,80 +184,112 @@ quick\-lint\-js sends the following LSP requests and notifications:
 .\}
 \f(CRworkspace/configuration\fP
 .RE
+.SH "DOCUMENT LANGUAGEID"
 .sp
-quick\-lint\-js interprets documents with the following document language IDs as if they were JavaScript+JSX files (like the
-\fB\-\-language=javascript\-jsx\fP command\-line option):
+quick\-lint\-js uses \f(CRlanguageId\fP from a \f(CRtextDocument/didOpen\fP notification to determine the language of that LSP document according to the following table:
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.  sp -1
-.  IP \(bu 2.3
-.\}
+.it 1 an-trap
+.nr an-no-space-flag 1
+.nr an-break-flag 1
+.br
+.B quick\-lint\-js\(cqs interpretation of languageId
+.TS
+allbox tab(:);
+lt lt.
+T{
+.sp
+LSP languageId
+T}:T{
+.sp
+Equivalent
+\fB\-\-language\fP
+.br
+command\-line option
+T}
+T{
+.sp
 \f(CRjavascript\fP
-.RE
+T}:T{
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.  sp -1
-.  IP \(bu 2.3
-.\}
+\f(CRjavascript\-jsx\fP
+T}
+T{
+.sp
 \f(CRjavascriptreact\fP
-.RE
+T}:T{
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.  sp -1
-.  IP \(bu 2.3
-.\}
+\f(CRjavascript\-jsx\fP
+T}
+T{
+.sp
 \f(CRjs\-jsx\fP
-.RE
+T}:T{
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.  sp -1
-.  IP \(bu 2.3
-.\}
+\f(CRjavascript\-jsx\fP
+T}
+T{
+.sp
 \f(CRjs\fP
-.RE
+T}:T{
 .sp
-quick\-lint\-js interprets documents with the following document language IDs as if they were TypeScript files (like the
-\fB\-\-language=experimental\-typescript\fP command\-line option):
+\f(CRjavascript\-jsx\fP
+T}
+T{
 .sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.  sp -1
-.  IP \(bu 2.3
-.\}
-\f(CRtypescript\fP
-.RE
-.sp
-quick\-lint\-js interprets documents with the following document language IDs as if they were TypeScript JSX files (like the
-\fB\-\-language=experimental\-typescript\-jsx\fP command\-line option):
-.sp
-.RS 4
-.ie n \{\
-\h'-04'\(bu\h'+03'\c
-.\}
-.el \{\
-.  sp -1
-.  IP \(bu 2.3
-.\}
 \f(CRtsx\fP
+T}:T{
+.sp
+\f(CRtypescript\-jsx\fP
+T}
+T{
+.sp
+\f(CRtypescript\fP
+T}:T{
+.sp
+See below
+T}
+T{
+.sp
+\f(CRtypescriptsource\fP
+T}:T{
+.sp
+\f(CRtypescript\fP
+T}
+T{
+.sp
+\f(CRtypescriptdefinition\fP
+T}:T{
+.sp
+\f(CRtypescript\-definition\fP
+T}
+T{
+.sp
+\f(CRtypescriptreact\fP
+T}:T{
+.sp
+\f(CRtypescript\-jsx\fP
+T}
+T{
+.sp
+(any)
+T}:T{
+.sp
+See below
+T}
+.TE
+.sp
+.sp
+If the \f(CRlanguageId\fP is equal to \f(CRtypescript\fP, then quick\-lint\-js inspects the base name of that document\(cqs URI to determine the language of that document:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.  sp -1
+.  IP \(bu 2.3
+.\}
+If the base name contains ".d.", then quick\-lint\-js interprets the document as if \f(CRlanguageId\fP was instead \f(CRtypescriptdefinition\fP.
 .RE
 .sp
 .RS 4
@@ -268,7 +300,18 @@ quick\-lint\-js interprets documents with the following document language IDs as
 .  sp -1
 .  IP \(bu 2.3
 .\}
-\f(CRtypescriptreact\fP
+Otherwise, if the base name ends with ".tsx", then quick\-lint\-js interprets the document as if \f(CRlanguageId\fP was instead \f(CRtypescriptreact\fP.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.  sp -1
+.  IP \(bu 2.3
+.\}
+Otherwise, quick\-lint\-js interprets the document as if \f(CRlanguageId\fP was instead \f(CRtypescriptsource\fP.
 .RE
 .sp
 quick\-lint\-js interprets documents with a base name of \f(CRquick\-lint\-js.config\fP as a JSON config file.
@@ -285,6 +328,32 @@ Log raw LSP messages between the editor and quick\-lint\-js.
 A timestamped subdirectory is created inside the tracing directory containing binary log files.
 If null or an empty string, tracing is disabled.
 .RE
+.sp
+It is also possible to configure quick\-lint\-js using the \f(CRinitialize\fP request.
+To do so, set \f(CRinitializationOptions\fP to an object containing a \f(CRconfiguration\fP object containing the settings.
+For example, the following \f(CRinitialize\fP request sets \f(CRquick\-lint\-js.tracing\-directory\fP:
+.sp
+.if n .RS 4
+.nf
+.fam C
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "processId": null,
+    "rootUri": null,
+    "capabilities": {},
+    "initializationOptions": {
+      "configuration": {
+        "quick\-lint\-js.tracing\-directory": "/tmp/quick\-lint\-js\-logs"
+      }
+    }
+  }
+}
+.fam
+.fi
+.if n .RE
 .SH "SEE ALSO"
 .sp
 \fBquick\-lint\-js\fP(1)

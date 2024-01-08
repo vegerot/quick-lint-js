@@ -1,10 +1,19 @@
+<!---{
+"title": "Faster, easier, friendlier: how quick-lint-js will take over ESLint",
+"linkLabelHTML": "Release: version 1.0",
+"description": "Faster, easier, friendlier: how quick-lint-js will take over ESLint",
+"navTitle": "Release 1.0",
+"blogAuthor": "Matthew \"strager\" Glazar",
+"blogDate": "2021-12-13T19:27:37-08:00"
+}--->
+
 <!DOCTYPE html>
 <!-- Copyright (C) 2020  Matthew "strager" Glazar -->
 <!-- See end of file for extended copyright information. -->
 <html>
   <head>
-    <%- await include("../../common-head.ejs.html", { title: `Faster, easier,
-    friendlier: how quick-lint-js will take over ESLint` }) %>
+    <%- await include("../../common-head.ejs.html") %> <%- await
+    include("../blog-head.ejs.html") %>
     <link href="../../main.css" rel="stylesheet" />
   </head>
   <body>
@@ -28,10 +37,10 @@
     <header><%- await include("../../common-nav.ejs.html") %></header>
 
     <main>
-      <h2>
+      <h1>
         Faster, easier, friendlier: how quick-lint-js will take over ESLint
-      </h2>
-      <p><time>2021-12-13</time></p>
+      </h1>
+      <p><qljs-date datetime="<%= meta.blogDate %>" /></p>
 
       <p>
         ESLint finds bugs. Or does it? ESLint is so slow that you don't bother

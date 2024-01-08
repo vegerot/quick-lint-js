@@ -1,13 +1,11 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_LSP_SERVER_PROCESS_H
-#define QUICK_LINT_JS_LSP_SERVER_PROCESS_H
+#pragma once
 
-#include <boost/json/value.hpp>
 #include <chrono>
+#include <coroutine>
 #include <cstdint>
-#include <experimental/coroutine>
 #include <filesystem>
 #include <optional>
 #include <quick-lint-js/assert.h>
@@ -19,6 +17,8 @@
 #include <quick-lint-js/lsp/lsp-server.h>
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/have.h>
+#include <quick-lint-js/port/memory-resource.h>
+#include <simdjson.h>
 #include <type_traits>
 #include <unistd.h>
 #include <utility>
@@ -36,31 +36,30 @@
 #endif
 
 namespace quick_lint_js {
-class benchmark_server_config;
-namespace std_coroutine = std::experimental;
+namespace std_coroutine = std;
 
-byte_buffer make_text_document_did_open_notification(string8_view uri,
+Byte_Buffer make_text_document_did_open_notification(String8_View uri,
                                                      std::int64_t version,
-                                                     string8_view text);
-byte_buffer make_text_document_did_fully_change_notification(
-    string8_view uri, std::int64_t version, string8_view text);
-byte_buffer make_text_document_did_close_notification(string8_view uri);
+                                                     String8_View text);
+Byte_Buffer make_text_document_did_fully_change_notification(
+    String8_View uri, std::int64_t version, String8_View text);
+Byte_Buffer make_text_document_did_close_notification(String8_View uri);
 
-class lsp_task_promise_type_base {
+class LSP_Task_Promise_Type_Base {
  public:
   std_coroutine::suspend_never initial_suspend() { return {}; }
 
-  auto final_suspend() noexcept { return final_suspend_awaitable(); }
+  auto final_suspend() noexcept { return Final_Suspend_Awaitable(); }
 
   std_coroutine::coroutine_handle<> continuation_ = {};
 
  private:
-  struct final_suspend_awaitable {
+  struct Final_Suspend_Awaitable {
     bool await_ready() const noexcept { return false; }
 
     template <class Promise>
-    std::experimental::coroutine_handle<> await_suspend(
-        std::experimental::coroutine_handle<Promise> continuation) noexcept {
+    std_coroutine::coroutine_handle<> await_suspend(
+        std_coroutine::coroutine_handle<Promise> continuation) noexcept {
       auto cont = continuation.promise().continuation_;
       return cont ? cont : std_coroutine::noop_coroutine();
     }
@@ -72,13 +71,13 @@ class lsp_task_promise_type_base {
 };
 
 template <class T>
-class lsp_task {
+class LSP_Task {
  public:
-  class promise_type : public lsp_task_promise_type_base {
+  class Promise_Type : public LSP_Task_Promise_Type_Base {
    public:
-    lsp_task get_return_object() {
-      return lsp_task(
-          std_coroutine::coroutine_handle<promise_type>::from_promise(*this));
+    LSP_Task get_return_object() {
+      return LSP_Task(
+          std_coroutine::coroutine_handle<Promise_Type>::from_promise(*this));
     }
 
     template <class U>
@@ -90,15 +89,17 @@ class lsp_task {
     std::optional<T> return_value_;
   };
 
-  explicit lsp_task(
-      std_coroutine::coroutine_handle<promise_type> continuation) noexcept
+  using promise_type = Promise_Type;
+
+  explicit LSP_Task(
+      std_coroutine::coroutine_handle<Promise_Type> continuation) noexcept
       : continuation_(continuation) {}
 
   auto operator co_await() const noexcept {
-    struct awaitable {
+    struct Awaitable {
       void await_suspend(
           std_coroutine::coroutine_handle<> continuation) noexcept {
-        promise_type& promise = this->continuation_.promise();
+        Promise_Type& promise = this->continuation_.promise();
         QLJS_ASSERT(!promise.return_value_.has_value());
         QLJS_ASSERT(!promise.continuation_);
         promise.continuation_ = continuation;
@@ -106,35 +107,35 @@ class lsp_task {
 
       bool await_ready() const noexcept {
         QLJS_ASSERT(this->continuation_);
-        promise_type& promise = this->continuation_.promise();
+        Promise_Type& promise = this->continuation_.promise();
         return promise.return_value_.has_value();
       }
 
       T&& await_resume() {
         QLJS_ASSERT(this->continuation_);
-        promise_type& promise = this->continuation_.promise();
+        Promise_Type& promise = this->continuation_.promise();
         QLJS_ASSERT(promise.return_value_.has_value());
         return std::move(*promise.return_value_);
       }
 
-      std_coroutine::coroutine_handle<promise_type> continuation_;
+      std_coroutine::coroutine_handle<Promise_Type> continuation_;
     };
 
-    return awaitable{this->continuation_};
+    return Awaitable{this->continuation_};
   }
 
  private:
-  std_coroutine::coroutine_handle<promise_type> continuation_;
+  std_coroutine::coroutine_handle<Promise_Type> continuation_;
 };
 
 template <>
-class lsp_task<void> {
+class LSP_Task<void> {
  public:
-  class promise_type : public lsp_task_promise_type_base {
+  class Promise_Type : public LSP_Task_Promise_Type_Base {
    public:
-    lsp_task get_return_object() {
-      return lsp_task(
-          std_coroutine::coroutine_handle<promise_type>::from_promise(*this));
+    LSP_Task get_return_object() {
+      return LSP_Task(
+          std_coroutine::coroutine_handle<Promise_Type>::from_promise(*this));
     }
 
     void return_void() { this->did_return_ = true; }
@@ -142,16 +143,18 @@ class lsp_task<void> {
     bool did_return_ = false;
   };
 
-  explicit lsp_task(
-      std_coroutine::coroutine_handle<promise_type> continuation) noexcept
+  using promise_type = Promise_Type;
+
+  explicit LSP_Task(
+      std_coroutine::coroutine_handle<Promise_Type> continuation) noexcept
       : continuation_(continuation) {}
 
   auto operator co_await() const noexcept {
-    struct awaitable {
+    struct Awaitable {
       void await_suspend(
           std_coroutine::coroutine_handle<> continuation) noexcept {
         QLJS_ASSERT(this->continuation_);
-        promise_type& promise = this->continuation_.promise();
+        Promise_Type& promise = this->continuation_.promise();
         QLJS_ASSERT(!promise.did_return_);
         QLJS_ASSERT(!promise.continuation_);
         promise.continuation_ = continuation;
@@ -159,20 +162,20 @@ class lsp_task<void> {
 
       bool await_ready() const noexcept {
         QLJS_ASSERT(this->continuation_);
-        promise_type& promise = this->continuation_.promise();
+        Promise_Type& promise = this->continuation_.promise();
         return promise.did_return_;
       }
 
       void await_resume() { QLJS_ASSERT(this->continuation_); }
 
-      std_coroutine::coroutine_handle<promise_type> continuation_;
+      std_coroutine::coroutine_handle<Promise_Type> continuation_;
     };
 
-    return awaitable{this->continuation_};
+    return Awaitable{this->continuation_};
   }
 
  private:
-  std_coroutine::coroutine_handle<promise_type> continuation_;
+  std_coroutine::coroutine_handle<Promise_Type> continuation_;
 };
 
 enum {
@@ -181,18 +184,25 @@ enum {
   TEXT_DOCUMENT_SYNC_KIND_INCREMENTAL = 2,
 };
 
-class lsp_server_process {
+class LSP_Server_Process : private Event_Loop_Pipe_Read_Delegate
+#if QLJS_EVENT_LOOP2_PIPE_WRITE
+    ,
+                           private Event_Loop_Pipe_Write_Delegate
+#endif
+{
  private:
-  class get_message_awaitable;
+  class Get_Message_Awaitable;
 
  public:
-  static lsp_server_process spawn(const benchmark_config_server& config);
+  static LSP_Server_Process spawn(const Benchmark_Config_Server& config);
 
-  // Run an lsp_task<void>-returning function with the server. After, forcefully
+  // Run an LSP_Task<void>-returning function with the server. After, forcefully
   // stop the server.
   template <class Func>
   void run_and_kill(Func&& func) {
-    [[maybe_unused]] lsp_task<void> task = [&]() -> lsp_task<void> {
+    Event_Loop event_loop;
+
+    [[maybe_unused]] LSP_Task<void> task = [&]() -> LSP_Task<void> {
       co_await std::forward<Func>(func)();
       this->message_writer_.flush();  // FIXME(strager): Might deadlock.
       // Some servers don't implement 'exit', so terminate the server manually.
@@ -200,25 +210,27 @@ class lsp_server_process {
           std::chrono::milliseconds(300));  // FIXME(strager): Might deadlock.
       if (!exited) {
         this->kill();
-
-        // HACK(strager): Flow doesn't ever close our reader (its writer), even
-        // if we kill the process. (Flow forks its own processes which we can't
-        // directly kill.) It does reliably crash if we close our writer (its
-        // reader), though, so let's force a crash.
-        this->stop_future_writes();
-
         this->wait_for_exit();
+
+        // HACK(strager): Flow and Rome don't ever close our reader (its
+        // writer), even if we kill the process. (They fork their own processes
+        // which we can't directly kill.) Work around this by forcefully
+        // stopping our event loop.
+        event_loop.un_keep_alive();
       }
     }();
-    this->event_loop_.run();
+
+    event_loop.keep_alive();
+    event_loop.register_pipe_read(this->reader_.ref(), this);
+#if QLJS_EVENT_LOOP2_PIPE_WRITE
+    event_loop.register_pipe_write(this->message_writer_.get_pipe_fd(), this);
+    this->enable_or_disable_writer_events_as_needed(&event_loop);
+#endif
+    event_loop.run();
   }
 
   // Forcefully stop the server.
   void kill();
-
-  // HACK(strager): Close the client->server pipe to make Flow's LSP server
-  // stop.
-  void stop_future_writes();
 
   // Wait for the server to stop on its own. Should be called to clean up
   // OS resources.
@@ -228,64 +240,67 @@ class lsp_server_process {
   // true if the process exited, or false if the given duration elapsed.
   bool wait_for_exit_for(std::chrono::milliseconds timeout);
 
-  lsp_task<void> initialize_lsp_async();
-  lsp_task<void> shut_down_lsp();
+  LSP_Task<void> initialize_lsp_async();
+  LSP_Task<void> shut_down_lsp();
 
-  void handle_misc_message(::boost::json::object& message);
+  void handle_misc_message(::simdjson::dom::object& message);
 
   // Receives the next message sent by the server. Returns an awaitable yielding
-  // a ::boost::json::value.
-  get_message_awaitable get_message_async() {
-    return get_message_awaitable(this);
+  // a ::simdjson::dom::element. The returned value is invalidated on the next
+  // call to get_message_async. See NOTE[LSP_Server_Process-message] for
+  // details.
+  Get_Message_Awaitable get_message_async() {
+    return Get_Message_Awaitable(this);
   }
 
   // Returns just the array of diagnostics.
   // Respects diagnosticsMessagesToIgnore.
-  lsp_task<::boost::json::array> wait_for_diagnostics_async(
+  LSP_Task<::simdjson::dom::array> wait_for_diagnostics_async(
       std::int64_t document_version);
-  lsp_task<::boost::json::array>
+  LSP_Task<::simdjson::dom::array>
   wait_for_diagnostics_after_incremental_change_async(
       std::int64_t document_version);
-  lsp_task<::boost::json::array> wait_for_diagnostics_ignoring_async(
+  LSP_Task<::simdjson::dom::array> wait_for_diagnostics_ignoring_async(
       std::int64_t document_version, std::int64_t messages_to_ignore);
-  lsp_task<::boost::json::array> wait_for_diagnostics_async(
-      string8_view document_uri, std::int64_t document_version);
-  template <class ParamsPredicate>
-  lsp_task<::boost::json::array> wait_for_diagnostics_async(ParamsPredicate&&);
-  template <class ParamsPredicate>
-  lsp_task<::boost::json::array> wait_for_diagnostics_ignoring_async(
-      ParamsPredicate&&, std::int64_t messages_to_ignore);
+  LSP_Task<::simdjson::dom::array> wait_for_diagnostics_async(
+      String8_View document_uri, std::int64_t document_version);
+  template <class Params_Predicate>
+  LSP_Task<::simdjson::dom::array> wait_for_diagnostics_async(
+      Params_Predicate&&);
+  template <class Params_Predicate>
+  LSP_Task<::simdjson::dom::array> wait_for_diagnostics_ignoring_async(
+      Params_Predicate&&, std::int64_t messages_to_ignore);
 
   // Returns the entire notification object.
   // Respects diagnosticsMessagesToIgnore.
-  lsp_task<::boost::json::object> wait_for_diagnostics_notification_async();
-  template <class ParamsPredicate>
-  lsp_task<::boost::json::object> wait_for_diagnostics_notification_async(
-      ParamsPredicate&&);
-  template <class ParamsPredicate>
-  lsp_task<::boost::json::object> wait_for_diagnostics_notification_async(
-      ParamsPredicate&&, std::int64_t messages_to_ignore);
+  LSP_Task<::simdjson::dom::object> wait_for_diagnostics_notification_async();
+  template <class Params_Predicate>
+  LSP_Task<::simdjson::dom::object> wait_for_diagnostics_notification_async(
+      Params_Predicate&&);
+  template <class Params_Predicate>
+  LSP_Task<::simdjson::dom::object> wait_for_diagnostics_notification_async(
+      Params_Predicate&&, std::int64_t messages_to_ignore);
 
   // Returns the entire notification object.
   // Does not respect diagnosticsMessagesToIgnore; returns the first matching
   // message.
-  lsp_task<::boost::json::object>
+  LSP_Task<::simdjson::dom::object>
   wait_for_first_diagnostics_notification_async();
-  template <class ParamsPredicate>
-  lsp_task<::boost::json::object> wait_for_first_diagnostics_notification_async(
-      ParamsPredicate&&);
+  template <class Params_Predicate>
+  LSP_Task<::simdjson::dom::object>
+  wait_for_first_diagnostics_notification_async(Params_Predicate&&);
 
-  void send_message(byte_buffer&& message);
+  void send_message(Byte_Buffer&& message);
 
-  std::filesystem::path file_to_path(string8_view path);
-  string8 file_to_uri(string8_view path);
+  std::filesystem::path file_to_path(String8_View path);
+  String8 file_to_uri(String8_View path);
 
-  void create_file_on_disk_if_needed(string8_view path);
+  void create_file_on_disk_if_needed(String8_View path);
 
  private:
-  class get_message_awaitable {
+  class Get_Message_Awaitable {
    public:
-    explicit get_message_awaitable(lsp_server_process* process)
+    explicit Get_Message_Awaitable(LSP_Server_Process* process)
         : process_(process) {}
 
     bool await_ready() { return false; }
@@ -296,76 +311,64 @@ class lsp_server_process {
       message_parser.out_message_content_ = &this->message_content_;
     }
 
-    ::boost::json::value await_resume();
+    ::simdjson::dom::element await_resume();
 
    private:
-    string8_view message_content_;
-    lsp_server_process* process_;
+    String8_View message_content_;
+    LSP_Server_Process* process_;
   };
 
-  struct continuing_lsp_message_parser
-      : public lsp_message_parser<continuing_lsp_message_parser> {
-    void message_parsed(string8_view message_content);
+  struct Continuing_LSP_Message_Parser
+      : public LSP_Message_Parser<Continuing_LSP_Message_Parser> {
+    void message_parsed(String8_View message_content);
 
     std_coroutine::coroutine_handle<> continuation_;
-    string8_view* out_message_content_ = nullptr;
+    String8_View* out_message_content_ = nullptr;
   };
 
-  class lsp_event_loop : public event_loop<lsp_event_loop> {
-   public:
-    explicit lsp_event_loop(lsp_server_process* process) : process_(process) {}
+  void on_pipe_read_data(Event_Loop_Base* event_loop, Platform_File_Ref,
+                         String8_View data) override {
+    this->message_parser_.append(data);
+#if QLJS_EVENT_LOOP2_PIPE_WRITE
+    this->enable_or_disable_writer_events_as_needed(event_loop);
+#endif
+  }
+  void on_pipe_read_end(Event_Loop_Base* event_loop,
+                        Platform_File_Ref) override {
+    event_loop->un_keep_alive();
+  }
+  void on_pipe_read_error(Event_Loop_Base* event_loop, Platform_File_Ref,
+                          Platform_File_IO_Error) override {
+    event_loop->un_keep_alive();
+  }
 
-    platform_file_ref get_readable_pipe() const {
-      return this->process_->reader_.ref();
-    }
+#if QLJS_EVENT_LOOP2_PIPE_WRITE
+  void on_pipe_write_ready(Event_Loop_Base* event_loop,
+                           Platform_File_Ref) override {
+    this->message_writer_.on_pipe_write_ready();
+    this->enable_or_disable_writer_events_as_needed(event_loop);
+  }
+  void on_pipe_write_end(Event_Loop_Base*, Platform_File_Ref) override {
+    this->message_writer_.on_pipe_write_end();
+  }
 
-    void append(string8_view data) {
-      this->process_->message_parser_.append(data);
+  // We have the same problem enabling and disabling the
+  // Non_Blocking_Pipe_Writer that the LSP server has. See
+  // HACK[Non_Blocking_Pipe_Writer-enable-disable] for details.
+  void enable_or_disable_writer_events_as_needed(Event_Loop_Base* event_loop) {
+    bool should_be_enabled = this->message_writer_.has_pending_data();
+    if (should_be_enabled) {
+      event_loop->enable_pipe_write(this->message_writer_.get_pipe_fd());
+    } else {
+      event_loop->disable_pipe_write(this->message_writer_.get_pipe_fd());
     }
-
-#if QLJS_HAVE_KQUEUE || QLJS_HAVE_POLL
-    std::optional<posix_fd_file_ref> get_pipe_write_fd() {
-      if (!this->process_->writer_.valid()) {
-        return std::nullopt;
-      }
-      return this->process_->message_writer_.get_event_fd();
-    }
+  }
 #endif
 
-#if QLJS_HAVE_KQUEUE
-    void on_pipe_write_event(const struct ::kevent& event) {
-      this->process_->message_writer_.on_poll_event(event);
-    }
-#elif QLJS_HAVE_POLL
-    void on_pipe_write_event(const ::pollfd& event) {
-      this->process_->message_writer_.on_poll_event(event);
-    }
-#endif
-
-#if QLJS_HAVE_KQUEUE
-    void on_fs_changed_kevent(const struct ::kevent&) {}
-
-    void on_fs_changed_kevents() {}
-#endif
-
-#if QLJS_HAVE_INOTIFY
-    std::optional<posix_fd_file_ref> get_inotify_fd() { return std::nullopt; }
-
-    void on_fs_changed_event(const ::pollfd&) {}
-#endif
-
-#if defined(_WIN32)
-    void on_fs_changed_event(::OVERLAPPED*, ::DWORD, ::DWORD) {}
-#endif
-
-   private:
-    lsp_server_process* process_;
-  };
-
-  explicit lsp_server_process(std::filesystem::path server_root,
-                              const benchmark_config_server& config,
-                              ::pid_t pid, platform_file reader,
-                              platform_file writer)
+  explicit LSP_Server_Process(std::filesystem::path server_root,
+                              const Benchmark_Config_Server& config,
+                              ::pid_t pid, Platform_File reader,
+                              Platform_File writer)
       : server_root_(server_root),
         initialization_options_json_(config.initialization_options_json),
         workspace_configuration_json_(config.workspace_configuration_json),
@@ -387,19 +390,26 @@ class lsp_server_process {
   bool need_files_on_disk_;
 
   ::pid_t pid_;
-  platform_file reader_;  // server -> client
-  platform_file writer_;  // client -> server
+  Platform_File reader_;  // server -> client
+  Platform_File writer_;  // client -> server
 
-  continuing_lsp_message_parser message_parser_;
-  lsp_pipe_writer message_writer_ = lsp_pipe_writer(this->writer_.ref());
-  lsp_event_loop event_loop_ = lsp_event_loop(this);
+  Continuing_LSP_Message_Parser message_parser_;
+  LSP_Pipe_Writer message_writer_ = LSP_Pipe_Writer(this->writer_.ref());
+
+  // This holds the most recently parsed message (if any).
+  //
+  // NOTE[LSP_Server_Process-message]: get_message_async calls
+  // json_parser_.parse(). This means that get_message_async's returned
+  // ::simdjson::dom::element's lifetime ends when the next call to
+  // get_message_async begins.
+  //
+  // Reusing a parser minimizes malloc/free traffic during the timed benchmark.
+  ::simdjson::dom::parser json_parser_;
 
   std::int64_t next_message_id_ = 1;
   std::int64_t text_document_sync_kind_ = TEXT_DOCUMENT_SYNC_KIND_NONE;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

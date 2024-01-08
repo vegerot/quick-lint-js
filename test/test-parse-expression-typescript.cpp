@@ -4,99 +4,198 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <quick-lint-js/cli/cli-location.h>
+#include <quick-lint-js/container/concat.h>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/parse-support.h>
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/unreachable.h>
 #include <quick-lint-js/port/warning.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <string>
 #include <string_view>
 
-using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
-using ::testing::IsEmpty;
 using namespace std::literals::string_literals;
 
 namespace quick_lint_js {
 namespace {
-class test_parse_expression_typescript : public test_parse_expression {};
+class Test_Parse_Expression_TypeScript : public Test_Parse_Expression {};
 
-TEST_F(test_parse_expression_typescript, type_annotation) {
+TEST_F(Test_Parse_Expression_TypeScript, type_annotation) {
   // These would normally appear in arrow function parameter lists.
 
   {
-    test_parser p(u8"x: Type"_sv, typescript_options);
-    expression* ast = p.parse_expression();
-    ASSERT_EQ(ast->kind(), expression_kind::type_annotated);
+    Test_Parser p(u8"x: Type"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    ASSERT_EQ(ast->kind(), Expression_Kind::Type_Annotated);
     EXPECT_EQ(summarize(ast->child_0()), "var x");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x: Type"));
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x: Type"_sv));
 
-    spy_visitor v;
-    static_cast<expression::type_annotated*>(ast)->visit_type_annotation(v);
+    Spy_Visitor v;
+    expression_cast<Expression::Type_Annotated*>(ast)->visit_type_annotation(v);
     EXPECT_THAT(v.visits, ElementsAreArray({
-                              "visit_variable_type_use",
+                              "visit_enter_type_scope",   //
+                              "visit_variable_type_use",  //
+                              "visit_exit_type_scope",    //
                           }));
     EXPECT_THAT(v.variable_uses, ElementsAreArray({u8"Type"}));
   }
 
   {
-    test_parser p(u8"{x}: Type"_sv, typescript_options);
-    expression* ast = p.parse_expression();
-    EXPECT_EQ(ast->kind(), expression_kind::type_annotated);
+    Test_Parser p(u8"{x}: Type"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(ast->kind(), Expression_Kind::Type_Annotated);
     EXPECT_EQ(summarize(ast->child_0()), "object(literal: var x)");
   }
 
   {
-    test_parser p(u8"[x]: Type"_sv, typescript_options);
-    expression* ast = p.parse_expression();
-    EXPECT_EQ(ast->kind(), expression_kind::type_annotated);
+    Test_Parser p(u8"[x]: Type"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(ast->kind(), Expression_Kind::Type_Annotated);
     EXPECT_EQ(summarize(ast->child_0()), "array(var x)");
   }
 }
 
-TEST_F(test_parse_expression_typescript,
+TEST_F(Test_Parse_Expression_TypeScript,
        conditional_colon_is_not_a_type_annotation) {
   {
-    test_parser p(u8"cond ? x: Type"_sv, typescript_options);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"cond ? x: Type"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "cond(var cond, var x, var Type)");
+  }
+
+  {
+    Test_Parser p(u8"cond ? t : param => body"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "cond(var cond, var t, arrowfunc(var param))");
+  }
+
+  {
+    Test_Parser p(u8"cond1 ? cond2 ? t2 : param => body : f1"_sv,
+                  typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast),
+              "cond(var cond1, cond(var cond2, var t2, arrowfunc(var param)), "
+              "var f1)");
+  }
+
+  {
+    Test_Parser p(u8"cond ? (t) : (<F />)"_sv, typescript_jsx_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast),
+              "cond(var cond, paren(var t), paren(jsxelement(F)))");
+  }
+
+  {
+    Test_Parser p(u8"cond ? ++t : f"_sv, typescript_jsx_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "cond(var cond, rwunary(var t), var f)");
   }
 }
 
-TEST_F(test_parse_expression_typescript, non_null_assertion) {
+TEST_F(Test_Parse_Expression_TypeScript,
+       colon_in_conditional_can_be_arrow_return_type_annotation) {
   {
-    test_parser p(u8"x!"_sv, typescript_options);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"cond ? (param): ReturnType => body : f"_sv,
+                  typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "cond(var cond, arrowfunc(var param), var f)");
+  }
+
+  {
+    Test_Parser p(u8"cond ? async (param): ReturnType => body : f"_sv,
+                  typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast),
+              "cond(var cond, asyncarrowfunc(var param), var f)");
+  }
+}
+
+TEST_F(
+    Test_Parse_Expression_TypeScript,
+    colon_in_conditional_can_be_arrow_return_type_annotation_despite_following_syntax_error) {
+  {
+    // TypeScript resolves this ambiguity as a syntax error, so we should too.
+    // TypeScript's rule seems to be that '(t2)' is not a parameter list if
+    // 'body' is followed by a ':'.
+    test_parse_and_visit_expression(
+        u8"cond1 ? cond2 ? (t2) : param => body : f1"_sv,  //
+        u8"                                         ` Diag_Missing_Colon_In_Conditional_Expression.expected_colon\n"_diag
+        u8"      ^ .question"_diag,
+        typescript_options);
+  }
+}
+
+TEST_F(
+    Test_Parse_Expression_TypeScript,
+    colon_in_conditional_true_branch_cannot_be_arrow_return_type_annotation_if_arrow_body_not_followed_by_colon) {
+  {
+    Test_Parser p(u8"cond ? (t) : param => body"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast),
+              "cond(var cond, paren(var t), arrowfunc(var param))");
+  }
+
+  {
+    // This example triggers backtracking in the parser. Ensure that the
+    // backtracking walks back any speculative visits.
+    Spy_Visitor p = test_parse_and_visit_expression(
+        u8"cond ? (t) : param => body"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_variable_declaration",       // param
+                              "visit_enter_function_scope_body",  //
+                              "visit_variable_use",               // body
+                              "visit_exit_function_scope",        //
+                              "visit_variable_use",               // cond,
+                              "visit_variable_use",               // t
+                          }));
+  }
+}
+
+TEST_F(
+    Test_Parse_Expression_TypeScript,
+    colon_in_conditional_true_branch_cannot_be_type_annotation_if_not_arrow_function) {
+  {
+    Test_Parser p(u8"cond ? (t) : f"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "cond(var cond, paren(var t), var f)");
+  }
+}
+
+TEST_F(Test_Parse_Expression_TypeScript, non_null_assertion) {
+  {
+    Test_Parser p(u8"x!"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "nonnull(var x)");
   }
 
   {
-    test_parser p(u8"f()!.someprop"_sv, typescript_options);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"f()!.someprop"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "dot(nonnull(call(var f)), someprop)");
   }
 
   {
-    test_parser p(u8"x! = y"_sv, typescript_options);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"x! = y"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "assign(nonnull(var x), var y)");
   }
 
   {
-    test_parser p(u8"async!"_sv, typescript_options);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"async!"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "nonnull(var async)");
   }
 
   {
-    test_parser p(u8"f(x!);"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(u8"f(x!);"_sv, no_diags,
+                                                   typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_variable_use",  // f
                               "visit_variable_use",  // x
@@ -105,75 +204,68 @@ TEST_F(test_parse_expression_typescript, non_null_assertion) {
   }
 
   {
-    test_parser p(u8"x! = null;"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(u8"x! = null;"_sv, no_diags,
+                                                   typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_variable_assignment",  // x
                           }));
   }
 }
 
-TEST_F(test_parse_expression_typescript,
+TEST_F(Test_Parse_Expression_TypeScript,
        non_null_assertion_does_not_allow_newline) {
   {
     // HACK(strager): We rely on the fact that parse_expression stops parsing at
     // the end of the line. "!+y" part is unparsed.
-    test_parser p(u8"x\n!+y"_sv, typescript_options);
-    expression* ast = p.parse_expression();
+    Test_Parser p(u8"x\n!+y"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
     EXPECT_EQ(summarize(ast), "var x");
   }
 }
 
-TEST_F(test_parse_expression_typescript,
+TEST_F(Test_Parse_Expression_TypeScript,
        non_null_assertion_not_allowed_in_javascript) {
-  test_parser p(u8"x!"_sv, javascript_options, capture_diags);
-  expression* ast = p.parse_expression();
+  Test_Parser p(u8"x!"_sv, javascript_options, capture_diags);
+  Expression* ast = p.parse_expression();
   EXPECT_EQ(summarize(ast), "nonnull(var x)");
-  EXPECT_THAT(
-      p.errors,
-      ElementsAreArray({
-          DIAG_TYPE_OFFSETS(
-              p.code,
-              diag_typescript_non_null_assertion_not_allowed_in_javascript,  //
-              bang, strlen(u8"x"), u8"!"),
-      }));
+  assert_diagnostics(
+      p.code, p.errors,
+      {
+          u8" ^ Diag_TypeScript_Non_Null_Assertion_Not_Allowed_In_JavaScript"_diag,
+      });
 }
 
-TEST_F(test_parse_expression_typescript,
+TEST_F(Test_Parse_Expression_TypeScript,
        as_type_assertion_not_allowed_in_javascript) {
   {
-    test_parser p(u8"x as y"_sv, javascript_options, capture_diags);
+    Test_Parser p(u8"x as y"_sv, javascript_options, capture_diags);
     EXPECT_EQ(summarize(p.parse_expression()), "as(var x)");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(
-                p.code,
-                diag_typescript_as_type_assertion_not_allowed_in_javascript,  //
-                as_keyword, strlen(u8"x "), u8"as"),
-        }));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"  ^^ Diag_TypeScript_As_Type_Assertion_Not_Allowed_In_JavaScript"_diag,
+        });
   }
 
   {
-    test_parser p(u8"{} as const"_sv, javascript_options, capture_diags);
+    Test_Parser p(u8"{} as const"_sv, javascript_options, capture_diags);
     EXPECT_EQ(summarize(p.parse_expression()), "as(object())");
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(
-                p.code,
-                diag_typescript_as_type_assertion_not_allowed_in_javascript,  //
-                as_keyword, strlen(u8"{} "), u8"as"),
-        }));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"   ^^ Diag_TypeScript_As_Type_Assertion_Not_Allowed_In_JavaScript"_diag,
+        });
   }
 }
 
-TEST_F(test_parse_expression_typescript, as_type_assertion) {
+TEST_F(Test_Parse_Expression_TypeScript, as_type_assertion) {
   {
-    test_parser p(u8"f(x as T);"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(u8"f(x as T);"_sv, no_diags,
+                                                   typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",   // as
                               "visit_variable_type_use",  // T
+                              "visit_exit_type_scope",    //
                               "visit_variable_use",       // f
                               "visit_variable_use",       // x
                           }));
@@ -181,10 +273,12 @@ TEST_F(test_parse_expression_typescript, as_type_assertion) {
   }
 
   {
-    test_parser p(u8"(lhs as T) = rhs;"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"(lhs as T) = rhs;"_sv, no_diags, typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",     // as
                               "visit_variable_type_use",    // T
+                              "visit_exit_type_scope",      //
                               "visit_variable_use",         // rhs
                               "visit_variable_assignment",  // lhs
                           }));
@@ -193,84 +287,102 @@ TEST_F(test_parse_expression_typescript, as_type_assertion) {
   }
 
   {
-    test_parser p(u8"x as y"_sv, typescript_options);
-    expression* ast = p.parse_expression();
-    ASSERT_EQ(ast->kind(), expression_kind::as_type_assertion);
+    Test_Parser p(u8"x as y"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    ASSERT_EQ(ast->kind(), Expression_Kind::As_Type_Assertion);
     EXPECT_EQ(summarize(ast->child_0()), "var x");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x as y"));
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x as y"_sv));
     EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",  // as
                               "visit_variable_type_use",
+                              "visit_exit_type_scope",  //
                           }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"y"}));
+  }
+
+  {
+    Test_Parser p(u8"x as T ? y : z"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_THAT(summarize(ast), "cond(as(var x), var y, var z)");
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",  // as
+                              "visit_variable_type_use",
+                              "visit_exit_type_scope",  //
+                          }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"T"}));
+  }
+
+  {
+    Test_Parser p(u8"x as (y)"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "as(var x)");
     EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"y"}));
   }
 }
 
-TEST_F(test_parse_expression_typescript,
-       as_type_assertion_is_not_allowed_in_function_parameter_list) {
+TEST_F(Test_Parse_Expression_TypeScript, as_cannot_have_newline_before) {
   {
-    test_parser p(u8"(x as T) => {}"_sv, typescript_options, capture_diags);
-    p.parse_and_visit_module();
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(
-                p.code,
-                diag_typescript_as_keyword_used_for_parameter_type_annotation,  //
-                as_keyword, strlen(u8"(x "), u8"as"),
-        }));
-    EXPECT_THAT(p.variable_declarations,
-                ElementsAreArray({arrow_param_decl(u8"x")}));
-  }
-
-  {
-    test_parser p(u8"([x, y, z] as T) => {}"_sv, typescript_options,
-                  capture_diags);
-    p.parse_and_visit_module();
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE(
-                diag_typescript_as_keyword_used_for_parameter_type_annotation),
-        }));
-    EXPECT_THAT(
-        p.variable_declarations,
-        ElementsAreArray({arrow_param_decl(u8"x"), arrow_param_decl(u8"y"),
-                          arrow_param_decl(u8"z")}));
-  }
-
-  {
-    test_parser p(u8"function f(x as T) {}"_sv, typescript_options,
-                  capture_diags);
-    p.parse_and_visit_module();
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(
-                p.code,
-                diag_typescript_as_keyword_used_for_parameter_type_annotation,  //
-                as_keyword, strlen(u8"function f(x "), u8"as"),
-        }));
-    EXPECT_THAT(
-        p.variable_declarations,
-        ElementsAreArray({function_decl(u8"f"), func_param_decl(u8"x")}));
-  }
-
-  {
-    test_parser p(u8"{} as const"_sv, typescript_options);
-    expression* ast = p.parse_expression();
-    ASSERT_EQ(ast->kind(), expression_kind::as_type_assertion);
-    EXPECT_EQ(summarize(ast->child_0()), "object()");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"{} as const"));
+    Spy_Visitor p = test_parse_and_visit_module(u8"f\nas(T);"_sv, no_diags,
+                                                typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_variable_use",   // f
+                              "visit_variable_use",   // as
+                              "visit_variable_use",   // T
+                              "visit_end_of_module",  //
+                          }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"f", u8"as", u8"T"}));
   }
 }
 
-TEST_F(test_parse_expression_typescript,
+TEST_F(Test_Parse_Expression_TypeScript,
+       as_type_assertion_is_not_allowed_in_function_parameter_list) {
+  {
+    Spy_Visitor p = test_parse_and_visit_module(
+        u8"(x as T) => {}"_sv,  //
+        u8"   ^^ Diag_TypeScript_As_Or_Satisfies_Used_For_Parameter_Type_Annotation"_diag,  //
+        typescript_options);
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({arrow_param_decl(u8"x"_sv)}));
+  }
+
+  {
+    Spy_Visitor p = test_parse_and_visit_module(
+        u8"([x, y, z] as T) => {}"_sv,  //
+        u8"Diag_TypeScript_As_Or_Satisfies_Used_For_Parameter_Type_Annotation"_diag,  //
+        typescript_options);
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({arrow_param_decl(u8"x"_sv),
+                                  arrow_param_decl(u8"y"_sv),
+                                  arrow_param_decl(u8"z"_sv)}));
+  }
+
+  {
+    Spy_Visitor p = test_parse_and_visit_module(
+        u8"function f(x as T) {}"_sv,  //
+        u8"             ^^ Diag_TypeScript_As_Or_Satisfies_Used_For_Parameter_Type_Annotation"_diag,  //
+        typescript_options);
+    EXPECT_THAT(
+        p.variable_declarations,
+        ElementsAreArray({func_param_decl(u8"x"_sv), function_decl(u8"f"_sv)}));
+  }
+
+  {
+    Test_Parser p(u8"{} as const"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    ASSERT_EQ(ast->kind(), Expression_Kind::As_Type_Assertion);
+    EXPECT_EQ(summarize(ast->child_0()), "object()");
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"{} as const"_sv));
+  }
+}
+
+TEST_F(Test_Parse_Expression_TypeScript,
        as_const_is_allowed_for_certain_expressions) {
-  for (const char8* expression : {
+  for (const Char8* expression : {
            u8"MyEnum.MEMBER",
            u8"'string literal'",
            u8"\"string literal\"",
            u8"`untagged template`",
+           u8"`untagged template with ${expression}`",
            u8"42",
            u8"42.0",
            u8"42n",
@@ -283,48 +395,143 @@ TEST_F(test_parse_expression_typescript,
            u8"[null, x, f()]",
            u8"{k: v, [f()]: null}",
        }) {
-    padded_string code(expression + u8" as const"s);
+    Padded_String code(expression + u8" as const"s);
     SCOPED_TRACE(code);
-    test_parser p(code.string_view(), typescript_options);
+    Test_Parser p(code.string_view(), typescript_options);
     p.parse_and_visit_expression();
   }
 }
 
-TEST_F(test_parse_expression_typescript,
+TEST_F(Test_Parse_Expression_TypeScript,
        as_const_is_disallowed_for_most_expressions) {
-  for (const char8* expression : {
-           u8"/regexp literal/",
-           u8"myVariable",
-           u8"'string' as string",
-           u8"'string' as const",
-           u8"f()",
-           u8"null",
-           u8"f`tagged template`",
+  for (String8_View expression : {
+           u8"/regexp literal/"_sv,
+           u8"myVariable"_sv,
+           u8"'string' as string"_sv,
+           u8"'string' as const"_sv,
+           u8"f()"_sv,
+           u8"null"_sv,
+           u8"f`tagged template`"_sv,
        }) {
-    padded_string code(expression + u8" as const"s);
+    Padded_String code(concat(expression, u8" as const"s));
     SCOPED_TRACE(code);
-    test_parser p(code.string_view(), typescript_options, capture_diags);
+    Test_Parser p(code.string_view(), typescript_options, capture_diags);
     p.parse_and_visit_expression();
     EXPECT_THAT(p.errors,
                 ElementsAreArray({
                     DIAG_TYPE_2_OFFSETS(
                         p.code,
-                        diag_typescript_as_const_with_non_literal_typeable,  //
+                        Diag_TypeScript_As_Const_With_Non_Literal_Typeable,  //
                         expression, 0, expression,                           //
-                        as_const, strlen(expression) + 1, u8"as const"),
+                        as_const, expression.size() + 1, u8"as const"_sv),
                 }));
   }
 
+  test_parse_and_visit_expression(
+      u8"(f()) as const"_sv,  //
+      u8" ^^^ Diag_TypeScript_As_Const_With_Non_Literal_Typeable.expression"_diag,  //
+      typescript_options);
+}
+
+TEST_F(Test_Parse_Expression_TypeScript,
+       satisfies_operator_not_allowed_in_javascript) {
   {
-    test_parser p(u8"(f()) as const", typescript_options, capture_diags);
-    p.parse_and_visit_expression();
-    EXPECT_THAT(p.errors,
-                ElementsAreArray({
-                    DIAG_TYPE_OFFSETS(
-                        p.code,
-                        diag_typescript_as_const_with_non_literal_typeable,  //
-                        expression, strlen(u8"("), u8"f()"),
-                }));
+    Test_Parser p(u8"x satisfies y"_sv, javascript_options, capture_diags);
+    EXPECT_EQ(summarize(p.parse_expression()), "satisfies(var x)");
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"  ^^^^^^^^^ Diag_TypeScript_Satisfies_Not_Allowed_In_JavaScript"_diag,
+        });
+  }
+}
+
+TEST_F(Test_Parse_Expression_TypeScript, satisfies) {
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"f(x satisfies T);"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",   // satisfies
+                              "visit_variable_type_use",  // T
+                              "visit_exit_type_scope",    //
+                              "visit_variable_use",       // f
+                              "visit_variable_use",       // x
+                          }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"T", u8"f", u8"x"}));
+  }
+
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"(lhs satisfies T) = rhs;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",     // satisfies
+                              "visit_variable_type_use",    // T
+                              "visit_exit_type_scope",      //
+                              "visit_variable_use",         // rhs
+                              "visit_variable_assignment",  // lhs
+                          }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"T", u8"rhs"}));
+    EXPECT_THAT(p.variable_assignments, ElementsAreArray({u8"lhs"}));
+  }
+
+  {
+    Test_Parser p(u8"x satisfies y"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    ASSERT_EQ(ast->kind(), Expression_Kind::Satisfies);
+    EXPECT_EQ(summarize(ast->child_0()), "var x");
+    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x satisfies y"_sv));
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",  // satisfies
+                              "visit_variable_type_use",
+                              "visit_exit_type_scope",  //
+                          }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"y"}));
+  }
+
+  {
+    Test_Parser p(u8"x satisfies T ? y : z"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_THAT(summarize(ast), "cond(satisfies(var x), var y, var z)");
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",  // satisfies
+                              "visit_variable_type_use",
+                              "visit_exit_type_scope",  //
+                          }));
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"T"}));
+  }
+
+  {
+    Test_Parser p(u8"x satisfies (y)"_sv, typescript_options);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "satisfies(var x)");
+    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"y"}));
+  }
+}
+
+TEST_F(Test_Parse_Expression_TypeScript, satisfies_cannot_have_newline_before) {
+  {
+    Spy_Visitor p = test_parse_and_visit_module(u8"f\nsatisfies(T);"_sv,
+                                                no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_variable_use",   // f
+                              "visit_variable_use",   // satisfies
+                              "visit_variable_use",   // T
+                              "visit_end_of_module",  //
+                          }));
+    EXPECT_THAT(p.variable_uses,
+                ElementsAreArray({u8"f", u8"satisfies", u8"T"}));
+  }
+}
+
+TEST_F(Test_Parse_Expression_TypeScript,
+       satisfies_is_not_allowed_in_function_parameter_list) {
+  {
+    Spy_Visitor p = test_parse_and_visit_module(
+        u8"(x satisfies T) => {}"_sv,  //
+        u8"   ^^^^^^^^^ Diag_TypeScript_As_Or_Satisfies_Used_For_Parameter_Type_Annotation"_diag,  //
+        typescript_options);
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({arrow_param_decl(u8"x"_sv)}));
   }
 }
 }

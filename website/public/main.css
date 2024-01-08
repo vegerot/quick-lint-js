@@ -25,7 +25,9 @@ video + figcaption,
 pre + figcaption {
   font-style: italic;
 }
+figure > picture > img,
 figure > img,
+figure > svg,
 figure > video {
   width: 100%;
   height: auto;
@@ -43,10 +45,10 @@ video + figcaption,
   grid-template-areas: "before after";
 }
 .side-by-side-comparison .before {
-  grid-area: "before";
+  grid-area: before;
 }
 .side-by-side-comparison .after {
-  grid-area: "after";
+  grid-area: after;
 }
 .side-by-side-comparison figure {
   margin: 0.5em;
@@ -61,11 +63,13 @@ header {
   margin-top: 1rem;
 }
 
-h1 {
+#title {
+  font-size: 2rem;
+  font-weight: bold;
   margin-top: 0;
   margin-bottom: 0;
 }
-h1 a:link {
+#title a:link {
   text-decoration: none;
 }
 
@@ -87,7 +91,7 @@ header nav.main-nav li.side-bar-only {
   display: none;
 }
 header nav.main-nav li a:link,
-header nav.main-nav li .current-page {
+header nav.main-nav li [aria-current] {
   padding: var(--nav-entry-padding);
 }
 
@@ -109,11 +113,11 @@ header nav.main-nav li li {
   --bullets-link-color: #999;
 }
 header nav.main-nav li li a:link,
-header nav.main-nav li li .current-page {
+header nav.main-nav li li [aria-current] {
   position: relative;
 }
 header nav.main-nav li li a:link:before,
-header nav.main-nav li li .current-page:before {
+header nav.main-nav li li [aria-current]:before {
   /* Vertical line */
   background-color: var(--bullets-line-color);
   bottom: 50%;
@@ -128,7 +132,7 @@ header nav.main-nav li li .current-page:before {
   width: var(--bullets-line-width);
 }
 header nav.main-nav li li a:link:after,
-header nav.main-nav li li .current-page:after {
+header nav.main-nav li li [aria-current]:after {
   /* Bullet (circle) */
   border-radius: 100%;
   content: " ";
@@ -146,11 +150,11 @@ header nav.main-nav li li .current-page:after {
 header nav.main-nav li li a:link:after {
   background-color: var(--bullets-link-color);
 }
-header nav.main-nav li li .current-page:after {
+header nav.main-nav li li [aria-current]:after {
   background-color: var(--bullets-current-color);
 }
 header nav.main-nav li li:first-child a:link:before,
-header nav.main-nav li li:first-child .current-page:before {
+header nav.main-nav li li:first-child [aria-current]:before {
   /* Extend the vertical line to the baseline of the parent nav entry. */
   top: calc(var(--nav-entry-padding) * -1);
 }
@@ -175,7 +179,7 @@ header {
   grid-template-columns: calc(var(--mascot-width) + 0.5rem) auto auto;
   grid-template-rows: auto minmax(var(--tag-line-height), auto) auto;
 }
-header > h1 {
+header > #title {
   grid-area: title;
 }
 header > .mascot {
@@ -206,7 +210,7 @@ header .mascot {
   header {
     grid-template-areas:
       "mascot title main-nav"
-      "mascot mascot main-nav"
+      "mascot title main-nav"
       "breadcrumbs breadcrumbs main-nav";
   }
   header > .tag-line {
@@ -225,10 +229,43 @@ hr {
   margin-left: 2rem;
   margin-right: 2rem;
 }
-
-main > h2:first-child {
+h1 + h2 {
+  /* Don't add a border between two headings. */
   border-top: 0;
   padding-top: 0;
+}
+
+h1 {
+  /* TODO(strager): Tweak this for better aesthetics. */
+  margin-bottom: 1.25rem;
+}
+h1 {
+  font-size: 1.5rem;
+}
+h2 {
+  font-size: 1.17rem;
+  margin-bottom: 1.17rem;
+  margin-top: 1.17rem;
+}
+h3 {
+  font-size: 1rem;
+  margin-bottom: 1.33rem;
+  margin-top: 1.33rem;
+}
+h4 {
+  font-size: 1rem;
+  margin-bottom: 1.67rem;
+  margin-top: 1.67rem;
+}
+
+main > h1:first-child,
+main > hgroup:first-child > h1:first-child {
+  margin-top: 0;
+}
+
+/* Style subtitles. */
+hgroup p {
+  font-style: italic;
 }
 
 nav.breadcrumbs ol {
@@ -345,7 +382,8 @@ ins {
 }
 
 /* Make errors stand out. */
-pre mark {
+pre mark,
+.diagnostic {
   color: unset;
   text-decoration: underline;
   background-color: #ffdddd;
@@ -354,16 +392,26 @@ pre mark {
   text-decoration-skip-ink: none;
   text-decoration-style: wavy;
 }
+pre mark:empty {
+  --svg-height: 4px;
+  background: none;
+  display: inline-block;
+  height: 1em;
+  height: calc(1lh + var(--svg-height));
+  margin-left: -2px; /* (width of SVG) / 2 */
+  position: absolute;
+  width: 6px;
+}
 pre mark:empty::before {
   color: red;
   content: url("demo/carat.svg") / "^";
   content: url("demo/carat.svg");
-  margin-left: -2px; /* (width of SVG) / 2 */
-  margin-top: 4px; /* height of SVG */
+  margin-top: var(--svg-height);
   position: absolute;
 }
 @media (prefers-color-scheme: dark) {
-  pre mark {
+  pre mark,
+  .diagnostic {
     background-color: #7a1965;
   }
 }
@@ -470,8 +518,11 @@ summary + h4 {
   display: grid;
   grid-template-areas: "linux macos windows";
 }
-.os-column-table h3 {
+.os-column-table h2 {
   margin-top: 0;
+  /* Disable default top border for <h2>. */
+  border-top: 0;
+  padding-top: 0;
 }
 .os-column-table {
   margin-bottom: 1em;
@@ -505,6 +556,9 @@ code.shell-session .long-shell-command-line {
 code.shell-session kbd::before {
   content: "$ ";
 }
+code.shell-session.windows kbd::before {
+  content: "> ";
+}
 
 /* Make keystrokes like "CTRL-S" and "RET" distinct from regular key presses. */
 kbd.keystroke {
@@ -526,6 +580,7 @@ kbd.keystroke {
   padding: 5px;
   font-size: 0.8rem;
   max-width: 300px;
+  user-select: none;
   z-index: 100;
 }
 
@@ -566,7 +621,6 @@ kbd.keystroke {
   background-color: rgb(240, 219, 79);
   border-radius: 0.5rem;
   display: inline-block;
-  font-weight: bold;
   letter-spacing: 0.75px;
   padding: 0.75rem 1.25rem 0.5em 1.25rem;
   text-decoration: none;
@@ -666,16 +720,16 @@ kbd.keystroke {
   }
 
   .side-bar-nav header nav.main-nav li a:link,
-  .side-bar-nav header nav.main-nav li .current-page {
+  .side-bar-nav header nav.main-nav li [aria-current] {
     display: block;
     text-decoration: none;
   }
 
-  .side-bar-nav header nav.main-nav li .current-page li {
+  .side-bar-nav header nav.main-nav li [aria-current] li {
     font-weight: initial;
   }
 
-  .side-bar-nav header nav.main-nav li .current-page {
+  .side-bar-nav header nav.main-nav li [aria-current] {
     font-weight: bold;
   }
 
@@ -684,7 +738,7 @@ kbd.keystroke {
   }
 
   .side-bar-nav header nav.main-nav li li a:link:after,
-  .side-bar-nav header nav.main-nav li li .current-page:after {
+  .side-bar-nav header nav.main-nav li li [aria-current]:after {
     margin-left: 0.5em;
   }
   .side-bar-nav header nav.main-nav li li {
@@ -708,8 +762,81 @@ kbd.keystroke {
     nav.main-nav
     li
     li:not(:nth-last-child(1))
-    .current-page:before {
+    [aria-current]:before {
     bottom: 0;
+  }
+}
+.show-in-mobile {
+  display: none;
+}
+#supported-editors {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  row-gap: 2em;
+  text-align: center;
+  padding: 2em;
+}
+#supported-editors .logo {
+  width: 2rem;
+  height: 2rem;
+}
+#supported-editors a {
+  background-color: rgb(240, 219, 79);
+  border-radius: 0.5rem;
+  margin: 0 0.5rem 0 0.5rem;
+  padding-bottom: 0.5rem;
+  padding-top: 0.5rem;
+  text-decoration: none;
+}
+#supported-editors a {
+  color: rgb(50, 51, 48);
+}
+@media only screen and (max-width: 43em) {
+  .hide-in-mobile {
+    display: none;
+  }
+
+  .show-in-mobile {
+    display: initial;
+  }
+  .comparison table {
+    border: 1px solid gray;
+  }
+  /*Hide call to action section*/
+  #install-section {
+    display: none;
+  }
+  #editors-support img {
+    padding-bottom: 1rem;
+  }
+}
+
+@media only screen and (max-width: 46em) {
+  .eslint-comparison {
+    border-bottom: solid 1px #aaaa;
+    grid-template-areas: "eslint" "qljs";
+    grid-template-columns: 100%;
+    grid-gap: 0;
+    padding-bottom: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .eslint-comparison figure {
+    margin-bottom: 0;
+  }
+}
+
+@media only screen and (max-width: 37em) {
+  #supported-editors {
+    font-size: small;
+  }
+}
+
+/* Scrollable container */
+@media screen and (max-width: 670px) {
+  pre {
+    overflow-x: auto;
+    max-height: 400px;
   }
 }
 

@@ -1,62 +1,103 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <quick-lint-js/container/linked-bump-allocator.h>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
-#include <quick-lint-js/fe/buffering-diag-reporter.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/buffering-diag-reporter.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/lex.h>
+#include <quick-lint-js/identifier-support.h>
 #include <type_traits>
-
-using ::testing::ElementsAre;
-using ::testing::ElementsAreArray;
 
 namespace quick_lint_js {
 namespace {
-source_code_span span_of(const padded_string& code) {
-  return source_code_span(code.data(), code.null_terminator());
-}
+TEST(Test_Buffering_Diag_Reporter, buffers_all_visits) {
+  static Padded_String let_code(u8"let"_sv);
+  static Padded_String expression_code(u8"2+2==5"_sv);
 
-TEST(test_buffering_diag_reporter, buffers_all_visits) {
-  padded_string let_code(u8"let"_sv);
-  padded_string expression_code(u8"2+2==5"_sv);
-
-  linked_bump_allocator<alignof(void*)> memory("test");
-  buffering_diag_reporter diag_reporter(&memory);
-  diag_reporter.report(diag_let_with_no_bindings{.where = span_of(let_code)});
-  diag_reporter.report(diag_expected_parenthesis_around_if_condition{
+  Linked_Bump_Allocator memory("test");
+  Buffering_Diag_Reporter diag_reporter(&memory);
+  diag_reporter.report(Diag_Let_With_No_Bindings{.where = span_of(let_code)});
+  diag_reporter.report(Diag_Expected_Parenthesis_Around_If_Condition{
       .where = span_of(expression_code),
       .token = u8'(',
   });
 
-  diag_collector collector;
-  diag_reporter.move_into(&collector);
-  EXPECT_THAT(
-      collector.errors,
-      ElementsAre(DIAG_TYPE_FIELD(diag_let_with_no_bindings, where,
-                                  source_code_span_matcher(span_of(let_code))),
-                  DIAG_TYPE_2_FIELDS(
-                      diag_expected_parenthesis_around_if_condition, where,
-                      source_code_span_matcher(span_of(expression_code)),  //
-                      token, u8'(')));
+  struct Test_Diag_Reporter : public Diag_Reporter {
+    void report_impl(Diag_Type type, void* diag) override {
+      this->report_count += 1;
+      switch (this->report_count) {
+      case 1: {
+        ASSERT_EQ(type, Diag_Type::Diag_Let_With_No_Bindings);
+        const auto* d = static_cast<const Diag_Let_With_No_Bindings*>(diag);
+        EXPECT_TRUE(same_pointers(d->where, span_of(let_code)));
+        break;
+      }
+      case 2: {
+        ASSERT_EQ(type,
+                  Diag_Type::Diag_Expected_Parenthesis_Around_If_Condition);
+        const auto* d =
+            static_cast<const Diag_Expected_Parenthesis_Around_If_Condition*>(
+                diag);
+        EXPECT_TRUE(same_pointers(d->where, span_of(expression_code)));
+        EXPECT_EQ(d->token, u8'(');
+        break;
+      }
+      default:
+        ADD_FAILURE() << "expected at most two calls to report_impl";
+        break;
+      }
+    }
+    int report_count = 0;
+  };
+  Test_Diag_Reporter test;
+  diag_reporter.move_into(&test);
+  EXPECT_EQ(test.report_count, 2);
 }
 
-TEST(test_buffering_diag_reporter, not_destructing_does_not_leak) {
+TEST(Test_Buffering_Diag_Reporter, reported_any_diagnostic_except_diag_types) {
+  static Padded_String code(u8"let"_sv);
+  Linked_Bump_Allocator memory("test");
+  Buffering_Diag_Reporter diag_reporter(&memory);
+
+  EXPECT_FALSE(diag_reporter.reported_any_diagnostic_except({
+      Diag_Type::Diag_Assignment_Before_Variable_Declaration,
+  }));
+  diag_reporter.report(Diag_Assignment_Before_Variable_Declaration{
+      .assignment = span_of(code),
+      .declaration = span_of(code),
+  });
+  EXPECT_FALSE(diag_reporter.reported_any_diagnostic_except({
+      Diag_Type::Diag_Assignment_Before_Variable_Declaration,
+  }));
+  EXPECT_TRUE(diag_reporter.reported_any_diagnostic_except({
+      Diag_Type::Diag_Assignment_To_Const_Global_Variable,
+  }));
+  EXPECT_FALSE(diag_reporter.reported_any_diagnostic_except({
+      Diag_Type::Diag_Assignment_To_Const_Global_Variable,
+      Diag_Type::Diag_Assignment_Before_Variable_Declaration,
+  }));
+  EXPECT_FALSE(diag_reporter.reported_any_diagnostic_except({
+      Diag_Type::Diag_Assignment_Before_Variable_Declaration,
+      Diag_Type::Diag_Assignment_To_Const_Global_Variable,
+  }));
+}
+
+TEST(Test_Buffering_Diag_Reporter, not_destructing_does_not_leak) {
   // This test relies on a leak checker such as Valgrind's memtest or
   // Clang's LeakSanitizer.
 
-  linked_bump_allocator<alignof(void*)> memory("test");
-  alignas(buffering_diag_reporter)
-      std::byte diag_reporter_storage[sizeof(buffering_diag_reporter)];
-  buffering_diag_reporter* diag_reporter =
-      new (&diag_reporter_storage) buffering_diag_reporter(&memory);
+  Linked_Bump_Allocator memory("test");
+  alignas(Buffering_Diag_Reporter)
+      std::byte diag_reporter_storage[sizeof(Buffering_Diag_Reporter)];
+  Buffering_Diag_Reporter* diag_reporter =
+      new (&diag_reporter_storage) Buffering_Diag_Reporter(&memory);
 
-  padded_string let_code(u8"let"_sv);
-  diag_reporter->report(diag_let_with_no_bindings{.where = span_of(let_code)});
+  Padded_String let_code(u8"let"_sv);
+  diag_reporter->report(Diag_Let_With_No_Bindings{.where = span_of(let_code)});
 
   // Destruct memory, but don't destruct *diag_reporter.
 }

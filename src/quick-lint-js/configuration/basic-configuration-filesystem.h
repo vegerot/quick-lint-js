@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONFIGURATION_BASIC_CONFIGURATION_FILESYSTEM_H
-#define QUICK_LINT_JS_CONFIGURATION_BASIC_CONFIGURATION_FILESYSTEM_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No filesystem on the web.
@@ -15,18 +14,16 @@
 #include <string>
 
 namespace quick_lint_js {
-class basic_configuration_filesystem : public configuration_filesystem {
+class Basic_Configuration_Filesystem : public Configuration_Filesystem {
  public:
-  static basic_configuration_filesystem* instance() noexcept;
+  static Basic_Configuration_Filesystem* instance();
 
-  result<canonical_path_result, canonicalize_path_io_error> canonicalize_path(
+  Result<Canonical_Path_Result, Canonicalize_Path_IO_Error> canonicalize_path(
       const std::string&) override;
-  result<padded_string, read_file_io_error> read_file(
-      const canonical_path&) override;
+  Result<Padded_String, Read_File_IO_Error> read_file(
+      const Canonical_Path&) override;
 };
 }
-
-#endif
 
 #endif
 

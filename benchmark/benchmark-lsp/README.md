@@ -6,27 +6,31 @@ This directory contains a tool which measures the speed of LSP servers.
 
 Install the LSP servers you want to benchmark:
 
+* **Biome**: Run `yarn` in the `biome/` directory.
 * **Deno**: Install [Deno][]. Ensure the `deno` command is in `$PATH`.
 * **ESLint**: Run `yarn` in the `eslint/` directory. Then, run
   `npm ci && npm run compile:server` in the `eslint/node_modules/vscode-eslint/`
   directory.
 * **Flow**: Run `yarn` in the `flow/` directory.
+* **oxlint**: Download the [Oxc Visual Studio Code extension .vsix
+  file][install-oxc] then ZIP-extract it into the `oxc/` directory.
 * **RSLint**: Install [RSLint's rslint_lsp crate][install-rslint]. Ensure the
   `rslint-lsp` command is in `$PATH`.
-* **TypeScript**: Run `yarn` in the `typescript/` directory.
+* **TypeScript**: Run `yarn` in the `typescript/` and `typescript-jsx/`
+  directories.
 * **quick-lint-js**: Install quick-lint-js. Ensure the `quick-lint-js` command
   is in `$PATH`.
 
 ## Building
 
-Install a compiler which supports C++20 coroutines (such as Clang version 12).
-[Configure quick-lint-js using CMake with
-`-DQUICK_LINT_JS_ENABLE_BENCHMARKS=YES`](../../docs/BUILDING.md). Build the
+Install a compiler which supports C++20 coroutines (such as GCC version 10 or
+Clang version 17). [Configure quick-lint-js using CMake with
+`-DQUICK_LINT_JS_ENABLE_BENCHMARKS=YES`][build-from-source]. Build the
 `quick-lint-js-benchmark-lsp-servers` target. For example, on Linux:
 
     $ mkdir build
     $ cd build
-    $ CC=clang-12 CXX=clang++-12 CXXFLAGS=-stdlib=libc++ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DQUICK_LINT_JS_ENABLE_BENCHMARKS=YES ..
+    $ CC=clang-17 CXX=clang++-17 CXXFLAGS=-stdlib=libc++ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DQUICK_LINT_JS_ENABLE_BENCHMARKS=YES ..
     $ cd ..
     $ ninja -C build quick-lint-js-benchmark-lsp-servers
 
@@ -121,4 +125,6 @@ Work (timed):
 
 [Deno]: https://deno.land/
 [Stack]: https://haskellstack.org/
+[build-from-source]: https://quick-lint-js.com/contribute/build-from-source/
+[install-oxc]: https://marketplace.visualstudio.com/items?itemName=oxc.oxc-vscode
 [install-rslint]: https://rslint.org/guide/

@@ -10,11 +10,11 @@
 #include <quick-lint-js/util/binary-writer.h>
 
 namespace quick_lint_js {
-trace_writer::trace_writer(async_byte_queue* out) : out_(out) {}
+Trace_Writer::Trace_Writer(Async_Byte_Queue* out) : out_(out) {}
 
-void trace_writer::commit() { this->out_->commit(); }
+void Trace_Writer::commit() { this->out_->commit(); }
 
-void trace_writer::write_header(const trace_context& context) {
+void Trace_Writer::write_header(const Trace_Context& context) {
   // clang-format off
   static constexpr std::uint8_t trace_header[] = {
       // CTF magic
@@ -27,60 +27,21 @@ void trace_writer::write_header(const trace_context& context) {
   // clang-format on
   this->out_->append_copy(trace_header, std::size(trace_header));
 
-  this->append_binary(8 + 1, [&](binary_writer& w) {
+  this->append_binary(8 + 1, [&](Binary_Writer& w) {
     w.u64_le(context.thread_id);
     w.u8(0x00);  // Compression mode
   });
 }
 
-void trace_writer::write_event_init(const trace_event_init& event) {
-  QLJS_ASSERT(!contains(event.version, u8'\0'));
-  this->append_binary(8 + 1, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-  });
-  this->out_->append_copy(event.version.data(), event.version.size());
+void Trace_Writer::write_utf8_string(String8_View s) {
+  this->append_binary(8, [&](Binary_Writer& w) { w.u64_le(s.size()); });
+  this->out_->append_copy(s.data(), s.size());
+}
+
+void Trace_Writer::write_utf8_zstring(String8_View s) {
+  QLJS_ASSERT(!contains(s, u8'\0'));
+  this->out_->append_copy(s.data(), s.size());
   this->out_->append_copy(u8'\0');
-}
-
-void trace_writer::write_event_lsp_client_to_server_message(
-    const trace_event_lsp_client_to_server_message& event) {
-  this->append_binary(8 + 1 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.body.size());
-  });
-  this->out_->append_copy(event.body.data(), event.body.size());
-}
-
-void trace_writer::write_event_vector_max_size_histogram_by_owner(
-    const trace_event_vector_max_size_histogram_by_owner& event) {
-  this->append_binary(8 + 1 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.histogram->size());
-  });
-  for (auto& [owner, max_size_histogram] : *event.histogram) {
-    this->out_->append_copy(owner.data(), owner.size());
-    this->out_->append_copy(u8'\0');
-    this->append_binary(
-        8 + (8 + 8) * max_size_histogram.size(),
-        [&, &max_size_histogram = max_size_histogram](binary_writer& w) {
-          w.u64_le(max_size_histogram.size());
-          for (auto& [max_size, count] : max_size_histogram) {
-            w.u64_le(max_size);
-            w.u64_le(narrow_cast<std::uint64_t>(count));
-          }
-        });
-  }
-}
-
-void trace_writer::write_event_process_id(const trace_event_process_id& event) {
-  this->append_binary(8 + 1 + 8, [&](binary_writer& w) {
-    w.u64_le(event.timestamp);
-    w.u8(event.id);
-    w.u64_le(event.process_id);
-  });
 }
 }
 

@@ -1,6 +1,8 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
+#pragma once
+
 #include <cstddef>
 #include <string_view>
 

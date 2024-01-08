@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <quick-lint-js/configuration/configuration.h>
-#include <quick-lint-js/fe/diag-reporter.h>
+#include <quick-lint-js/diag/diag-reporter.h>
 #include <quick-lint-js/fe/global-declared-variable-set.h>
 #include <quick-lint-js/fe/global-variables.h>
 #include <quick-lint-js/fe/variable-analyzer.h>
@@ -12,7 +12,7 @@
 #include <quick-lint-js/port/unreachable.h>
 #include <quick-lint-js/port/warning.h>
 #include <quick-lint-js/util/algorithm.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <simdjson.h>
 #include <vector>
 
@@ -22,32 +22,32 @@ using namespace std::literals::string_view_literals;
 
 namespace quick_lint_js {
 namespace {
-source_code_span span_of_json_value(::simdjson::ondemand::value&);
+Source_Code_Span span_of_json_value(::simdjson::ondemand::value&);
 
 // Returns false on parse error, and true otherwise.
 template <class Error>
 static bool get_bool_or_default(
     ::simdjson::simdjson_result<::simdjson::ondemand::value>&& value, bool* out,
-    bool default_value, diag_reporter*);
+    bool default_value, Diag_Reporter*);
 }
 
-configuration::configuration() { this->reset(); }
+Configuration::Configuration() { this->reset(); }
 
-const global_declared_variable_set& configuration::globals() noexcept {
+const Global_Declared_Variable_Set& Configuration::globals() {
   if (!this->did_add_globals_from_groups_) {
     this->build_globals_from_groups();
   }
   return this->globals_;
 }
 
-void configuration::reset_global_groups() {
+void Configuration::reset_global_groups() {
   for (bool& enabled : this->enabled_global_groups_) {
     enabled = false;
   }
 }
 
-bool configuration::add_global_group(string8_view group_name) {
-  if (group_name == u8"literally-anything"sv) {
+bool Configuration::add_global_group(String8_View group_name) {
+  if (group_name == u8"literally-anything"_sv) {
     this->literally_anything_global_group_enabled_ = true;
     return true;
   }
@@ -60,18 +60,18 @@ bool configuration::add_global_group(string8_view group_name) {
   return false;
 }
 
-void configuration::add_global_variable(
-    global_declared_variable global_variable) {
+void Configuration::add_global_variable(
+    Global_Declared_Variable global_variable) {
   this->remove_global_variable(global_variable.name);
   this->globals_.add_global_variable(global_variable);
 }
 
-void configuration::remove_global_variable(string8_view name) {
+void Configuration::remove_global_variable(String8_View name) {
   this->globals_to_remove_.emplace_back(name);
 }
 
-void configuration::load_from_json(padded_string_view json,
-                                   diag_reporter* reporter) {
+void Configuration::load_from_json(Padded_String_View json,
+                                   Diag_Reporter* reporter) {
   ::simdjson::ondemand::parser json_parser;
   ::simdjson::ondemand::document document;
   ::simdjson::error_code parse_error =
@@ -80,7 +80,7 @@ void configuration::load_from_json(padded_string_view json,
                    narrow_cast<std::size_t>(json.size()),
                    narrow_cast<std::size_t>(json.padded_size()))
           .get(document);
-  if (parse_error != ::simdjson::error_code::SUCCESS) {
+  if (parse_error != ::simdjson::SUCCESS) {
     this->report_json_error(json, reporter);
     return;
   }
@@ -118,7 +118,7 @@ void configuration::load_from_json(padded_string_view json,
     ::simdjson::ondemand::value v;
     if (globals.get(v) == ::simdjson::SUCCESS &&
         v.type().error() == ::simdjson::SUCCESS) {
-      reporter->report(diag_config_globals_type_mismatch{
+      reporter->report(Diag_Config_Globals_Type_Mismatch{
           .value = span_of_json_value(v),
       });
     } else {
@@ -137,20 +137,19 @@ void configuration::load_from_json(padded_string_view json,
   }
 }
 
-void configuration::reset() {
-  // TODO(strager): Make this more efficient by avoiding reallocations.
-  this->globals_ = global_declared_variable_set();
+void Configuration::reset() {
+  this->globals_.clear();
   this->globals_to_remove_.clear();
   this->did_add_globals_from_groups_ = false;
   for (bool& enabled : this->enabled_global_groups_) {
     enabled = true;
   }
   this->literally_anything_global_group_enabled_ = false;
-  this->string_allocator_.release();
+  this->allocator_.release();
 }
 
-bool configuration::load_global_groups_from_json(
-    ::simdjson::ondemand::value& global_groups_value, diag_reporter* reporter) {
+bool Configuration::load_global_groups_from_json(
+    ::simdjson::ondemand::value& global_groups_value, Diag_Reporter* reporter) {
   ::simdjson::ondemand::json_type global_groups_value_type;
   if (global_groups_value.type().get(global_groups_value_type) !=
       ::simdjson::SUCCESS) {
@@ -199,7 +198,7 @@ bool configuration::load_global_groups_from_json(
         if (global_group_value.type().error() != ::simdjson::SUCCESS) {
           return false;
         }
-        reporter->report(diag_config_global_groups_group_type_mismatch{
+        reporter->report(Diag_Config_Global_Groups_Group_Type_Mismatch{
             .group = span_of_json_value(global_group_value),
         });
         break;
@@ -215,7 +214,7 @@ bool configuration::load_global_groups_from_json(
   case ::simdjson::ondemand::json_type::number:
   case ::simdjson::ondemand::json_type::object:
   case ::simdjson::ondemand::json_type::string:
-    reporter->report(diag_config_global_groups_type_mismatch{
+    reporter->report(Diag_Config_Global_Groups_Type_Mismatch{
         .value = span_of_json_value(global_groups_value),
     });
     break;
@@ -223,15 +222,15 @@ bool configuration::load_global_groups_from_json(
   return true;
 }
 
-bool configuration::load_globals_from_json(
-    ::simdjson::ondemand::object& globals_value, diag_reporter* reporter) {
+bool Configuration::load_globals_from_json(
+    ::simdjson::ondemand::object& globals_value, Diag_Reporter* reporter) {
   for (simdjson::simdjson_result<::simdjson::ondemand::field> global_field :
        globals_value) {
     std::string_view key;
     if (global_field.unescaped_key().get(key) != ::simdjson::SUCCESS) {
       return false;
     }
-    string8_view global_name = this->save_string(key);
+    String8_View global_name = this->save_string(key);
 
     ::simdjson::ondemand::value descriptor;
     if (global_field.value().get(descriptor) != ::simdjson::SUCCESS) {
@@ -248,10 +247,11 @@ bool configuration::load_globals_from_json(
         return false;
       }
       if (descriptor_bool) {
-        add_global_variable(global_declared_variable{
+        add_global_variable(Global_Declared_Variable{
             .name = global_name,
             .is_writable = true,
             .is_shadowable = true,
+            .is_type_only = false,
         });
       } else {
         remove_global_variable(global_name);
@@ -269,20 +269,21 @@ bool configuration::load_globals_from_json(
       bool is_writable;
       bool ok = true;
       if (!get_bool_or_default<
-              diag_config_globals_descriptor_shadowable_type_mismatch>(
+              Diag_Config_Globals_Descriptor_Shadowable_Type_Mismatch>(
               descriptor_object["shadowable"], &is_shadowable, true,
               reporter)) {
         ok = false;
       }
       if (!get_bool_or_default<
-              diag_config_globals_descriptor_writable_type_mismatch>(
+              Diag_Config_Globals_Descriptor_Writable_Type_Mismatch>(
               descriptor_object["writable"], &is_writable, true, reporter)) {
         ok = false;
       }
-      this->add_global_variable(global_declared_variable{
+      this->add_global_variable(Global_Declared_Variable{
           .name = global_name,
           .is_writable = is_writable,
           .is_shadowable = is_shadowable,
+          .is_type_only = false,
       });
       if (!ok) {
         return false;
@@ -292,7 +293,7 @@ bool configuration::load_globals_from_json(
     }
 
     default:
-      reporter->report(diag_config_globals_descriptor_type_mismatch{
+      reporter->report(Diag_Config_Globals_Descriptor_Type_Mismatch{
           .descriptor = span_of_json_value(descriptor),
       });
       break;
@@ -301,36 +302,37 @@ bool configuration::load_globals_from_json(
   return true;
 }
 
-string8_view configuration::save_string(std::string_view s) {
-  string8_view s8 = to_string8_view(s);
-  char8* out_begin =
-      string_allocator_.allocate_uninitialized_array<char8>(s8.size());
-  std::uninitialized_copy(s8.begin(), s8.end(), out_begin);
-  return string8_view(out_begin, s8.size());
+String8_View Configuration::save_string(std::string_view s) {
+  String8_View s8 = to_string8_view(s);
+  // TODO(strager): Use Linked_Bump_Allocator::new_objects_copy.
+  Span<Char8> out =
+      this->allocator_.allocate_uninitialized_span<Char8>(s8.size());
+  std::uninitialized_copy(s8.begin(), s8.end(), out.data());
+  return String8_View(out.data(), narrow_cast<std::size_t>(out.size()));
 }
 
-bool configuration::should_remove_global_variable(string8_view name) {
+bool Configuration::should_remove_global_variable(String8_View name) {
   return contains(this->globals_to_remove_, name);
 }
 
-[[gnu::noinline]] void configuration::build_globals_from_groups() {
+[[gnu::noinline]] void Configuration::build_globals_from_groups() {
   QLJS_ASSERT(!this->did_add_globals_from_groups_);
 
   if (this->literally_anything_global_group_enabled_) {
     this->globals_.add_literally_everything();
   }
 
-  auto iterate_globals = [](const char8* globals, auto&& func) -> void {
-    for (const char8* it = globals; *it != '\0';) {
-      string8_view global(it);
+  auto iterate_globals = [](const Char8* globals, auto&& func) -> void {
+    for (const Char8* it = globals; *it != '\0';) {
+      String8_View global(it);
       func(global);
       it += global.size() + 1;
     }
   };
 
-  auto add_globals = [&]([[maybe_unused]] const global_group& group,
-                         const char8* group_globals, bool shadowable,
-                         bool writable,
+  auto add_globals = [&]([[maybe_unused]] const Global_Group& group,
+                         const Char8* group_globals, bool shadowable,
+                         bool writable, bool type_only,
                          std::int16_t expected_globals_count) -> void {
     if (!group_globals) {
       QLJS_ASSERT(expected_globals_count == 0);
@@ -341,12 +343,13 @@ bool configuration::should_remove_global_variable(string8_view name) {
         narrow_cast<std::size_t>(expected_globals_count),
         /*is_shadowable=*/shadowable,
         /*is_writable=*/writable);
-    iterate_globals(group_globals, [&](string8_view global) {
+    iterate_globals(group_globals, [&](String8_View global) {
       if (!this->should_remove_global_variable(global)) {
-        this->globals_.add_global_variable(global_declared_variable{
+        this->globals_.add_global_variable(Global_Declared_Variable{
             .name = global,
             .is_writable = writable,
             .is_shadowable = shadowable,
+            .is_type_only = type_only,
         });
       }
     });
@@ -354,7 +357,7 @@ bool configuration::should_remove_global_variable(string8_view name) {
 #if !(defined(NDEBUG) && NDEBUG)
     int actual_globals_count = 0;
     iterate_globals(group_globals,
-                    [&](string8_view) { actual_globals_count += 1; });
+                    [&](String8_View) { actual_globals_count += 1; });
     if (actual_globals_count != expected_globals_count) {
       std::ptrdiff_t group_index = &group - global_groups;
       // clang-format off
@@ -380,49 +383,51 @@ bool configuration::should_remove_global_variable(string8_view name) {
   for (std::size_t i = 0; i < this->enabled_global_groups_.size(); ++i) {
     bool enabled = this->enabled_global_groups_[i];
     if (enabled) {
-      const global_group& group = global_groups[i];
-      add_globals(group, group.globals, true, true, group.globals_count);
-      add_globals(group, group.non_shadowable_globals, false, true,
+      const Global_Group& group = global_groups[i];
+      add_globals(group, group.globals, true, true, false, group.globals_count);
+      add_globals(group, group.non_shadowable_globals, false, true, false,
                   group.non_shadowable_globals_count);
-      add_globals(group, group.non_writable_globals, true, false,
+      add_globals(group, group.non_writable_globals, true, false, false,
                   group.non_writable_globals_count);
+      add_globals(group, group.type_only_globals, true, false, true,
+                  group.type_only_globals_count);
     }
   }
 
   this->did_add_globals_from_groups_ = true;
 }
 
-void configuration::report_json_error(padded_string_view json,
-                                      diag_reporter* reporter) {
+void Configuration::report_json_error(Padded_String_View json,
+                                      Diag_Reporter* reporter) {
   // TODO(strager): Produce better error messages. simdjson provides no location
   // information for errors:
   // https://github.com/simdjson/simdjson/issues/237
-  reporter->report(diag_config_json_syntax_error{
-      .where = source_code_span::unit(json.data()),
+  reporter->report(Diag_Config_Json_Syntax_Error{
+      .where = Source_Code_Span::unit(json.data()),
   });
 }
 
 namespace {
-string8_view remove_trailing_json_whitespace(string8_view sv) {
+String8_View remove_trailing_json_whitespace(String8_View sv) {
   QLJS_ASSERT(!sv.empty());
   // According to RFC 8259, whitespace characters are U+0009, U+000A, U+000D,
   // and U+0020.
   std::size_t last_character_index =
-      sv.find_last_not_of(u8"\u0009\u000a\u000d\u0020"sv);
+      sv.find_last_not_of(u8"\u0009\u000a\u000d\u0020"_sv);
   QLJS_ASSERT(last_character_index != sv.npos);
   return sv.substr(0, last_character_index + 1);
 }
 
-source_code_span span_of_json_value(::simdjson::ondemand::value& value) {
-  string8_view sv = to_string8_view(value.raw_json_token());
+Source_Code_Span span_of_json_value(::simdjson::ondemand::value& value) {
+  String8_View sv = to_string8_view(value.raw_json_token());
   sv = remove_trailing_json_whitespace(sv);
-  return source_code_span(sv.data(), sv.data() + sv.size());
+  return Source_Code_Span(sv.data(), sv.data() + sv.size());
 }
 
 template <class Error>
 bool get_bool_or_default(
     ::simdjson::simdjson_result<::simdjson::ondemand::value>&& value, bool* out,
-    bool default_value, diag_reporter* reporter) {
+    bool default_value, Diag_Reporter* reporter) {
   ::simdjson::ondemand::value v;
   ::simdjson::error_code error = value.get(v);
   switch (error) {

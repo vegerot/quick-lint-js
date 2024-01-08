@@ -17,18 +17,18 @@ namespace {
 template <class Char, class Predicate>
 typename std::basic_string_view<Char>::size_type find_first_if(
     std::basic_string_view<Char> string, Predicate &&predicate) {
-  using string_view_type = std::basic_string_view<Char>;
-  using size_type = typename string_view_type::size_type;
-  for (size_type i = 0; i < string.size(); ++i) {
+  using String_View_Type = std::basic_string_view<Char>;
+  using Size_Type = typename String_View_Type::size_type;
+  for (Size_Type i = 0; i < string.size(); ++i) {
     if (predicate(string[i])) {
       return i;
     }
   }
-  return string_view_type::npos;
+  return String_View_Type::npos;
 }
 
-template <class Char, class WriteFunc>
-void write_json_escaped_string_impl(WriteFunc &&write_string,
+template <class Char, class Write_Func>
+void write_json_escaped_string_impl(Write_Func &&write_string,
                                     std::basic_string_view<Char> string) {
   for (;;) {
     auto special_character_index =
@@ -42,23 +42,23 @@ void write_json_escaped_string_impl(WriteFunc &&write_string,
     Char special_character = string[special_character_index];
     switch (special_character) {
       // clang-format off
-    case u8'\\': write_string(u8"\\\\"sv); break;
-    case u8'"':  write_string(u8"\\\""sv); break;
-    case u8'\b': write_string(u8"\\b"sv);  break;
-    case u8'\f': write_string(u8"\\f"sv);  break;
-    case u8'\n': write_string(u8"\\n"sv);  break;
-    case u8'\r': write_string(u8"\\r"sv);  break;
-    case u8'\t': write_string(u8"\\t"sv);  break;
+    case u8'\\': write_string(u8"\\\\"_sv); break;
+    case u8'"':  write_string(u8"\\\""_sv); break;
+    case u8'\b': write_string(u8"\\b"_sv);  break;
+    case u8'\f': write_string(u8"\\f"_sv);  break;
+    case u8'\n': write_string(u8"\\n"_sv);  break;
+    case u8'\r': write_string(u8"\\r"_sv);  break;
+    case u8'\t': write_string(u8"\\t"_sv);  break;
       // clang-format on
     default: {
       QLJS_ASSERT(special_character >= u8'\x00');
       QLJS_ASSERT(special_character < u8'\x20');
-      char8 buffer[6] = u8"\\u00";
-      buffer[4] = narrow_cast<char8>(
+      Char8 buffer[6] = u8"\\u00";
+      buffer[4] = narrow_cast<Char8>(
           u8'0' + ((narrow_cast<int>(special_character) & 0xf0) >> 4));
       buffer[5] =
           u8"0123456789abcdef"[narrow_cast<int>(special_character) & 0x0f];
-      write_string(string8_view(buffer, std::size(buffer)));
+      write_string(String8_View(buffer, std::size(buffer)));
       break;
     }
     }
@@ -68,20 +68,20 @@ void write_json_escaped_string_impl(WriteFunc &&write_string,
 }
 }
 
-void write_json_escaped_string(byte_buffer &output, string8_view string) {
+void write_json_escaped_string(Byte_Buffer &output, String8_View string) {
   write_json_escaped_string_impl(
-      [&](const string8_view &s) { output.append_copy(s); }, string);
+      [&](const String8_View &s) { output.append_copy(s); }, string);
 }
 
-void write_json_escaped_string(output_stream &output, string8_view string) {
+void write_json_escaped_string(Output_Stream &output, String8_View string) {
   write_json_escaped_string_impl(
-      [&](const string8_view &s) { output.append_copy(s); }, string);
+      [&](const String8_View &s) { output.append_copy(s); }, string);
 }
 
-string8 to_json_escaped_string_with_quotes(string8_view string) {
-  string8 output = u8"\"";
+String8 to_json_escaped_string_with_quotes(String8_View string) {
+  String8 output = u8"\"";
   write_json_escaped_string_impl(
-      [&](const string8_view &s) { output.append(s); }, string);
+      [&](const String8_View &s) { output.append(s); }, string);
   output.push_back(u8'"');
   return output;
 }

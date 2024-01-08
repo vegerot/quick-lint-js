@@ -6,37 +6,42 @@
 #include <cstring>
 #include <optional>
 #include <quick-lint-js/assert.h>
+#include <quick-lint-js/container/monotonic-allocator.h>
+#include <quick-lint-js/container/string-view.h>
+#include <quick-lint-js/container/vector.h>
 #include <quick-lint-js/i18n/translation.h>
 #include <quick-lint-js/port/have.h>
+#include <quick-lint-js/port/span.h>
 #include <quick-lint-js/port/warning.h>
 #include <string>
 #include <string_view>
-#include <vector>
 
 using namespace std::literals::string_view_literals;
 
 QLJS_WARNING_IGNORE_GCC("-Wuseless-cast")
 
 namespace quick_lint_js {
-translator qljs_messages;
+Translator qljs_messages;
 
 namespace {
-std::vector<std::string> split_on(const char* s, char separator) {
-  std::vector<std::string> locales;
+Span<std::string_view> split_on(const char* s, char separator,
+                                Monotonic_Allocator* allocator) {
+  Vector<std::string_view> locales("locales", allocator);
   for (;;) {
     const char* sep = std::strchr(s, separator);
     if (sep) {
-      locales.emplace_back(s, sep);
+      locales.emplace_back(make_string_view(s, sep));
       s = sep + 1;
     } else {
       locales.emplace_back(s);
       break;
     }
   }
-  return locales;
+  return locales.release_to_span();
 }
 
-std::vector<std::string> get_user_locale_preferences() {
+Span<std::string_view> get_user_locale_preferences(
+    Monotonic_Allocator* allocator) {
   // This lookup order roughly mimics GNU gettext.
 
   int category =
@@ -53,13 +58,15 @@ std::vector<std::string> get_user_locale_preferences() {
 
   const char* language_env = ::getenv("LANGUAGE");
   if (language_env && language_env[0] != '\0') {
-    return split_on(language_env, ':');
+    return split_on(language_env, ':', allocator);
   }
 
   // TODO(strager): Determine the language using macOS' and Windows' native
   // APIs. See GNU gettext's _nl_language_preferences_default.
 
-  return {locale};
+  Vector<std::string_view> locales("locales", allocator);
+  locales.push_back(locale);
+  return locales.release_to_span();
 }
 
 void initialize_locale() {
@@ -72,23 +79,26 @@ void initialize_locale() {
 
 void initialize_translations_from_environment() {
   initialize_locale();
-  if (!qljs_messages.use_messages_from_locales(get_user_locale_preferences())) {
+  Monotonic_Allocator allocator("initialize_translations_from_environment");
+  if (!qljs_messages.use_messages_from_locales(
+          get_user_locale_preferences(&allocator))) {
     qljs_messages.use_messages_from_source_code();
   }
 }
 
-void initialize_translations_from_locale(const char* locale_name) {
+void initialize_translations_from_locale(std::string_view locale_name) {
   initialize_locale();
   if (!qljs_messages.use_messages_from_locale(locale_name)) {
     qljs_messages.use_messages_from_source_code();
   }
 }
 
-void translator::use_messages_from_source_code() {
+void Translator::use_messages_from_source_code() {
+  // See NOTE[untranslated-locale-slot].
   this->locale_index_ = translation_table_locale_count;
 }
 
-bool translator::use_messages_from_locale(const char* locale_name) {
+bool Translator::use_messages_from_locale(std::string_view locale_name) {
   std::optional<int> locale_index =
       find_locale(translation_data.locale_table, locale_name);
   if (locale_index.has_value()) {
@@ -98,14 +108,14 @@ bool translator::use_messages_from_locale(const char* locale_name) {
   return false;
 }
 
-bool translator::use_messages_from_locales(
-    const std::vector<std::string>& locale_names) {
-  for (const std::string& locale : locale_names) {
-    if (locale == "C" || locale == "POSIX") {
+bool Translator::use_messages_from_locales(
+    Span<const std::string_view> locale_names) {
+  for (const std::string_view& locale : locale_names) {
+    if (locale == "C"sv || locale == "POSIX"sv) {
       // Stop seaching. C/POSIX locale takes priority. See GNU gettext.
       break;
     }
-    bool found_messages = this->use_messages_from_locale(locale.c_str());
+    bool found_messages = this->use_messages_from_locale(locale);
     if (found_messages) {
       return true;
     }
@@ -113,14 +123,13 @@ bool translator::use_messages_from_locales(
   return false;
 }
 
-const char8* translator::translate(const translatable_message& message) {
+const Char8* Translator::translate(const Translatable_Message& message) {
   // If the following assertion fails, it's likely that
-  // translation-table-generated.h is out of date. Run
-  // tools/update-translator-sources to rebuild that file.
+  // translation-table-generated.h is out of date.
   QLJS_ASSERT(message.valid());
 
   std::uint16_t mapping_index = message.translation_table_mapping_index();
-  const translation_table::mapping_entry& mapping =
+  const Translation_Table::Mapping_Entry& mapping =
       translation_data.mapping_table[mapping_index];
   std::uint32_t string_offset = mapping.string_offsets[this->locale_index_];
   if (string_offset == 0) {

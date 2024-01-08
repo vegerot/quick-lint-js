@@ -21,52 +21,6 @@ Release URL: https://github.com/google/benchmark/releases/tag/v1.6.1
 Release date: January 10, 2022
 Version: v1.6.1
 
-## boost
-
-The boost directory contains Boost, free peer-reviewed portable C++ source
-libraries.
-
-The boost directory was generated using Boost's [bcp
-tool](https://www.boost.org/doc/libs/1_76_0/tools/bcp/doc/html/index.html). To
-regenerate the boost directory, run the following commands inside a Boost
-release archive:
-
-    $ qljs_vendor=/PATH/TO/quick-lint-js/vendor/
-    $ cd /PATH/TO/BOOST/
-    $ ./bootstrap.sh
-    $ cd tools/bcp/
-    $ ../../b2
-    $ cd ../../
-    $ rm -r "${qljs_vendor}/boost/"
-    $ mkdir "${qljs_vendor}/boost/"
-    $ boost_libs="boost/container/pmr/memory_resource.hpp boost/container/pmr/polymorphic_allocator.hpp boost/container/pmr/unsynchronized_pool_resource.hpp boost/json/parse.hpp boost/json.hpp boost/json/src.hpp boost/throw_exception.hpp"
-    $ eval ./dist/bin/bcp ${boost_libs} "${qljs_vendor}/boost/"
-    $ eval ./dist/bin/bcp --report ${boost_libs} "${qljs_vendor}/boost/report.html"
-    $ cp LICENSE_1_0.txt "${qljs_vendor}/boost/"
-    $ rm -r "${qljs_vendor}/boost/usr/"
-
-Additionally, the following patches have been manually applied:
-
-* boost-static-var.patch
-
-Additionally, the following directories and files have been deleted to reduce
-storage consumption:
-
-* boost/boost/shared_ptr.hpp
-* boost/boost/smart_ptr/
-
-Copyright: various
-Download URL: https://boostorg.jfrog.io/artifactory/main/release/1.76.0/source/boost_1_76_0.tar.bz2
-Download date: June 27, 2021
-Git commit: ccb2ab3b4384a16deafaa849de509bce2b2cbada (et al)
-License file: boost/LICENSE_1_0.txt
-License type: BSL-1.0
-Location: boost
-Project URL: https://www.boost.org/
-Release URL: https://www.boost.org/users/history/version_1_76_0.html
-Release date: April 16th, 2021
-Version: 1.76.0
-
 ## googletest
 
 The googletest directory contains Google Test, a testing framework for C++
@@ -100,17 +54,24 @@ consumption:
 * mongoose/docs/
 * mongoose/src/
 
-Copyright: Copyright (c) 2004-2013 Sergey Lyubka; Copyright (c) 2013-2021 Cesanta Software Limited; All rights reserved
-Download URL: https://github.com/cesanta/mongoose/archive/refs/tags/7.8.tar.gz
-Download date: October 14, 2022
-Git commit: 0a265e79a67d7bfcdca27f2ccb98ccb474677ec6
+Additionally, the following patches have been manually applied:
+
+* mongoose-mg_print_ip_port.patch
+* mongoose-error-handling.patch
+* mongoose-windows-SO_EXCLUSIVEADDRUSE.patch
+* mongoose-windows-timeout.patch
+
+Copyright: Copyright (c) 2004-2013 Sergey Lyubka; Copyright (c) 2013-2023 Cesanta Software Limited; All rights reserved
+Download URL: https://github.com/cesanta/mongoose/archive/refs/tags/7.9.tar.gz
+Download date: March 16, 2023
+Git commit: 4236405b90e051310aadda818e21c811e404b4d8
 License file: mongoose/LICENSE
 License type: GPL-2.0-only
 Location: mongoose
 Project URL: https://mongoose.ws/
-Release URL: https://github.com/cesanta/mongoose/releases/tag/7.8
-Release date: August 28, 2022
-Version: 7.8
+Release URL: https://github.com/cesanta/mongoose/releases/tag/7.9
+Release date: January 20, 2023
+Version: 7.9
 
 ## node
 

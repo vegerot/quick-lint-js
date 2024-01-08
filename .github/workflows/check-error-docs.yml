@@ -10,13 +10,10 @@ on:
 jobs:
   check_format:
     name: check error docs
-    runs-on: ubuntu-18.04
-    container: ghcr.io/quick-lint/quick-lint-js-github-builder:v1
+    runs-on: ubuntu-latest
+    container: ghcr.io/quick-lint/quick-lint-js-github-website-builder:v5
     steps:
-      - uses: quick-lint/setup-emsdk@v7
-        with:
-          version: 2.0.4
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: C++ configure
         run: emcmake cmake -S . -B build -G Ninja
@@ -29,9 +26,9 @@ jobs:
         run: cd website && yarn install --production
 
       - name: check docs
-        run: node website/check-error-documentation.mjs
+        run: node website/tools/check-error-documentation.mjs
       - name: check diagnostics
-        run: node website/check-diagnostic-messages.mjs
+        run: node website/tools/check-diagnostic-messages.mjs
 
 # quick-lint-js finds bugs in JavaScript programs.
 # Copyright (C) 2020  Matthew Glazar

@@ -14,23 +14,31 @@ jobs:
       fail-fast: false
       matrix:
         toolchain:
-          - {runs_on: macos-12, name: "macOS Clang", CXX: clang++, CXXFLAGS: "-std=gnu++17 -O2"}
-          - {runs_on: ubuntu-18.04, name: "Linux Clang 9 libc++", CXX: clang++-9, CXXFLAGS: "-std=gnu++17 -stdlib=libc++ -O2"}
-          - {runs_on: ubuntu-latest, name: "Linux Clang 9 libstdc++", CXX: clang++-9, CXXFLAGS: "-std=gnu++17 -stdlib=libstdc++ -O2"}
-          - {runs_on: ubuntu-latest, name: "Linux GCC 8", CXX: g++-8, CXXFLAGS: "-std=gnu++17 -O2"}
+          - {runs_on: macos-12, name: "macOS"}
+          - {runs_on: ubuntu-latest, name: "Linux", "ghcr.io/quick-lint/quick-lint-js-github-gcc:v1"}
     runs-on: ${{ matrix.toolchain.runs_on }}
-    container: ${{ fromJSON('["", "ghcr.io/quick-lint/quick-lint-js-github-builder:v1"]')[matrix.toolchain.runs_on == 'ubuntu-latest'] }}
-    env:
-      CXX: ${{ matrix.toolchain.CXX }}
-      CXXFLAGS: ${{ matrix.toolchain.CXXFLAGS }}
+    container: ${{ matrix.toolchain.container }}
 
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: build
-        # Keep in sync with "quick build" in docs/BUILDING.md.
-        run: '"${CXX}" ${CXXFLAGS} -o quick-lint-js -std=gnu++17 -I src -I vendor/boost -I vendor/simdjson/include -I vendor/simdjson/src -D_LIBCPP_HIDE_FROM_ABI_PER_TU_BY_DEFAULT=1 -D_LIBCPP_INLINE_VISIBILITY="__attribute__((internal_linkage))" src/quick-lint-js/*.cpp src/quick-lint-js/*/*.cpp vendor/boost/libs/container/src/*.cpp vendor/boost/libs/container/src/alloc_lib.c vendor/simdjson/src/simdjson.cpp -pthread'
+        # Keep in sync with "single-command build" in website/public/contribute/build-from-source/.
+        run: 'c++ -o quick-lint-js -std=gnu++17 -I src -I vendor/simdjson/include -I vendor/simdjson/src -D_LIBCPP_HIDE_FROM_ABI_PER_TU_BY_DEFAULT=1 -D_LIBCPP_INLINE_VISIBILITY="__attribute__((internal_linkage))" src/quick-lint-js/*.cpp src/quick-lint-js/*/*.cpp vendor/simdjson/src/simdjson.cpp -pthread'
+
+      - name: test
+        run: |
+          printf 'const x = 3;\nconst x = 4;\n' >errors.js
+          (
+            set +e
+            ./quick-lint-js errors.js
+            echo "STATUS=$?"
+          ) >output.txt 2>&1
+          cat output.txt
+
+          grep E0034 output.txt
+          grep STATUS=1 output.txt
 
 # quick-lint-js finds bugs in JavaScript programs.
 # Copyright (C) 2020  Matthew Glazar

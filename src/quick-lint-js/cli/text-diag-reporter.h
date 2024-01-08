@@ -1,16 +1,15 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CLI_TEXT_DIAG_REPORTER_H
-#define QUICK_LINT_JS_CLI_TEXT_DIAG_REPORTER_H
+#pragma once
 
 #include <optional>
 #include <quick-lint-js/cli/cli-location.h>
 #include <quick-lint-js/cli/options.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diag-reporter.h>
-#include <quick-lint-js/fe/diagnostic-formatter.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diag-reporter.h>
+#include <quick-lint-js/diag/diagnostic-formatter.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/fe/token.h>
@@ -18,47 +17,45 @@
 #include <quick-lint-js/port/char8.h>
 
 namespace quick_lint_js {
-class text_diag_formatter;
+class Text_Diag_Formatter;
 
-class text_diag_reporter final : public diag_reporter {
+class Text_Diag_Reporter final : public Diag_Reporter {
  public:
-  explicit text_diag_reporter(translator, output_stream *output,
+  explicit Text_Diag_Reporter(Translator, Output_Stream *output,
                               bool escape_errors);
 
-  void set_source(padded_string_view input, const char *file_name);
+  void set_source(Padded_String_View input, const char *file_name);
 
-  void report_impl(diag_type type, void *diag) override;
+  void report_impl(Diag_Type type, void *diag) override;
 
  private:
-  output_stream &output_;
-  translator translator_;
-  std::optional<cli_locator> locator_;
+  Output_Stream &output_;
+  Translator translator_;
+  std::optional<CLI_Locator> locator_;
   const char *file_path_;
   bool format_escape_errors_;
 };
 
-class text_diag_formatter : public diagnostic_formatter<text_diag_formatter> {
+class Text_Diag_Formatter : public Diagnostic_Formatter<Text_Diag_Formatter> {
  public:
-  explicit text_diag_formatter(translator, output_stream *output,
-                               const char *file_path, cli_locator &locator,
+  explicit Text_Diag_Formatter(Translator, Output_Stream *output,
+                               const char *file_path, CLI_Locator &locator,
                                bool format_escape_errors);
 
-  void write_before_message(std::string_view code, diagnostic_severity,
-                            const source_code_span &origin);
-  void write_message_part(std::string_view code, diagnostic_severity,
-                          string8_view);
-  void write_after_message(std::string_view code, diagnostic_severity,
-                           const source_code_span &origin);
+  void write_before_message(std::string_view code, Diagnostic_Severity,
+                            const Source_Code_Span &origin);
+  void write_message_part(std::string_view code, Diagnostic_Severity,
+                          String8_View);
+  void write_after_message(std::string_view code, Diagnostic_Severity,
+                           const Source_Code_Span &origin);
 
  private:
-  output_stream &output_;
+  Output_Stream &output_;
   const char *file_path_;
-  cli_locator &locator_;
+  CLI_Locator &locator_;
   bool format_escape_errors_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

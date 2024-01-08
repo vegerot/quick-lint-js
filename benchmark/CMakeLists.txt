@@ -1,7 +1,7 @@
 # Copyright (C) 2020  Matthew "strager" Glazar
 # See end of file for extended copyright information.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
 include(QuickLintJSTarget)
 
 add_subdirectory(benchmark-lsp)
@@ -36,10 +36,6 @@ quick_lint_js_add_benchmark_executable(
   benchmark-configuration-loader.cpp
 )
 quick_lint_js_add_benchmark_executable(
-  quick-lint-js-benchmark-document
-  benchmark-document.cpp
-)
-quick_lint_js_add_benchmark_executable(
   quick-lint-js-benchmark-lex
   benchmark-lex.cpp
 )
@@ -50,6 +46,10 @@ quick_lint_js_add_benchmark_executable(
 quick_lint_js_add_benchmark_executable(
   quick-lint-js-benchmark-lsp
   benchmark-lsp.cpp
+)
+quick_lint_js_add_benchmark_executable(
+  quick-lint-js-benchmark-lsp-document-text
+  benchmark-lsp-document-text.cpp
 )
 quick_lint_js_add_benchmark_executable(
   quick-lint-js-benchmark-lsp-location

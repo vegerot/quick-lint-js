@@ -9,7 +9,7 @@
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/parse-support.h>
@@ -19,19 +19,18 @@
 #include <string_view>
 #include <vector>
 
-using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
-using ::testing::IsEmpty;
-using ::testing::UnorderedElementsAre;
 
 namespace quick_lint_js {
 namespace {
-class test_parse_typescript : public test_parse_expression {};
+class Test_Parse_TypeScript : public Test_Parse_Expression {};
 
-TEST_F(test_parse_typescript, type_annotation_in_expression_is_an_error) {
+TEST_F(Test_Parse_TypeScript, type_annotation_in_expression_is_an_error) {
   {
-    test_parser p(u8"x = myVar: Type;"_sv, typescript_options, capture_diags);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"x = myVar: Type;"_sv,                                            //
+        u8"         ^ Diag_TypeScript_Type_Annotation_In_Expression"_diag,  //
+        typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_variable_use",         // myVar
                               "visit_variable_assignment",  // x
@@ -39,159 +38,58 @@ TEST_F(test_parse_typescript, type_annotation_in_expression_is_an_error) {
         << "visit_variable_type_use for Type should not happen because it "
            "might produce spurious warnings about undeclared types";
     EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"myVar"}));
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code,
-                              diag_typescript_type_annotation_in_expression,  //
-                              type_colon, strlen(u8"x = myVar"), u8":"),
-        }));
   }
 }
 
-TEST_F(test_parse_typescript, type_alias) {
+TEST_F(Test_Parse_TypeScript, warn_on_mistyped_strict_inequality_operator) {
   {
-    test_parser p(u8"type T = U;"_sv, typescript_options);
-    p.parse_and_visit_statement();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // T
-                              "visit_enter_type_alias_scope",  // T
-                              "visit_variable_type_use",       // U
-                              "visit_exit_type_alias_scope",   // T
-                          }));
-    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"U"}));
-    EXPECT_THAT(p.variable_declarations,
-                ElementsAreArray({type_alias_decl(u8"T")}));
+    Test_Parser p(u8"x! == y"_sv, typescript_options, capture_diags);
+    Expression* ast = p.parse_expression();
+    EXPECT_EQ(summarize(ast), "binary(nonnull(var x), var y)");
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            u8"  ^ Diag_Bang_Equal_Equal_Interpreted_As_Non_Null_Assertion.unexpected_space\n"_diag
+            u8" ^ .bang"_diag,
+        });
   }
-
-  {
-    test_parser p(u8"type MyAlias<T> = U;"_sv, typescript_options);
-    p.parse_and_visit_statement();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // MyAlias
-                              "visit_enter_type_alias_scope",  // MyAlias
-                              "visit_variable_declaration",    // T
-                              "visit_variable_type_use",       // U
-                              "visit_exit_type_alias_scope",   // MyAlias
-                          }));
-    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"U"}));
-    EXPECT_THAT(p.variable_declarations,
-                ElementsAreArray(
-                    {type_alias_decl(u8"MyAlias"), generic_param_decl(u8"T")}));
-  }
+  test_parse_and_visit_statement(
+      u8"if (length + 1! == constraints.getMaxLength()) {}"_sv,  //
+      u8"               ^ Diag_Bang_Equal_Equal_Interpreted_As_Non_Null_Assertion.unexpected_space"_diag,  //
+      typescript_options);
+  test_parse_and_visit_statement(
+      u8"if (typeof diagnostic.code! == 'undefined') {}"_sv,  //
+      u8"                           ^ Diag_Bang_Equal_Equal_Interpreted_As_Non_Null_Assertion.unexpected_space"_diag,  //
+      typescript_options);
 }
 
-TEST_F(test_parse_typescript, type_alias_requires_semicolon_or_asi) {
-  {
-    test_parser p(u8"type T = U"_sv, typescript_options);
-    p.parse_and_visit_statement();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // T
-                              "visit_enter_type_alias_scope",  // T
-                              "visit_variable_type_use",       // U
-                              "visit_exit_type_alias_scope",   // T
-                          }));
-  }
-
-  {
-    test_parser p(u8"type T = U\ntype V = W;"_sv, typescript_options);
-    p.parse_and_visit_module();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // T
-                              "visit_enter_type_alias_scope",  // T
-                              "visit_variable_type_use",       // U
-                              "visit_exit_type_alias_scope",   // T
-                              "visit_variable_declaration",    // V
-                              "visit_enter_type_alias_scope",  // V
-                              "visit_variable_type_use",       // W
-                              "visit_exit_type_alias_scope",   // V
-                              "visit_end_of_module",
-                          }));
-  }
-
-  {
-    test_parser p(u8"type T = U type V = W;"_sv, typescript_options,
-                  capture_diags);
-    p.parse_and_visit_module();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // T
-                              "visit_enter_type_alias_scope",  // T
-                              "visit_variable_type_use",       // U
-                              "visit_exit_type_alias_scope",   // T
-                              "visit_variable_declaration",    // V
-                              "visit_enter_type_alias_scope",  // V
-                              "visit_variable_type_use",       // W
-                              "visit_exit_type_alias_scope",   // V
-                              "visit_end_of_module",
-                          }));
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code,
-                              diag_missing_semicolon_after_statement,  //
-                              where, strlen(u8"type T = U"), u8""),
-        }));
-  }
+TEST_F(Test_Parse_TypeScript,
+       mistyped_strict_inequality_operator_is_suppressable) {
+  test_parse_and_visit_statement(u8"(x!) == y"_sv, no_diags,
+                                 typescript_options);
+  test_parse_and_visit_statement(u8"x! /**/ == y"_sv, no_diags,
+                                 typescript_options);
+  test_parse_and_visit_statement(u8"x!\n== y"_sv, no_diags, typescript_options);
 }
 
-TEST_F(test_parse_typescript,
-       type_alias_can_be_named_certain_contextual_keywords) {
-  for (string8 name :
-       dirty_set<string8>{u8"await"} |
-           (contextual_keywords - typescript_builtin_type_keywords -
-            typescript_special_type_keywords -
-            dirty_set<string8>{
-                u8"let",
-                u8"static",
-                u8"yield",
-            })) {
-    test_parser p(concat(u8"type ", name, u8" = T;"), typescript_options);
-    SCOPED_TRACE(p.code);
-    p.parse_and_visit_statement();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // (name)
-                              "visit_enter_type_alias_scope",  // (name)
-                              "visit_variable_type_use",       // T
-                              "visit_exit_type_alias_scope",   // (name)
-                          }));
-    EXPECT_THAT(p.variable_declarations,
-                ElementsAreArray({type_alias_decl(name)}));
-  }
+TEST_F(Test_Parse_TypeScript, unicode_next_line_is_whitespace) {
+  Spy_Visitor v = test_parse_and_visit_statement(u8"x+\u0085+y;"_sv, no_diags,
+                                                 typescript_options);
+  EXPECT_THAT(v.variable_uses, ElementsAreArray({u8"x"_sv, u8"y"_sv}));
 }
 
-TEST_F(test_parse_typescript,
-       type_alias_cannot_have_newline_after_type_keyword) {
-  {
-    test_parser p(u8"type\nT = U;"_sv, typescript_options);
-    p.parse_and_visit_module();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_use",         // type
-                              "visit_variable_use",         // U
-                              "visit_variable_assignment",  // T
-                              "visit_end_of_module",
-                          }));
-    EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"type", u8"U"}));
-  }
-}
-
-TEST_F(test_parse_typescript, type_alias_not_allowed_in_javascript) {
-  {
-    test_parser p(u8"type T = U;"_sv, javascript_options, capture_diags);
-    p.parse_and_visit_statement();
-    EXPECT_THAT(p.visits, ElementsAreArray({
-                              "visit_variable_declaration",    // T
-                              "visit_enter_type_alias_scope",  // (name)
-                              "visit_variable_type_use",       // U
-                              "visit_exit_type_alias_scope",   // (name)
-                          }));
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(
-                p.code,
-                diag_typescript_type_alias_not_allowed_in_javascript,  //
-                type_keyword, 0, u8"type"),
-        }));
+// These examples used to crash with assertion failures.
+TEST_F(Test_Parse_TypeScript, no_crash) {
+  for (String8_View code : {
+           u8"export declare:"_sv,
+           u8"export declare export"_sv,
+           u8"export declare()"_sv,
+       }) {
+    Spy_Visitor v;
+    Padded_String code_string(code);
+    Parser p(&code_string, &v, typescript_options);
+    // Should not crash:
+    p.parse_and_visit_module_catching_fatal_parse_errors(v);
   }
 }
 }

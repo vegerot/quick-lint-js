@@ -2,8 +2,7 @@
 // Copyright (c) 2014-2020, Arm Limited.
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_PORT_SIMD_NEON_ARM_H
-#define QUICK_LINT_JS_PORT_SIMD_NEON_ARM_H
+#pragma once
 
 #include <cstdint>
 #include <quick-lint-js/port/attribute.h>
@@ -19,11 +18,10 @@
 
 namespace quick_lint_js {
 #if QLJS_HAVE_ARM_NEON_A64
-QLJS_FORCE_INLINE inline int bool_vector_16_neon::find_first_false() const
-    noexcept {
+QLJS_FORCE_INLINE inline int Bool_Vector_16_NEON::find_first_false() const {
   // You might expect a magic pattern to look like the following:
   //
-  //   { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x08, [repeat] }
+  //   { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, [repeat] }
   //
   // However, the above magic pattern requires mixing cells 3 times
   // (16x8 -> 8x16 -> 4x32 -> 2x64). Our magic pattern requires mixing cells
@@ -67,15 +65,13 @@ QLJS_FORCE_INLINE inline int bool_vector_16_neon::find_first_false() const
   return countr_zero(mask) / 2;
 }
 #elif QLJS_HAVE_ARM_NEON
-QLJS_FORCE_INLINE inline int bool_vector_16_neon::find_first_false() const
-    noexcept {
+QLJS_FORCE_INLINE inline int Bool_Vector_16_NEON::find_first_false() const {
   return countr_one(this->mask());
 }
 #endif
 
 #if QLJS_HAVE_ARM_NEON
-QLJS_FORCE_INLINE inline std::uint32_t bool_vector_16_neon::mask() const
-    noexcept {
+QLJS_FORCE_INLINE inline std::uint32_t Bool_Vector_16_NEON::mask() const {
   // Algorithm derived from sse2neon's _mm_movemask_epi8 function:
   // https://github.com/DLTcollab/sse2neon/blob/814935c9ba06f68e9549272dbf5df0db8dab2a00/sse2neon.h#L4752-L4830
   // clang-format off
@@ -83,14 +79,12 @@ QLJS_FORCE_INLINE inline std::uint32_t bool_vector_16_neon::mask() const
   ::uint32x4_t paired16  = ::vreinterpretq_u32_u16(vsraq_n_u16(high_bits, high_bits,  8 - 1));
   ::uint64x2_t paired32  = ::vreinterpretq_u64_u32(vsraq_n_u32(paired16,  paired16,  16 - 2));
   ::uint8x16_t paired64  = ::vreinterpretq_u8_u64 (vsraq_n_u64(paired32,  paired32,  32 - 4));
-  // clang-format on
   return static_cast<std::uint32_t>(vgetq_lane_u8(paired64, 0)) |
-         (static_cast<std::uint32_t>(vgetq_lane_u8(paired64, 8)) << 8);
+        (static_cast<std::uint32_t>(vgetq_lane_u8(paired64, 8)) << 8);
+  // clang-format on
 }
 #endif
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

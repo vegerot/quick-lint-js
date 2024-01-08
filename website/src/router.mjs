@@ -2,15 +2,30 @@
 // See end of file for extended copyright information.
 
 import ejs from "ejs";
-import fs from "fs";
-import path from "path";
-import url from "url";
+import fs from "node:fs";
+import path from "node:path";
+import url from "node:url";
 import { getQuickLintJSVersionInfoAsync } from "./qljs-version.mjs";
 import { makeRelativeURI } from "./uri.mjs";
+import { stripHTMLFrontMatter } from "./front-matter.mjs";
 
 export async function renderEJSFileAsync(ejsFilePath, { currentURI }) {
   ejsFilePath = path.resolve(ejsFilePath);
   let ejsHTML = await fs.promises.readFile(ejsFilePath, "utf-8");
+
+  let stripResult;
+  try {
+    stripResult = stripHTMLFrontMatter(ejsHTML);
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      throw new SyntaxError(
+        `failed to parse front matter of ${ejsFilePath}: ${e}`
+      );
+    }
+    throw e;
+  }
+  ejsHTML = stripResult.strippedHTML;
+  let frontMatterData = stripResult.data;
 
   let state = {
     cwd: path.dirname(ejsFilePath),
@@ -45,6 +60,7 @@ export async function renderEJSFileAsync(ejsFilePath, { currentURI }) {
       _state: state,
       currentURI: currentURI,
       absoluteFilePath: absoluteFilePath,
+      meta: frontMatterData,
       importFileAsync: async (pathToImport) => {
         return await import(url.pathToFileURL(absoluteFilePath(pathToImport)));
       },

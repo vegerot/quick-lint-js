@@ -3,17 +3,17 @@
 
 #include <benchmark/benchmark.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diag-reporter.h>
+#include <quick-lint-js/diag/diag-reporter.h>
 #include <quick-lint-js/fe/lex.h>
 #include <quick-lint-js/port/char8.h>
 
 namespace quick_lint_js {
 namespace {
-void benchmark_lex(::benchmark::State &state, string8_view raw_source) {
-  padded_string source(raw_source);
+void benchmark_lex(::benchmark::State &state, String8_View raw_source) {
+  Padded_String source(raw_source);
   for (auto _ : state) {
-    lexer l(&source, &null_diag_reporter::instance);
-    while (l.peek().type != token_type::end_of_file) {
+    Lexer l(&source, &Null_Diag_Reporter::instance);
+    while (l.peek().type != Token_Type::end_of_file) {
       l.skip();
     }
     ::benchmark::DoNotOptimize(l.peek().type);
@@ -174,8 +174,8 @@ function buildFragment( elems, context, scripts, selection, ignored ) {
 			// Add nodes directly
 			if ( toType( elem ) === "object" ) {
 )"_sv);
-}  // namespace
-}  // namespace quick_lint_js
+}
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

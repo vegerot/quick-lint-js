@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_SPY_VISITOR_H
-#define QUICK_LINT_JS_SPY_VISITOR_H
+#pragma once
 
 #include <iosfwd>
 #include <optional>
@@ -16,154 +15,225 @@
 #include <vector>
 
 namespace quick_lint_js {
-struct visited_variable_declaration {
-  string8 name;
-  variable_kind kind;
-  variable_init_kind init_kind;
+struct Visited_Variable_Declaration {
+  String8 name;
+  Variable_Kind kind;
+  Variable_Declaration_Flags flags;
 
-  bool operator==(const visited_variable_declaration &other) const {
+  bool operator==(const Visited_Variable_Declaration &other) const {
     return this->name == other.name && this->kind == other.kind &&
-           this->init_kind == other.init_kind;
+           this->flags == other.flags;
   }
 
-  bool operator!=(const visited_variable_declaration &other) const {
+  bool operator!=(const Visited_Variable_Declaration &other) const {
     return !(*this == other);
   }
 };
 
 // An function/method parameter. Not an arrow function parameter.
-inline visited_variable_declaration arrow_param_decl(string8_view name) {
-  return visited_variable_declaration{string8(name),
-                                      variable_kind::_arrow_parameter,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration arrow_param_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_arrow_parameter,
+                                      Variable_Declaration_Flags::none};
 }
 
-inline visited_variable_declaration catch_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_catch,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration catch_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_catch,
+                                      Variable_Declaration_Flags::none};
 }
 
-inline visited_variable_declaration class_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_class,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration class_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_class,
+                                      Variable_Declaration_Flags::none};
 }
 
-// A variable declared with 'const' with an initializer. Example: const x =
-// null;
-inline visited_variable_declaration const_init_decl(string8_view name) {
-  return visited_variable_declaration{
-      string8(name), variable_kind::_const,
-      variable_init_kind::initialized_with_equals};
+// A variable declared with 'const' with an initializer.
+// Example: const x = null;
+inline Visited_Variable_Declaration const_init_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_const,
+      Variable_Declaration_Flags::initialized_with_equals};
 }
 
 // A variable declared with 'const' without an initializer.
 // Example: for (const x of []) {}
-inline visited_variable_declaration const_noinit_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_const,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration const_noinit_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_const,
+                                      Variable_Declaration_Flags::none};
 }
 
-inline visited_variable_declaration enum_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_enum,
-                                      variable_init_kind::normal};
+// A variable declared with 'const' with an initializer in the head of a 'for'
+// loop.
+// Example: for (const length = xs.length; i < length; ++i);
+inline Visited_Variable_Declaration const_init_for_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_const,
+      Variable_Declaration_Flags::inside_for_loop_head_initialized_with_equals};
 }
 
-inline visited_variable_declaration function_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_function,
-                                      variable_init_kind::normal};
+// A variable declared with 'const' without an initializer in the head of a
+// 'for' loop.
+// Example: for (const x of xs);
+inline Visited_Variable_Declaration const_noinit_for_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_const,
+      Variable_Declaration_Flags::inside_for_loop_head};
+}
+
+inline Visited_Variable_Declaration enum_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_enum,
+                                      Variable_Declaration_Flags::none};
+}
+
+inline Visited_Variable_Declaration function_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_function,
+                                      Variable_Declaration_Flags::none};
 }
 
 // An function/method parameter. Not an arrow function parameter.
-inline visited_variable_declaration func_param_decl(string8_view name) {
-  return visited_variable_declaration{string8(name),
-                                      variable_kind::_function_parameter,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration func_param_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_function_parameter,
+                                      Variable_Declaration_Flags::none};
 }
 
 // An function parameter in a TypeScript type.
-inline visited_variable_declaration func_type_param_decl(string8_view name) {
-  return visited_variable_declaration{string8(name),
-                                      variable_kind::_function_type_parameter,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration func_type_param_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_function_type_parameter,
+                                      Variable_Declaration_Flags::none};
 }
 
 // A TypeScript namespace or module alias. Example: import A = B;
-inline visited_variable_declaration import_alias_decl(string8_view name) {
-  return visited_variable_declaration{
-      string8(name), variable_kind::_import_alias, variable_init_kind::normal};
+inline Visited_Variable_Declaration import_alias_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_import_alias,
+                                      Variable_Declaration_Flags::none};
 }
 
-inline visited_variable_declaration import_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_import,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration import_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_import,
+                                      Variable_Declaration_Flags::none};
 }
 
-inline visited_variable_declaration import_type_decl(string8_view name) {
-  return visited_variable_declaration{
-      string8(name), variable_kind::_import_type, variable_init_kind::normal};
+inline Visited_Variable_Declaration import_type_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_import_type,
+                                      Variable_Declaration_Flags::none};
 }
 
 // A parameter in a TypeScript index signature.
 //
 // Example: [key: KeyType]: ValueType  // key is an index signature parameter.
-inline visited_variable_declaration index_signature_param_decl(
-    string8_view name) {
-  return visited_variable_declaration{string8(name),
-                                      variable_kind::_index_signature_parameter,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration index_signature_param_decl(
+    String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_index_signature_parameter,
+                                      Variable_Declaration_Flags::none};
 }
 
-inline visited_variable_declaration interface_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_interface,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration infer_type_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_infer_type,
+                                      Variable_Declaration_Flags::none};
+}
+
+inline Visited_Variable_Declaration interface_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_interface,
+                                      Variable_Declaration_Flags::none};
 }
 
 // A variable declared with 'let' with an initializer. Example: let x = null;
-inline visited_variable_declaration let_init_decl(string8_view name) {
-  return visited_variable_declaration{
-      string8(name), variable_kind::_let,
-      variable_init_kind::initialized_with_equals};
+inline Visited_Variable_Declaration let_init_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_let,
+      Variable_Declaration_Flags::initialized_with_equals};
 }
 
 // A variable declared with 'let' without an initializer. Example: let x;
-inline visited_variable_declaration let_noinit_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_let,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration let_noinit_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_let,
+                                      Variable_Declaration_Flags::none};
 }
 
-// A TypeScript namespace (declared with the 'namespace' keyword).
-inline visited_variable_declaration namespace_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_namespace,
-                                      variable_init_kind::normal};
+// A variable declared with 'let' with an initializer in the head of a 'for'
+// loop.
+// Example: for (let x = 0; x < 10; ++x);
+inline Visited_Variable_Declaration let_init_for_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_let,
+      Variable_Declaration_Flags::inside_for_loop_head_initialized_with_equals};
+}
+
+// A variable declared with 'let' without an initializer in the head of a 'for'
+// loop.
+// Example: for (let x of xs);
+inline Visited_Variable_Declaration let_noinit_for_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_let,
+      Variable_Declaration_Flags::inside_for_loop_head};
+}
+
+// A TypeScript namespace (declared with the 'module' or 'namespace' keyword)
+// for which the TypeScript compiler generates JavaScript code.
+inline Visited_Variable_Declaration non_empty_namespace_decl(
+    String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_namespace,
+      Variable_Declaration_Flags::non_empty_namespace};
+}
+
+// A TypeScript namespace for which the TypeScript compiler does not generate
+// any JavaScript code.
+inline Visited_Variable_Declaration empty_namespace_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_namespace,
+                                      Variable_Declaration_Flags::none};
 }
 
 // A TypeScript generic function parameter.
-inline visited_variable_declaration generic_param_decl(string8_view name) {
-  return visited_variable_declaration{string8(name),
-                                      variable_kind::_generic_parameter,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration generic_param_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name),
+                                      Variable_Kind::_generic_parameter,
+                                      Variable_Declaration_Flags::none};
 }
 
 // A TypeScript type alias. Example: type T = number;
-inline visited_variable_declaration type_alias_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_type_alias,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration type_alias_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_type_alias,
+                                      Variable_Declaration_Flags::none};
 }
 
 // A variable declared with 'var' with an initializer. Example: var x = null;
-inline visited_variable_declaration var_init_decl(string8_view name) {
-  return visited_variable_declaration{
-      string8(name), variable_kind::_var,
-      variable_init_kind::initialized_with_equals};
+inline Visited_Variable_Declaration var_init_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_var,
+      Variable_Declaration_Flags::initialized_with_equals};
 }
 
 // A variable declared with 'var' without an initializer. Example: var x;
-inline visited_variable_declaration var_noinit_decl(string8_view name) {
-  return visited_variable_declaration{string8(name), variable_kind::_var,
-                                      variable_init_kind::normal};
+inline Visited_Variable_Declaration var_noinit_decl(String8_View name) {
+  return Visited_Variable_Declaration{String8(name), Variable_Kind::_var,
+                                      Variable_Declaration_Flags::none};
 }
 
-struct parse_visit_collector : public parse_visitor_base {
+// A variable declared with 'var' with an initializer in the head of a 'for'
+// loop.
+// Example: for (var length = xs.length; i < length; ++i);
+inline Visited_Variable_Declaration var_init_for_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_var,
+      Variable_Declaration_Flags::inside_for_loop_head_initialized_with_equals};
+}
+
+// A variable declared with 'var' without an initializer in the head of a
+// 'for' loop.
+// Example: for (var x of xs);
+inline Visited_Variable_Declaration var_noinit_for_decl(String8_View name) {
+  return Visited_Variable_Declaration{
+      String8(name), Variable_Kind::_var,
+      Variable_Declaration_Flags::inside_for_loop_head};
+}
+
+struct Parse_Visit_Collector : public Parse_Visitor_Base {
   std::vector<std::string_view> visits;
 
   void visit_end_of_module() override {
@@ -178,13 +248,29 @@ struct parse_visit_collector : public parse_visitor_base {
     this->visits.emplace_back("visit_enter_with_scope");
   }
 
+  void visit_enter_class_construct_scope() override {
+    this->visits.emplace_back("visit_enter_class_construct_scope");
+  }
+
   void visit_enter_class_scope() override {
     this->visits.emplace_back("visit_enter_class_scope");
   }
 
   void visit_enter_class_scope_body(
-      const std::optional<identifier> &) override {
+      const std::optional<Identifier> &) override {
     this->visits.emplace_back("visit_enter_class_scope_body");
+  }
+
+  void visit_enter_conditional_type_scope() override {
+    this->visits.emplace_back("visit_enter_conditional_type_scope");
+  }
+
+  void visit_enter_declare_global_scope() override {
+    this->visits.emplace_back("visit_enter_declare_global_scope");
+  }
+
+  void visit_enter_declare_scope() override {
+    this->visits.emplace_back("visit_enter_declare_scope");
   }
 
   void visit_enter_enum_scope() override {
@@ -211,7 +297,7 @@ struct parse_visit_collector : public parse_visitor_base {
     this->visits.emplace_back("visit_enter_interface_scope");
   }
 
-  void visit_enter_named_function_scope(identifier name) override {
+  void visit_enter_named_function_scope(Identifier name) override {
     this->enter_named_function_scopes.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_enter_named_function_scope");
   }
@@ -220,11 +306,11 @@ struct parse_visit_collector : public parse_visitor_base {
     this->visits.emplace_back("visit_enter_namespace_scope");
   }
 
-  void visit_enter_type_alias_scope() override {
-    this->visits.emplace_back("visit_enter_type_alias_scope");
+  void visit_enter_type_scope() override {
+    this->visits.emplace_back("visit_enter_type_scope");
   }
 
-  std::vector<string8> enter_named_function_scopes;
+  std::vector<String8> enter_named_function_scopes;
 
   void visit_exit_block_scope() override {
     this->visits.emplace_back("visit_exit_block_scope");
@@ -234,8 +320,24 @@ struct parse_visit_collector : public parse_visitor_base {
     this->visits.emplace_back("visit_exit_with_scope");
   }
 
+  void visit_exit_class_construct_scope() override {
+    this->visits.emplace_back("visit_exit_class_construct_scope");
+  }
+
   void visit_exit_class_scope() override {
     this->visits.emplace_back("visit_exit_class_scope");
+  }
+
+  void visit_exit_conditional_type_scope() override {
+    this->visits.emplace_back("visit_exit_conditional_type_scope");
+  }
+
+  void visit_exit_declare_global_scope() override {
+    this->visits.emplace_back("visit_exit_declare_global_scope");
+  }
+
+  void visit_exit_declare_scope() override {
+    this->visits.emplace_back("visit_exit_declare_scope");
   }
 
   void visit_exit_enum_scope() override {
@@ -262,17 +364,17 @@ struct parse_visit_collector : public parse_visitor_base {
     this->visits.emplace_back("visit_exit_namespace_scope");
   }
 
-  void visit_exit_type_alias_scope() override {
-    this->visits.emplace_back("visit_exit_type_alias_scope");
+  void visit_exit_type_scope() override {
+    this->visits.emplace_back("visit_exit_type_scope");
   }
 
-  void visit_keyword_variable_use(identifier name) override {
+  void visit_keyword_variable_use(Identifier name) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_keyword_variable_use");
   }
 
   void visit_property_declaration(
-      const std::optional<identifier> &name) override {
+      const std::optional<Identifier> &name) override {
     if (name.has_value()) {
       this->property_declarations.emplace_back(name->normalized_name());
     } else {
@@ -281,72 +383,81 @@ struct parse_visit_collector : public parse_visitor_base {
     this->visits.emplace_back("visit_property_declaration");
   }
 
-  std::vector<std::optional<string8>> property_declarations;
+  std::vector<std::optional<String8>> property_declarations;
 
-  void visit_variable_assignment(identifier name) override {
+  void visit_variable_assignment(Identifier name,
+                                 Variable_Assignment_Flags) override {
     this->variable_assignments.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_assignment");
   }
 
-  std::vector<string8> variable_assignments;
+  std::vector<String8> variable_assignments;
 
-  void visit_variable_declaration(identifier name, variable_kind kind,
-                                  variable_init_kind init_kind) override {
-    this->variable_declarations.emplace_back(visited_variable_declaration{
-        string8(name.normalized_name()), kind, init_kind});
+  void visit_variable_declaration(Identifier name, Variable_Kind kind,
+                                  Variable_Declaration_Flags flags) override {
+    this->variable_declarations.emplace_back(Visited_Variable_Declaration{
+        String8(name.normalized_name()), kind, flags});
     this->visits.emplace_back("visit_variable_declaration");
   }
 
-  std::vector<visited_variable_declaration> variable_declarations;
+  std::vector<Visited_Variable_Declaration> variable_declarations;
+
+  void visit_variable_assertion_signature_use(Identifier name) override {
+    this->variable_uses.emplace_back(name.normalized_name());
+    this->visits.emplace_back("visit_variable_assertion_signature_use");
+  }
 
   void visit_variable_delete_use(
-      identifier name,
-      [[maybe_unused]] source_code_span delete_keyword) override {
+      Identifier name,
+      [[maybe_unused]] Source_Code_Span delete_keyword) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_delete_use");
   }
 
-  void visit_variable_export_use(identifier name) override {
+  void visit_variable_export_default_use(Identifier name) override {
+    this->variable_uses.emplace_back(name.normalized_name());
+    this->visits.emplace_back("visit_variable_export_default_use");
+  }
+
+  void visit_variable_export_use(Identifier name) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_export_use");
   }
 
-  void visit_variable_namespace_use(identifier name) override {
+  void visit_variable_namespace_use(Identifier name) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_namespace_use");
   }
 
-  void visit_variable_type_predicate_use(identifier parameter_name) override {
+  void visit_variable_type_predicate_use(Identifier parameter_name) override {
     this->variable_uses.emplace_back(parameter_name.normalized_name());
     this->visits.emplace_back("visit_variable_type_predicate_use");
   }
 
-  void visit_variable_type_use(identifier name) override {
+  void visit_variable_type_use(Identifier name) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_type_use");
   }
 
-  void visit_variable_typeof_use(identifier name) override {
+  void visit_variable_typeof_use(Identifier name) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_typeof_use");
   }
 
-  void visit_variable_use(identifier name) override {
+  void visit_variable_use(Identifier name) override {
     this->variable_uses.emplace_back(name.normalized_name());
     this->visits.emplace_back("visit_variable_use");
   }
 
-  std::vector<string8> variable_uses;
+  std::vector<String8> variable_uses;
 };
 
 // TODO(strager): Rename this.
-struct spy_visitor final : public diag_collector,
-                           public parse_visit_collector {};
+struct Spy_Visitor final : public Diag_Collector,
+                           public Parse_Visit_Collector {};
 
-void PrintTo(const visited_variable_declaration &, std::ostream *);
+void PrintTo(const Visited_Variable_Declaration &, std::ostream *);
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

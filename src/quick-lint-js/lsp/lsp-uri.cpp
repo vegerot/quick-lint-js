@@ -6,7 +6,7 @@
 #include <quick-lint-js/assert.h>
 #include <quick-lint-js/container/string-view.h>
 #include <quick-lint-js/lsp/lsp-uri.h>
-#include <quick-lint-js/port/integer.h>
+#include <quick-lint-js/util/integer.h>
 #include <string>
 #include <string_view>
 
@@ -14,7 +14,7 @@ using namespace std::literals::string_view_literals;
 
 namespace quick_lint_js {
 // Returns an empty string on parse failure.
-std::string parse_file_from_lsp_uri(string8_view uri) {
+std::string parse_file_from_lsp_uri(String8_View uri) {
 #if defined(_WIN32)
   return parse_file_from_lsp_uri_win32(uri);
 #else
@@ -22,18 +22,18 @@ std::string parse_file_from_lsp_uri(string8_view uri) {
 #endif
 }
 
-std::string parse_file_from_lsp_uri_posix(string8_view uri) {
-  if (!starts_with(uri, u8"file://"sv)) {
+std::string parse_file_from_lsp_uri_posix(String8_View uri) {
+  if (!starts_with(uri, u8"file://"_sv)) {
     return "";
   }
-  if (uri.size() < strlen(u8"file://") + 1) {
+  if (uri.size() < u8"file://"_sv.size() + 1) {
     return "";
   }
   bool have_authority = uri[7] != u8'/';
   if (have_authority) {
-    uri = uri.substr(strlen(u8"file:"));
+    uri = uri.substr(u8"file:"_sv.size());
   } else {
-    uri = uri.substr(strlen(u8"file://"));
+    uri = uri.substr(u8"file://"_sv.size());
   }
   std::size_t query_start = uri.find(u8'?');
   if (query_start != uri.npos) {
@@ -53,14 +53,11 @@ std::string parse_file_from_lsp_uri_posix(string8_view uri) {
     if (uri.size() < 2) {
       return "";
     }
-    string8_view digits = uri.substr(0, 2);
+    String8_View digits = uri.substr(0, 2);
     unsigned char c;
-    from_char8s_result parse_result =
-        from_char8s_hex(digits.data(), digits.data() + 2, c);
-    if (parse_result.ptr != digits.data() + 2) {
+    if (parse_integer_exact_hex(digits, c) != Parse_Integer_Exact_Error::ok) {
       return "";
     }
-    QLJS_ASSERT(parse_result.ec == std::errc());
     result.push_back(static_cast<char>(c));
     uri = uri.substr(2);
   }
@@ -68,7 +65,7 @@ std::string parse_file_from_lsp_uri_posix(string8_view uri) {
   return result;
 }
 
-std::string parse_file_from_lsp_uri_win32(string8_view uri) {
+std::string parse_file_from_lsp_uri_win32(String8_View uri) {
   std::string result = parse_file_from_lsp_uri_posix(uri);
   if (result.empty()) {
     return result;

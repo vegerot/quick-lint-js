@@ -1,48 +1,137 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_HASH_MAP_H
-#define QUICK_LINT_JS_CONTAINER_HASH_MAP_H
+#pragma once
 
 #include <quick-lint-js/container/hash.h>
+#include <quick-lint-js/port/memory-resource.h>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
 namespace quick_lint_js {
-// Like std::unordered_map.
-template <class Key, class Value, class Hash = hasher<Key>>
-class hash_map {
+// Like std::pmr::polymorphic_allocator<T>, but with allocator propagation
+// enabled and with no default allocator.
+template <class T>
+class Hash_Map_Allocator {
+ public:
+  using value_type = T;
+
+  Hash_Map_Allocator(Memory_Resource* memory) : memory_(memory) {}
+
+  template <class U>
+  explicit Hash_Map_Allocator(Hash_Map_Allocator<U> other)
+      : memory_(other.resource()) {}
+
+  Hash_Map_Allocator(const Hash_Map_Allocator&) = default;
+  Hash_Map_Allocator& operator=(const Hash_Map_Allocator&) = default;
+
+  Hash_Map_Allocator(Hash_Map_Allocator&&) = default;
+  Hash_Map_Allocator& operator=(Hash_Map_Allocator&&) = default;
+
+  T* allocate(std::size_t size) {
+    return static_cast<T*>(
+        this->memory_->allocate(size * sizeof(T), alignof(T)));
+  }
+
+  void deallocate(T* p, std::size_t size) {
+    return this->memory_->deallocate(p, size * sizeof(T), alignof(T));
+  }
+
+  friend bool operator==(Hash_Map_Allocator lhs, Hash_Map_Allocator rhs) {
+    return lhs.memory_ == rhs.memory_;
+  }
+  friend bool operator!=(Hash_Map_Allocator lhs, Hash_Map_Allocator rhs) {
+    return !(lhs == rhs);
+  }
+
+  Hash_Map_Allocator select_on_container_copy_construction() { return *this; }
+
+  using propagate_on_container_copy_assignment = std::true_type;
+  using propagate_on_container_move_assignment = std::true_type;
+  using propagate_on_container_swap = std::true_type;
+
+  using is_always_empty = std::false_type;
+
+  Memory_Resource* resource() const { return this->memory_; }
+
  private:
-  using unordered_map = std::unordered_map<Key, Value, Hash>;
+  Memory_Resource* memory_;
+};
+
+// Like std::unordered_map.
+template <class Key, class Value, class Hash = Hasher<Key>>
+class Hash_Map {
+ private:
+  using Key_Equal = std::equal_to<>;
+  using Allocator = Hash_Map_Allocator<std::pair<const Key, Value>>;
+  using Unordered_Map =
+      std::unordered_map<Key, Value, Hash, Key_Equal, Allocator>;
 
  public:
-  using const_iterator = typename unordered_map::const_iterator;
-  using iterator = typename unordered_map::iterator;
-  using size_type = typename unordered_map::size_type;
-  using value_type = typename unordered_map::value_type;
+  using allocator_type = Allocator;
+  using const_iterator = typename Unordered_Map::const_iterator;
+  using iterator = typename Unordered_Map::iterator;
+  using size_type = typename Unordered_Map::size_type;
+  using value_type = typename Unordered_Map::value_type;
 
-  explicit hash_map() = default;
+  // TODO(strager): Require a Memory_Resource.
+  explicit Hash_Map() : Hash_Map(new_delete_resource()) {}
 
-  explicit hash_map(std::initializer_list<value_type> init) : map_(init) {}
+  // Needed for AllocatorAwareContainer.
+  explicit Hash_Map(const Allocator& allocator)
+      : Hash_Map(allocator.resource()) {}
+
+  explicit Hash_Map(Memory_Resource* memory) : map_(memory) {}
+
+  // TODO(strager): Require a Memory_Resource.
+  explicit Hash_Map(std::initializer_list<value_type> init)
+      : Hash_Map(init, new_delete_resource()) {}
+
+  explicit Hash_Map(std::initializer_list<value_type> init,
+                    Memory_Resource* memory)
+      : map_(init, /*bucket_count=*/0, memory) {}
+
+  Hash_Map(const Hash_Map&) = default;
+  // Propagates the Memory_Resource.
+  Hash_Map& operator=(const Hash_Map&) = default;
+
+  Hash_Map(Hash_Map&&) = default;
+  // Propagates the Memory_Resource.
+  Hash_Map& operator=(Hash_Map&&) = default;
+
+  // Needed for AllocatorAwareContainer.
+  Hash_Map(const Hash_Map& other, const Allocator& allocator)
+      : map_(other.map_, allocator) {}
+
+  // Needed for AllocatorAwareContainer.
+  const Allocator& get_allocator() { return this->map_.get_allocator(); }
 
   template <class K>
-  const_iterator find(const K& key) const noexcept {
+  const_iterator find(const K& key) const {
     return this->map_.find(key);
   }
   template <class K>
-  iterator find(const K& key) noexcept {
+  iterator find(const K& key) {
     return this->map_.find(key);
   }
 
-  iterator begin() noexcept { return this->map_.begin(); }
-  const_iterator begin() const noexcept { return this->map_.begin(); }
+  template <class K>
+  const Value& at(const K& key) const {
+    const_iterator it = this->find(key);
+    QLJS_ASSERT(it != this->end());
+    return it->second;
+  }
 
-  iterator end() noexcept { return this->map_.end(); }
-  const_iterator end() const noexcept { return this->map_.end(); }
+  iterator begin() { return this->map_.begin(); }
+  const_iterator begin() const { return this->map_.begin(); }
 
-  bool empty() const noexcept { return this->map_.empty(); }
+  iterator end() { return this->map_.end(); }
+  const_iterator end() const { return this->map_.end(); }
 
-  size_type size() const noexcept { return this->map_.size(); }
+  bool empty() const { return this->map_.empty(); }
+
+  size_type size() const { return this->map_.size(); }
 
   // Copies the key if successful.
   template <class... Args>
@@ -91,11 +180,13 @@ class hash_map {
   void reserve(size_type size) { this->map_.reserve(size); }
 
  private:
-  unordered_map map_;
+  Unordered_Map map_;
 };
-}
 
-#endif
+// A Hash_Map with pointer-stable values.
+template <class Key, class Value, class Hash = Hasher<Key>>
+using Stable_Hash_Map = Hash_Map<Key, Value, Hash>;
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

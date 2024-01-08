@@ -1,24 +1,27 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_IDENTIFIER_SUPPORT_H
-#define QUICK_LINT_JS_IDENTIFIER_SUPPORT_H
+#pragma once
 
+#include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/fe/identifier.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/port/char8.h>
 
 namespace quick_lint_js {
-inline source_code_span span_of(const char8 *code) {
-  return source_code_span(&code[0], &code[strlen(code)]);
+inline Source_Code_Span span_of(String8_View code) {
+  const Char8 *c = code.data();
+  return Source_Code_Span(&c[0], &c[code.size()]);
 }
 
-inline identifier identifier_of(const char8 *name) {
-  return identifier(span_of(name));
-}
+inline Source_Code_Span span_of(const Padded_String &code) {
+  return Source_Code_Span(code.data(), code.null_terminator());
 }
 
-#endif
+inline Identifier identifier_of(const Char8 *name) {
+  return Identifier(span_of(name));
+}
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

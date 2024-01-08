@@ -1,34 +1,35 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_IO_OUTPUT_STREAM_H
-#define QUICK_LINT_JS_IO_OUTPUT_STREAM_H
+#pragma once
 
 #include <cstddef>
 #include <memory>
 #include <quick-lint-js/assert.h>
 #include <quick-lint-js/io/file-handle.h>
+#include <quick-lint-js/io/file.h>
 #include <quick-lint-js/port/char8.h>
-#include <quick-lint-js/port/integer.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/port/type-traits.h>
+#include <quick-lint-js/util/cast.h>
+#include <quick-lint-js/util/integer.h>
 
 namespace quick_lint_js {
-// output_stream is similar to std::basic_ostream<char8>.
-class output_stream {
+// Output_Stream is similar to std::basic_ostream<Char8>.
+class Output_Stream {
  public:
   static inline constexpr int minimum_buffer_size = 8;
 
-  explicit output_stream();
-  explicit output_stream(int buffer_size);
+  explicit Output_Stream();
+  explicit Output_Stream(int buffer_size);
 
-  output_stream(output_stream&&) = delete;
-  output_stream& operator=(output_stream&&) = delete;
+  Output_Stream(Output_Stream&&) = delete;
+  Output_Stream& operator=(Output_Stream&&) = delete;
 
-  virtual ~output_stream();
+  virtual ~Output_Stream();
 
   template <class Func>
   void append(int max_byte_count, Func&& f) {
-    char8* data = this->reserve(max_byte_count);
+    Char8* data = this->reserve(max_byte_count);
     if (data) {
       int bytes_written = f(data);
       QLJS_ASSERT(bytes_written <= max_byte_count);
@@ -36,35 +37,76 @@ class output_stream {
     } else {
       // this->buffer_ is too small.
       this->flush();
-      std::unique_ptr<char8[]> temp_buffer(
-          new char8[narrow_cast<std::size_t>(max_byte_count)]);
+      std::unique_ptr<Char8[]> temp_buffer(
+          new Char8[narrow_cast<std::size_t>(max_byte_count)]);
       int bytes_written = f(temp_buffer.get());
       QLJS_ASSERT(bytes_written <= max_byte_count);
-      this->flush_impl(string8_view(temp_buffer.get(),
+      this->flush_impl(String8_View(temp_buffer.get(),
                                     narrow_cast<std::size_t>(bytes_written)));
     }
   }
 
   template <class T>
   void append_decimal_integer(T value) {
-    this->append(integer_string_length<T>, [&](char8* out) -> int {
-      char8* end = write_integer<T>(value, out);
+    this->append(integer_string_length<T>, [&](Char8* out) -> int {
+      Char8* end = write_integer<T>(value, out);
       return narrow_cast<int>(end - out);
     });
   }
 
-  [[gnu::noinline]] void append_copy(string8_view data);
-  void append_copy(char8 data);
+  // Write pad_character then write a decimal integer. The total number of
+  // characters written is at least pad_width.
+  //
+  // append_padded_decimal_integer(42, 4, '0')
+  // => u8"0042"
+  template <class T>
+  void append_padded_decimal_integer(
+      T value, int pad_width,
+      std::enable_if_t<std::is_unsigned_v<T>, Char8> pad_character) {
+    int max_width = (std::max)(integer_string_length<T>, pad_width);
+    this->append(max_width, [&](Char8* out) -> int {
+      Char8* integer_end = write_integer<T>(value, out);
+      int integer_width = narrow_cast<int>(integer_end - out);
+      bool need_padding = pad_width > integer_width;
+      if (!need_padding) {
+        return integer_width;
+      }
 
-  // Do not call. Create a string8_view explicitly instead.
-  void append_copy(const char8* data) = delete;
-  void append_copy(char8* data) = delete;
+      Char8* out_end = out + pad_width;
+      Char8* integer_start = std::copy_backward(out, integer_end, out_end);
+      QLJS_ASSERT(out < integer_start &&
+                  "should pad with at least one character");
+      QLJS_ASSERT(integer_start < out_end &&
+                  "integer should consume at least one character");
+      for (Char8* c = out; c != integer_start; ++c) {
+        *c = pad_character;
+      }
+      return pad_width;
+    });
+  }
+
+  template <class T>
+  void append_fixed_hexadecimal_integer(T value, int width) {
+    this->append(width, [&](Char8* out) -> int {
+      write_integer_fixed_hexadecimal<T>(value, width, out);
+      return width;
+    });
+  }
+
+  void append_decimal_float_slow(double value);
+
+  [[gnu::noinline]] void append_copy(String8_View data);
+  void append_copy(Char8 data);
+
+  // Do not call. Create a String8_View explicitly instead.
+  void append_copy(const Char8* data) = delete;
+  void append_copy(Char8* data) = delete;
 
   // Precondition: data.size() <= buffer_size
-  void append_copy_small(string8_view data);
+  void append_copy_small(String8_View data);
 
   // Optimize appending small string literals.
-  void append_literal(string8_view data) {
+  void append_literal(String8_View data) {
     if (data.size() <= minimum_buffer_size) {
       this->append_copy_small(data);
     } else {
@@ -75,61 +117,66 @@ class output_stream {
   void flush();
 
  protected:
-  virtual void flush_impl(string8_view) = 0;
+  virtual void flush_impl(String8_View) = 0;
 
  private:
   // Returns nullptr if byte_count > buffer_size.
-  char8* reserve(int byte_count);
+  Char8* reserve(int byte_count);
 
-  std::unique_ptr<char8[]> buffer_;
+  std::unique_ptr<Char8[]> buffer_;
   int buffer_size_;
-  char8* cursor_ = this->buffer_.get();
-  char8* buffer_end_ = this->buffer_.get() + this->buffer_size_;
+  Char8* cursor_ = this->buffer_.get();
+  Char8* buffer_end_ = this->buffer_.get() + this->buffer_size_;
 };
 
 #if defined(__EMSCRIPTEN__)
 // No files on the web.
 #else
 // Non-owning.
-class file_output_stream final : public output_stream {
+class File_Output_Stream final : public Output_Stream {
  public:
-  explicit file_output_stream(platform_file_ref);
-  explicit file_output_stream(platform_file_ref, int buffer_size);
+  explicit File_Output_Stream(Platform_File_Ref);
+  explicit File_Output_Stream(Platform_File_Ref, int buffer_size);
 
-  ~file_output_stream() override;
+  ~File_Output_Stream() override;
 
-  static file_output_stream* get_stdout();
-  static file_output_stream* get_stderr();
+  static File_Output_Stream* get_stdout();
+  static File_Output_Stream* get_stderr();
 
  protected:
-  void flush_impl(string8_view) override;
+  void flush_impl(String8_View) override;
 
  private:
-  platform_file_ref file_;
+  Platform_File_Ref file_;
 };
 #endif
 
-// Designed for testing only.
-class memory_output_stream final : public output_stream {
+// Designed for testing and scripts only.
+class Memory_Output_Stream final : public Output_Stream {
  public:
-  explicit memory_output_stream();
-  explicit memory_output_stream(int buffer_size);
+  explicit Memory_Output_Stream();
+  explicit Memory_Output_Stream(int buffer_size);
 
   // Return all of the flushed output, excluding unflushed output.
-  string8 get_flushed_string8() const;
+  String8 get_flushed_string8() const;
 
   // Remove flushed and unflushed output.
   void clear();
 
+#if !defined(__EMSCRIPTEN__)
+  // Performs this->flush() then
+  // quick_lint_js::write_file_if_different(path, this->get_flushed_string8()).
+  Result<void, Generic_IO_Error> write_file_if_different(const char* path);
+  void write_file_if_different_or_exit(const char* path);
+#endif
+
  protected:
-  void flush_impl(string8_view) override;
+  void flush_impl(String8_View) override;
 
  private:
-  string8 data_;
+  String8 data_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

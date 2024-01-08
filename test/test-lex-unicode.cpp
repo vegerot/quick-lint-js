@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <gtest/gtest.h>
 #include <quick-lint-js/fe/lex.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <sstream>
 #include <string>
 #include <unicode/uchar.h>
@@ -24,11 +24,14 @@ std::string pretty(char32_t c) {
 }
 
 bool icu_data_is_valid() {
-  std::uint8_t minimum_unicode_version = 15;
+  std::uint8_t minimum_unicode_major_version = 15;
+  std::uint8_t minimum_unicode_minor_version = 1;
 
   UVersionInfo version;
   ::u_getUnicodeVersion(version);
-  if (version[0] >= minimum_unicode_version) {
+  if (version[0] > minimum_unicode_major_version ||
+      (version[0] == minimum_unicode_major_version &&
+       version[1] >= minimum_unicode_minor_version)) {
     return true;
   }
 
@@ -37,15 +40,15 @@ bool icu_data_is_valid() {
     std::fprintf(stderr,
                  "warning: The ICU library has data for Unicode version "
                  "%u.%u.%u.%u, which is too old. Upgrade ICU to Unicode "
-                 "version %u or newer. Skipping tests...\n",
+                 "version %u.%u or newer. Skipping tests...\n",
                  version[0], version[1], version[2], version[3],
-                 minimum_unicode_version);
+                 minimum_unicode_major_version, minimum_unicode_minor_version);
     did_log_warning = true;
   }
   return false;
 }
 
-TEST(test_lex_unicode, is_initial_identifier_character) {
+TEST(Test_Lex_Unicode, is_initial_identifier_character) {
   if (!icu_data_is_valid()) {
     GTEST_SKIP();
   }
@@ -55,11 +58,11 @@ TEST(test_lex_unicode, is_initial_identifier_character) {
         c == U'$' ||  //
         c == U'_' ||  //
         ::u_hasBinaryProperty(narrow_cast<::UChar32>(c), UCHAR_ID_START);
-    EXPECT_EQ(lexer::is_initial_identifier_character(c), expected) << pretty(c);
+    EXPECT_EQ(Lexer::is_initial_identifier_character(c), expected) << pretty(c);
   }
 }
 
-TEST(test_lex_unicode, is_identifier_character) {
+TEST(Test_Lex_Unicode, is_identifier_character) {
   if (!icu_data_is_valid()) {
     GTEST_SKIP();
   }
@@ -71,7 +74,7 @@ TEST(test_lex_unicode, is_identifier_character) {
         c == U'\u200d' ||
         ::u_hasBinaryProperty(narrow_cast<::UChar32>(c), UCHAR_ID_CONTINUE);
     EXPECT_EQ(
-        lexer::is_identifier_character(c, lexer::identifier_kind::javascript),
+        Lexer::is_identifier_character(c, Lexer::Identifier_Kind::javascript),
         expected)
         << pretty(c);
   }

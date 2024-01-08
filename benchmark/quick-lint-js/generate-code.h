@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_GENERATE_CODE_H
-#define QUICK_LINT_JS_GENERATE_CODE_H
+#pragma once
 
 #include <memory>
 #include <quick-lint-js/container/padded-string.h>
@@ -13,25 +12,23 @@
 
 namespace quick_lint_js {
 std::vector<int> random_line_lengths(std::mt19937_64 &, int line_count);
-padded_string make_source_code(const std::vector<int> &line_lengths,
-                               const string8 &newline);
+Padded_String make_source_code(const std::vector<int> &line_lengths,
+                               const String8 &newline);
 
-struct source_code_with_spans {
-  explicit source_code_with_spans(std::unique_ptr<padded_string> &&source,
-                                  std::vector<source_code_span> &&spans)
+struct Source_Code_With_Spans {
+  explicit Source_Code_With_Spans(std::unique_ptr<Padded_String> &&source,
+                                  std::vector<Source_Code_Span> &&spans)
       : source(std::move(source)), spans(std::move(spans)) {}
 
-  source_code_with_spans(const source_code_with_spans &) = delete;
-  source_code_with_spans &operator=(const source_code_with_spans &) = delete;
+  Source_Code_With_Spans(const Source_Code_With_Spans &) = delete;
+  Source_Code_With_Spans &operator=(const Source_Code_With_Spans &) = delete;
 
-  std::unique_ptr<padded_string> source;
-  std::vector<source_code_span> spans;
+  std::unique_ptr<Padded_String> source;
+  std::vector<Source_Code_Span> spans;
 };
 
-source_code_with_spans make_realisticish_code(int line_count, int span_count);
+Source_Code_With_Spans make_realisticish_code(int line_count, int span_count);
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

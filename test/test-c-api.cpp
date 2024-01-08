@@ -9,41 +9,41 @@
 
 namespace quick_lint_js {
 namespace {
-TEST(test_c_api_web_demo, empty_document_has_no_diagnostics) {
-  qljs_web_demo_document* p = qljs_web_demo_create_document();
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(p);
+TEST(Test_C_API_Web_Demo, empty_document_has_no_diagnostics) {
+  QLJS_Web_Demo_Document* p = qljs_web_demo_create_document();
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(p);
   EXPECT_EQ(diagnostics[0].message, nullptr);
   qljs_web_demo_destroy_document(p);
 }
 
-TEST(test_c_api_web_demo, lint_error_after_text_insertion) {
-  qljs_web_demo_document* p = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, lint_error_after_text_insertion) {
+  QLJS_Web_Demo_Document* p = qljs_web_demo_create_document();
 
-  const char8* document_text = u8"let x;let x;";
-  qljs_web_demo_set_text(p, document_text, strlen(document_text));
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(p);
+  String8_View document_text = u8"let x;let x;"_sv;
+  qljs_web_demo_set_text(p, document_text.data(), document_text.size());
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(p);
   EXPECT_NE(diagnostics[0].message, nullptr);
   EXPECT_EQ(diagnostics[1].message, nullptr);
   EXPECT_STREQ(diagnostics[1].code, "");
 
   EXPECT_STREQ(diagnostics[0].message, "redeclaration of variable: x");
   EXPECT_STREQ(diagnostics[0].code, "E0034");
-  EXPECT_EQ(diagnostics[0].begin_offset, strlen(u8"let x;let "));
-  EXPECT_EQ(diagnostics[0].end_offset, strlen(u8"let x;let x"));
+  EXPECT_EQ(diagnostics[0].begin_offset, u8"let x;let "_sv.size());
+  EXPECT_EQ(diagnostics[0].end_offset, u8"let x;let x"_sv.size());
 
   qljs_web_demo_destroy_document(p);
 }
 
-TEST(test_c_api_web_demo, lint_new_error_after_second_text_insertion) {
-  qljs_web_demo_document* p = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, lint_new_error_after_second_text_insertion) {
+  QLJS_Web_Demo_Document* p = qljs_web_demo_create_document();
 
-  const char8* document_text = u8"let x;";
-  qljs_web_demo_set_text(p, document_text, strlen(document_text));
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(p);
+  String8_View document_text = u8"let x;"_sv;
+  qljs_web_demo_set_text(p, document_text.data(), document_text.size());
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(p);
   EXPECT_EQ(diagnostics[0].message, nullptr);
 
-  const char8* document_text_2 = u8"let x;let x;";
-  qljs_web_demo_set_text(p, document_text_2, strlen(document_text_2));
+  String8_View document_text_2 = u8"let x;let x;"_sv;
+  qljs_web_demo_set_text(p, document_text_2.data(), document_text_2.size());
   diagnostics = qljs_web_demo_lint(p);
   EXPECT_NE(diagnostics[0].message, nullptr);
   EXPECT_EQ(diagnostics[1].message, nullptr);
@@ -51,25 +51,25 @@ TEST(test_c_api_web_demo, lint_new_error_after_second_text_insertion) {
 
   EXPECT_STREQ(diagnostics[0].message, "redeclaration of variable: x");
   EXPECT_STREQ(diagnostics[0].code, "E0034");
-  EXPECT_EQ(diagnostics[0].begin_offset, strlen(u8"let x;let "));
-  EXPECT_EQ(diagnostics[0].end_offset, strlen(u8"let x;let x"));
+  EXPECT_EQ(diagnostics[0].begin_offset, u8"let x;let "_sv.size());
+  EXPECT_EQ(diagnostics[0].end_offset, u8"let x;let x"_sv.size());
 
   qljs_web_demo_destroy_document(p);
 }
 
-TEST(test_c_api_web_demo, setting_locale_changes_messages_forever) {
-  qljs_web_demo_document* p = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, setting_locale_changes_messages_forever) {
+  QLJS_Web_Demo_Document* p = qljs_web_demo_create_document();
 
   qljs_web_demo_set_locale(p, "en_US@snarky");
 
-  const char8* document_text_1 = u8"let x;let x;";
-  qljs_web_demo_set_text(p, document_text_1, strlen(document_text_1));
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(p);
+  String8_View document_text_1 = u8"let x;let x;"_sv;
+  qljs_web_demo_set_text(p, document_text_1.data(), document_text_1.size());
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(p);
   EXPECT_STREQ(diagnostics[0].message,
                "you couldn't get enough of x, so you had to make two, huh?");
 
-  const char8* document_text_2 = u8"let y;let y;";
-  qljs_web_demo_set_text(p, document_text_2, strlen(document_text_2));
+  String8_View document_text_2 = u8"let y;let y;"_sv;
+  qljs_web_demo_set_text(p, document_text_2.data(), document_text_2.size());
   diagnostics = qljs_web_demo_lint(p);
   EXPECT_STREQ(diagnostics[0].message,
                "you couldn't get enough of y, so you had to make two, huh?");
@@ -77,19 +77,20 @@ TEST(test_c_api_web_demo, setting_locale_changes_messages_forever) {
   qljs_web_demo_destroy_document(p);
 }
 
-TEST(test_c_api_web_demo, linting_uses_config) {
-  qljs_web_demo_document* js_doc = qljs_web_demo_create_document();
-  qljs_web_demo_document* config_doc = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, linting_uses_config) {
+  QLJS_Web_Demo_Document* js_doc = qljs_web_demo_create_document();
+  QLJS_Web_Demo_Document* config_doc = qljs_web_demo_create_document();
 
-  const char8* config_text = u8R"({"globals": {"testGlobalVariable": true}})";
-  qljs_web_demo_set_text(config_doc, config_text, strlen(config_text));
+  String8_View config_text =
+      u8R"({"globals": {"testGlobalVariable": true}})"_sv;
+  qljs_web_demo_set_text(config_doc, config_text.data(), config_text.size());
 
-  const char8* document_text = u8"testGlobalVariable;";
-  qljs_web_demo_set_text(js_doc, document_text, strlen(document_text));
+  String8_View document_text = u8"testGlobalVariable;"_sv;
+  qljs_web_demo_set_text(js_doc, document_text.data(), document_text.size());
 
   qljs_web_demo_set_config(js_doc, config_doc);
 
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(js_doc);
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(js_doc);
   EXPECT_EQ(diagnostics[0].message, nullptr);
   EXPECT_STREQ(diagnostics[0].code, "");
 
@@ -97,22 +98,23 @@ TEST(test_c_api_web_demo, linting_uses_config) {
   qljs_web_demo_destroy_document(config_doc);
 }
 
-TEST(test_c_api_web_demo, unsetting_config_uses_default_config) {
-  qljs_web_demo_document* js_doc = qljs_web_demo_create_document();
-  qljs_web_demo_document* config_doc = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, unsetting_config_uses_default_config) {
+  QLJS_Web_Demo_Document* js_doc = qljs_web_demo_create_document();
+  QLJS_Web_Demo_Document* config_doc = qljs_web_demo_create_document();
 
-  const char8* config_text = u8R"({"globals": {"testGlobalVariable": true}})";
-  qljs_web_demo_set_text(config_doc, config_text, strlen(config_text));
+  String8_View config_text =
+      u8R"({"globals": {"testGlobalVariable": true}})"_sv;
+  qljs_web_demo_set_text(config_doc, config_text.data(), config_text.size());
 
-  const char8* document_text = u8"testGlobalVariable;";
-  qljs_web_demo_set_text(js_doc, document_text, strlen(document_text));
+  String8_View document_text = u8"testGlobalVariable;"_sv;
+  qljs_web_demo_set_text(js_doc, document_text.data(), document_text.size());
 
   qljs_web_demo_set_config(js_doc, config_doc);
   qljs_web_demo_lint(js_doc);
 
   qljs_web_demo_set_config(js_doc, nullptr);
 
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(js_doc);
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(js_doc);
   EXPECT_STREQ(diagnostics[0].code, "E0057")
       << "testGlobalVariable should be undeclared (message: "
       << diagnostics[0].message << ")";
@@ -122,29 +124,29 @@ TEST(test_c_api_web_demo, unsetting_config_uses_default_config) {
   qljs_web_demo_destroy_document(config_doc);
 }
 
-TEST(test_c_api_web_demo, changing_config_document_text_then_relinting_js) {
-  qljs_web_demo_document* js_doc = qljs_web_demo_create_document();
-  qljs_web_demo_document* config_doc = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, changing_config_document_text_then_relinting_js) {
+  QLJS_Web_Demo_Document* js_doc = qljs_web_demo_create_document();
+  QLJS_Web_Demo_Document* config_doc = qljs_web_demo_create_document();
 
-  const char8* config_text =
-      u8R"({"globals": {"testGlobalVariable1": true, "testGlobalVariable2": true}})";
-  qljs_web_demo_set_text(config_doc, config_text, strlen(config_text));
+  String8_View config_text =
+      u8R"({"globals": {"testGlobalVariable1": true, "testGlobalVariable2": true}})"_sv;
+  qljs_web_demo_set_text(config_doc, config_text.data(), config_text.size());
 
-  const char8* document_text = u8"testGlobalVariable1; testGlobalVariable2;";
-  qljs_web_demo_set_text(js_doc, document_text, strlen(document_text));
+  String8_View document_text = u8"testGlobalVariable1; testGlobalVariable2;"_sv;
+  qljs_web_demo_set_text(js_doc, document_text.data(), document_text.size());
 
   qljs_web_demo_set_config(js_doc, config_doc);
   qljs_web_demo_lint(js_doc);
 
-  const char8* updated_config_text =
-      u8R"({"globals": {"testGlobalVariable1": true, "testGlobalVariable2": false}})";
-  qljs_web_demo_set_text(config_doc, updated_config_text,
-                         strlen(updated_config_text));
+  String8_View updated_config_text =
+      u8R"({"globals": {"testGlobalVariable1": true, "testGlobalVariable2": false}})"_sv;
+  qljs_web_demo_set_text(config_doc, updated_config_text.data(),
+                         updated_config_text.size());
   SCOPED_TRACE(
       "testGlobalVariable1 should be declared, but testGlobalVariable2 should "
       "be undeclared");
 
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(js_doc);
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(js_doc);
   EXPECT_STREQ(diagnostics[0].code, "E0057")
       << "message: " << diagnostics[0].message;
   EXPECT_STREQ(diagnostics[1].code, "")
@@ -154,30 +156,31 @@ TEST(test_c_api_web_demo, changing_config_document_text_then_relinting_js) {
   qljs_web_demo_destroy_document(config_doc);
 }
 
-TEST(test_c_api_web_demo, lint_config) {
-  qljs_web_demo_document* p = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, lint_config) {
+  QLJS_Web_Demo_Document* p = qljs_web_demo_create_document();
 
-  const char8* config_text = u8R"({"globals": {"testGlobalVariable": null}})";
-  qljs_web_demo_set_text(p, config_text, strlen(config_text));
+  String8_View config_text =
+      u8R"({"globals": {"testGlobalVariable": null}})"_sv;
+  qljs_web_demo_set_text(p, config_text.data(), config_text.size());
 
   qljs_web_demo_set_language_options(p, qljs_language_options_config_json_bit);
 
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(p);
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(p);
   EXPECT_STREQ(diagnostics[0].code, "E0171");
   EXPECT_STREQ(diagnostics[1].code, "");
 
   qljs_web_demo_destroy_document(p);
 }
 
-TEST(test_c_api_web_demo, changing_language_options_affects_lint) {
-  qljs_web_demo_document* p = qljs_web_demo_create_document();
+TEST(Test_C_API_Web_Demo, changing_language_options_affects_lint) {
+  QLJS_Web_Demo_Document* p = qljs_web_demo_create_document();
 
-  const char8* document_text = u8"abstract class C {}";
-  qljs_web_demo_set_text(p, document_text, strlen(document_text));
+  String8_View document_text = u8"abstract class C {}"_sv;
+  qljs_web_demo_set_text(p, document_text.data(), document_text.size());
 
-  const qljs_web_demo_diagnostic* diagnostics = qljs_web_demo_lint(p);
+  const QLJS_Web_Demo_Diagnostic* diagnostics = qljs_web_demo_lint(p);
   EXPECT_STREQ(diagnostics[0].code, "E0244")
-      << "diag_typescript_abstract_class_not_allowed_in_javascript";
+      << "Diag_TypeScript_Abstract_Class_Not_Allowed_In_JavaScript";
   EXPECT_STREQ(diagnostics[1].code, "");
 
   qljs_web_demo_set_language_options(p, qljs_language_options_typescript_bit);
@@ -187,7 +190,7 @@ TEST(test_c_api_web_demo, changing_language_options_affects_lint) {
   qljs_web_demo_destroy_document(p);
 }
 
-TEST(test_c_api, locale_list) {
+TEST(Test_C_API, locale_list) {
   std::vector<std::string> locale_strings;
   const char* const* locales = qljs_list_locales();
   for (const char* const* l = locales; *l; ++l) {

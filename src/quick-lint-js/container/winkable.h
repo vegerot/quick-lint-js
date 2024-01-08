@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_WINKABLE_H
-#define QUICK_LINT_JS_CONTAINER_WINKABLE_H
+#pragma once
 
 #include <type_traits>
 
@@ -15,13 +14,11 @@ namespace quick_lint_js {
 // * anything trivially destructible
 // * container types like std::vector<U>, if U is winkable
 template <class T>
-struct is_winkable : std::is_trivially_destructible<T> {};
+struct Is_Winkable : std::is_trivially_destructible<T> {};
 
 template <class T>
-constexpr bool is_winkable_v = is_winkable<T>::value;
+constexpr bool is_winkable_v = Is_Winkable<T>::value;
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

@@ -1,27 +1,22 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_TRACKING_MEMORY_RESOURCE_H
-#define QUICK_LINT_JS_TRACKING_MEMORY_RESOURCE_H
+#pragma once
 
 #include <cstdint>
 #include <quick-lint-js/assert.h>
 #include <quick-lint-js/port/memory-resource.h>
 
 namespace quick_lint_js {
-class tracking_memory_resource : public memory_resource {
+class Tracking_Memory_Resource : public Memory_Resource {
  public:
-  std::uint64_t alive_bytes() const noexcept {
+  std::uint64_t alive_bytes() const {
     return this->allocated_bytes_ - this->deallocated_bytes_;
   }
 
-  std::uint64_t allocated_bytes() const noexcept {
-    return this->allocated_bytes_;
-  }
+  std::uint64_t allocated_bytes() const { return this->allocated_bytes_; }
 
-  std::uint64_t deallocated_bytes() const noexcept {
-    return this->deallocated_bytes_;
-  }
+  std::uint64_t deallocated_bytes() const { return this->deallocated_bytes_; }
 
  protected:
   void* do_allocate(std::size_t bytes, std::size_t align) override {
@@ -39,19 +34,12 @@ class tracking_memory_resource : public memory_resource {
     }
   }
 
-  bool do_is_equal(const memory_resource&) const noexcept override {
-    QLJS_UNIMPLEMENTED();
-    return false;
-  }
-
-  memory_resource* underlying_memory_ = new_delete_resource();
+  Memory_Resource* underlying_memory_ = new_delete_resource();
 
   std::uint64_t allocated_bytes_ = 0;
   std::uint64_t deallocated_bytes_ = 0;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

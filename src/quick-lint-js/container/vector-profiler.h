@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_VECTOR_PROFILER_H
-#define QUICK_LINT_JS_CONTAINER_VECTOR_PROFILER_H
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -12,11 +11,14 @@
 #include <memory>
 #include <quick-lint-js/assert.h>
 #include <quick-lint-js/container/hash-map.h>
+#include <quick-lint-js/container/monotonic-allocator.h>
 #include <quick-lint-js/feature.h>
+#include <quick-lint-js/io/output-stream.h>
 #include <quick-lint-js/port/attribute.h>
-#include <quick-lint-js/port/thread.h>
+#include <quick-lint-js/port/span.h>
 #include <quick-lint-js/port/warning.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
+#include <quick-lint-js/util/synchronized.h>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -24,10 +26,12 @@
 #include <vector>
 
 namespace quick_lint_js {
+struct Trace_Vector_Max_Size_Histogram_By_Owner_Entry;
+
 // vector_instrumentation is thread-safe.
-class vector_instrumentation {
+class Vector_Instrumentation {
  public:
-  enum class event {
+  enum class Event {
     append,
     assign,
     clear,
@@ -36,30 +40,30 @@ class vector_instrumentation {
     resize,
   };
 
-  struct entry {
+  struct Entry {
     std::uintptr_t object_id;
     const char *owner;
-    vector_instrumentation::event event;
+    Vector_Instrumentation::Event event;
     std::uintptr_t data_pointer;
     std::size_t size;
     std::size_t capacity;
 
-    friend std::ostream &operator<<(std::ostream &, const entry &);
+    friend std::ostream &operator<<(std::ostream &, const Entry &);
   };
 
 #if QLJS_FEATURE_VECTOR_PROFILING
-  static vector_instrumentation instance;
+  static Vector_Instrumentation &instance();
 #endif
 
   void clear();
 
   // TODO(strager): Delete.
-  std::vector<entry> entries() const;
+  std::vector<Entry> entries();
 
-  std::vector<entry> take_entries();
+  std::vector<Entry> take_entries();
 
   void add_entry(std::uintptr_t object_id, const char *owner,
-                 vector_instrumentation::event event,
+                 Vector_Instrumentation::Event event,
                  std::uintptr_t data_pointer, std::size_t size,
                  std::size_t capacity);
 
@@ -68,47 +72,45 @@ class vector_instrumentation {
 #endif
 
  private:
-  std::vector<entry> entries_;
-  mutable mutex mutex_;
+  Synchronized<std::vector<Entry>> entries_;
 };
 
 // vector_max_size_histogram_by_owner is *not* thread-safe.
-class vector_max_size_histogram_by_owner {
+class Vector_Max_Size_Histogram_By_Owner {
  public:
-  explicit vector_max_size_histogram_by_owner();
+  explicit Vector_Max_Size_Histogram_By_Owner();
 
-  vector_max_size_histogram_by_owner(
-      const vector_max_size_histogram_by_owner &) = delete;
-  vector_max_size_histogram_by_owner &operator=(
-      const vector_max_size_histogram_by_owner &) = delete;
+  Vector_Max_Size_Histogram_By_Owner(
+      const Vector_Max_Size_Histogram_By_Owner &) = delete;
+  Vector_Max_Size_Histogram_By_Owner &operator=(
+      const Vector_Max_Size_Histogram_By_Owner &) = delete;
 
-  ~vector_max_size_histogram_by_owner();
+  ~Vector_Max_Size_Histogram_By_Owner();
 
-  void add_entries(const std::vector<vector_instrumentation::entry> &);
+  void add_entries(const std::vector<Vector_Instrumentation::Entry> &);
 
-  std::map<std::string_view, std::map<std::size_t, int>> histogram() const;
+  Span<const Trace_Vector_Max_Size_Histogram_By_Owner_Entry> histogram(
+      Monotonic_Allocator *memory) const;
 
-  struct dump_options {
+  struct Dump_Options {
     int maximum_line_length = (std::numeric_limits<int>::max)();
     int max_adjacent_empty_rows = (std::numeric_limits<int>::max)();
   };
 
-  static void dump(
-      const std::map<std::string_view, std::map<std::size_t, int>> &,
-      std::ostream &);
-  static void dump(
-      const std::map<std::string_view, std::map<std::size_t, int>> &,
-      std::ostream &, const dump_options &options);
+  static void dump(Span<const Trace_Vector_Max_Size_Histogram_By_Owner_Entry>,
+                   Output_Stream &);
+  static void dump(Span<const Trace_Vector_Max_Size_Histogram_By_Owner_Entry>,
+                   Output_Stream &, const Dump_Options &options);
 
  private:
-  hash_map<const char *, hash_map<std::size_t, int>> histogram_;
-  hash_map<std::pair<const char *, std::uintptr_t>, std::size_t> object_sizes_;
+  Hash_Map<const char *, Hash_Map<std::size_t, int>> histogram_;
+  Hash_Map<std::pair<const char *, std::uintptr_t>, std::size_t> object_sizes_;
 };
 
 // vector_capacity_change_histogram_by_owner is *not* thread-safe.
-class vector_capacity_change_histogram_by_owner {
+class Vector_Capacity_Change_Histogram_By_Owner {
  public:
-  struct capacity_change_histogram {
+  struct Capacity_Change_Histogram {
     // Number of times an append caused the vector to create its initial
     // capacity.
     std::size_t appends_initial_capacity = 0;
@@ -118,40 +120,40 @@ class vector_capacity_change_histogram_by_owner {
     std::size_t appends_growing_capacity = 0;
   };
 
-  explicit vector_capacity_change_histogram_by_owner();
+  explicit Vector_Capacity_Change_Histogram_By_Owner();
 
-  vector_capacity_change_histogram_by_owner(
-      const vector_capacity_change_histogram_by_owner &) = delete;
-  vector_capacity_change_histogram_by_owner &operator=(
-      const vector_capacity_change_histogram_by_owner &) = delete;
+  Vector_Capacity_Change_Histogram_By_Owner(
+      const Vector_Capacity_Change_Histogram_By_Owner &) = delete;
+  Vector_Capacity_Change_Histogram_By_Owner &operator=(
+      const Vector_Capacity_Change_Histogram_By_Owner &) = delete;
 
-  ~vector_capacity_change_histogram_by_owner();
+  ~Vector_Capacity_Change_Histogram_By_Owner();
 
-  void add_entries(const std::vector<vector_instrumentation::entry> &);
+  void add_entries(const std::vector<Vector_Instrumentation::Entry> &);
 
-  std::map<std::string_view, capacity_change_histogram> histogram() const;
+  std::map<std::string_view, Capacity_Change_Histogram> histogram() const;
 
-  struct dump_options {
+  struct Dump_Options {
     int maximum_line_length = 80;
   };
 
   static void dump(
-      const std::map<std::string_view, capacity_change_histogram> &,
-      std::ostream &, const dump_options &);
+      const std::map<std::string_view, Capacity_Change_Histogram> &,
+      Output_Stream &, const Dump_Options &);
 
  private:
-  struct vector_info {
+  struct Vector_Info {
     std::uintptr_t data_pointer;
     std::size_t size;
   };
 
-  std::map<std::string_view, capacity_change_histogram> histogram_;
-  std::map<std::uintptr_t, vector_info> objects_;
+  std::map<std::string_view, Capacity_Change_Histogram> histogram_;
+  std::map<std::uintptr_t, Vector_Info> objects_;
 };
 
 #if QLJS_FEATURE_VECTOR_PROFILING
 template <class Vector>
-class instrumented_vector {
+class Instrumented_Vector {
  public:
   using allocator_type = typename Vector::allocator_type;
   using const_iterator = typename Vector::const_iterator;
@@ -164,179 +166,225 @@ class instrumented_vector {
   using size_type = typename Vector::size_type;
   using value_type = typename Vector::value_type;
 
-  explicit instrumented_vector(const char *debug_owner,
-                               const allocator_type &allocator) noexcept
+  explicit Instrumented_Vector(const char *debug_owner,
+                               const allocator_type &allocator)
       : data_(allocator), debug_owner_(debug_owner) {
-    this->add_instrumentation_entry(vector_instrumentation::event::create);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::create);
   }
 
   QLJS_WARNING_PUSH
   QLJS_WARNING_IGNORE_GCC("-Wzero-as-null-pointer-constant")
-  explicit instrumented_vector(const char *debug_owner,
+  explicit Instrumented_Vector(const char *debug_owner,
                                const allocator_type &allocator,
                                const value_type *begin, const value_type *end)
       : data_(begin, end, allocator), debug_owner_(debug_owner) {
-    this->add_instrumentation_entry(vector_instrumentation::event::create);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::create);
   }
   QLJS_WARNING_POP
 
-  instrumented_vector(const instrumented_vector &) = delete;
-  instrumented_vector &operator=(const instrumented_vector &) = delete;
+  Instrumented_Vector(const Instrumented_Vector &) = delete;
+  Instrumented_Vector &operator=(const Instrumented_Vector &) = delete;
 
-  instrumented_vector(instrumented_vector &&other)
-      : instrumented_vector(other.debug_owner_, std::move(other)) {}
+  Instrumented_Vector(Instrumented_Vector &&other)
+      : Instrumented_Vector(other.debug_owner_, std::move(other)) {}
 
-  instrumented_vector(const char *debug_owner, instrumented_vector &&other)
+  Instrumented_Vector(const char *debug_owner, Instrumented_Vector &&other)
       : data_(std::move(other.data_)), debug_owner_(debug_owner) {
-    this->add_instrumentation_entry(vector_instrumentation::event::create);
-    other.add_instrumentation_entry(vector_instrumentation::event::clear);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::create);
+    other.add_instrumentation_entry(Vector_Instrumentation::Event::clear);
   }
 
-  instrumented_vector &operator=(instrumented_vector &&other) {
+  Instrumented_Vector &operator=(Instrumented_Vector &&other) {
     this->data_ = std::move(other.data_);
-    this->add_instrumentation_entry(vector_instrumentation::event::assign);
-    other.add_instrumentation_entry(vector_instrumentation::event::clear);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::assign);
+    other.add_instrumentation_entry(Vector_Instrumentation::Event::clear);
     return *this;
   }
 
-  ~instrumented_vector() {
-    this->add_instrumentation_entry(vector_instrumentation::event::destroy);
+  ~Instrumented_Vector() {
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::destroy);
   }
 
-  QLJS_FORCE_INLINE allocator_type get_allocator() const noexcept {
+  QLJS_FORCE_INLINE allocator_type get_allocator() const {
     return this->data_.get_allocator();
   }
 
-  QLJS_FORCE_INLINE value_type *data() noexcept { return this->data_.data(); }
-  QLJS_FORCE_INLINE const value_type *data() const noexcept {
+  QLJS_FORCE_INLINE value_type *data() { return this->data_.data(); }
+  QLJS_FORCE_INLINE const value_type *data() const {
     return this->data_.data();
   }
 
-  QLJS_FORCE_INLINE size_type size() const noexcept {
-    return this->data_.size();
-  }
+  QLJS_FORCE_INLINE size_type size() const { return this->data_.size(); }
 
-  QLJS_FORCE_INLINE size_type capacity() const noexcept {
+  QLJS_FORCE_INLINE size_type capacity() const {
     return this->data_.capacity();
   }
 
-  QLJS_FORCE_INLINE bool empty() const noexcept { return this->data_.empty(); }
+  QLJS_FORCE_INLINE bool empty() const { return this->data_.empty(); }
 
-  QLJS_FORCE_INLINE value_type &front() noexcept { return this->data_.front(); }
-  QLJS_FORCE_INLINE value_type &back() noexcept { return this->data_.back(); }
+  QLJS_FORCE_INLINE value_type &front() { return this->data_.front(); }
+  QLJS_FORCE_INLINE value_type &back() { return this->data_.back(); }
 
-  QLJS_FORCE_INLINE const value_type &front() const noexcept {
+  QLJS_FORCE_INLINE const value_type &front() const {
     return this->data_.front();
   }
-  QLJS_FORCE_INLINE const value_type &back() const noexcept {
+  QLJS_FORCE_INLINE const value_type &back() const {
     return this->data_.back();
   }
 
-  QLJS_FORCE_INLINE value_type &operator[](size_type index) noexcept {
+  QLJS_FORCE_INLINE value_type &operator[](size_type index) {
     return this->data_[index];
   }
 
-  QLJS_FORCE_INLINE value_type *begin() noexcept { return this->data(); }
-  QLJS_FORCE_INLINE value_type *end() noexcept {
-    return this->begin() + this->size();
+  QLJS_FORCE_INLINE const value_type &operator[](size_type index) const {
+    return this->data_[index];
   }
 
-  QLJS_FORCE_INLINE const value_type *begin() const noexcept {
-    return this->data();
-  }
-  QLJS_FORCE_INLINE const value_type *end() const noexcept {
+  QLJS_FORCE_INLINE value_type *begin() { return this->data(); }
+  QLJS_FORCE_INLINE value_type *end() { return this->begin() + this->size(); }
+
+  QLJS_FORCE_INLINE const value_type *begin() const { return this->data(); }
+  QLJS_FORCE_INLINE const value_type *end() const {
     return this->begin() + this->size();
   }
 
   template <class... Args>
   QLJS_FORCE_INLINE value_type &emplace_back(Args &&... args) {
     this->data_.emplace_back(std::forward<Args>(args)...);
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
     return this->data_.back();
   }
 
   QLJS_FORCE_INLINE value_type &push_back(value_type &&value) {
     this->data_.push_back(std::move(value));
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
     return this->data_.back();
   }
 
   QLJS_FORCE_INLINE value_type &push_back(const value_type &value) {
     this->data_.push_back(value);
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
     return this->data_.back();
   }
 
   QLJS_FORCE_INLINE void pop_back() {
     this->data_.pop_back();
-    this->add_instrumentation_entry(vector_instrumentation::event::resize);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::resize);
+  }
+
+  QLJS_FORCE_INLINE void push_front(value_type &&value) {
+    this->data_.push_front(std::move(value));
+    // TODO(strager): Add instrumentation specific to prepending.
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::resize);
   }
 
   QLJS_FORCE_INLINE void clear() {
     this->data_.clear();
-    this->add_instrumentation_entry(vector_instrumentation::event::clear);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::clear);
   }
 
-  void reserve(std::size_t new_capacity) { this->data_.reserve(new_capacity); }
+  QLJS_FORCE_INLINE void erase(iterator begin, iterator end) {
+    this->data_.erase(begin, end);
+    // TODO(strager): Add instrumentation specific to erasing.
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::resize);
+  }
 
-  void resize(std::size_t new_size) {
+  QLJS_FORCE_INLINE void erase(iterator item) {
+    this->data_.erase(item);
+    // TODO(strager): Add instrumentation specific to erasing.
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::resize);
+  }
+
+  void reserve(size_type new_capacity) { this->data_.reserve(new_capacity); }
+
+  void resize(size_type new_size) {
     this->data_.resize(new_size);
-    this->add_instrumentation_entry(vector_instrumentation::event::resize);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::resize);
   }
 
   // NOTE(strager): This is a non-standard function.
   void release() { this->data_.release(); }
 
   // NOTE(strager): This is a non-standard function.
+  Span<value_type> get_and_release() { return this->data_.get_and_release(); }
+
+  // NOTE(strager): This is a non-standard function.
   void append(const value_type *begin, const value_type *end) {
     this->data_.append(begin, end);
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
   }
 
   // NOTE(strager): This is a non-standard function.
   void append(size_type count, value_type value) {
     this->data_.append(count, value);
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
   }
 
   // NOTE(strager): This is a non-standard function.
-  instrumented_vector &operator+=(value_type value) {
+  Instrumented_Vector &operator+=(value_type value) {
     this->data_ += value;
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
     return *this;
   }
 
   // NOTE(strager): This is a non-standard function.
-  instrumented_vector &operator+=(std::basic_string_view<value_type> values) {
+  Instrumented_Vector &operator+=(std::basic_string_view<value_type> values) {
     this->data_ += values;
-    this->add_instrumentation_entry(vector_instrumentation::event::append);
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::append);
     return *this;
   }
 
   // NOTE(strager): This is a non-standard function.
-  explicit operator std::basic_string_view<value_type>() const noexcept {
-    return std::basic_string_view<value_type>(this->data_);
+  std::basic_string_view<value_type> to_string_view() const {
+    return this->data_.to_string_view();
+  }
+
+  // NOTE(strager): This is a non-standard function.
+  Span<value_type> release_to_span() { return this->data_.release_to_span(); }
+
+  // NOTE(strager): This is a non-standard function.
+  std::basic_string_view<value_type> release_to_string_view() {
+    return this->data_.release_to_string_view();
+  }
+
+  // NOTE(strager): This is a non-standard function.
+  explicit operator Span<value_type>() { return Span<value_type>(this->data_); }
+
+  // NOTE(strager): This is a non-standard function.
+  explicit operator Span<const value_type>() const noexcept {
+    return Span<const value_type>(this->data_);
+  }
+
+  void swap(Instrumented_Vector &other) {
+    this->data_.swap(other.data_);
+    std::swap(this->debug_owner_, other.debug_owner_);
+    // TODO(strager): Add instrumentation specific to swapping.
+    this->add_instrumentation_entry(Vector_Instrumentation::Event::resize);
+    other.add_instrumentation_entry(Vector_Instrumentation::Event::resize);
   }
 
  private:
   QLJS_FORCE_INLINE void add_instrumentation_entry(
-      vector_instrumentation::event event) {
-    vector_instrumentation::instance.add_entry(
+      Vector_Instrumentation::Event event) {
+    Vector_Instrumentation::instance().add_entry(
         /*object_id=*/reinterpret_cast<std::uintptr_t>(this),
         /*owner=*/this->debug_owner_,
         /*event=*/event,
         /*data_pointer=*/reinterpret_cast<std::uintptr_t>(this->data()),
-        /*size=*/this->size(),
-        /*capacity=*/this->capacity());
+        /*size=*/narrow_cast<std::size_t>(this->size()),
+        /*capacity=*/narrow_cast<std::size_t>(this->capacity()));
   }
 
   Vector data_;
   const char *debug_owner_;
 };
+
+template <class V>
+void swap(Instrumented_Vector<V> &lhs, Instrumented_Vector<V> &rhs) {
+  lhs.swap(rhs);
+}
 #endif
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

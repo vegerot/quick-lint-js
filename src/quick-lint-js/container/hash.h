@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_HASH_H
-#define QUICK_LINT_JS_CONTAINER_HASH_H
+#pragma once
 
 #include <cstddef>
 #include <functional>
@@ -21,12 +20,12 @@ inline std::size_t mix_hashes(std::size_t a, std::size_t b) {
 //
 // Implements the C++ standard Hash requirement.
 template <class T, class = void>
-struct hasher;
+struct Hasher;
 
 template <class T>
-struct hasher<T, std::enable_if_t<std::is_integral_v<T>>> {
+struct Hasher<T, std::enable_if_t<std::is_integral_v<T>>> {
   template <class U>
-  std::size_t operator()(U data) const noexcept {
+  std::size_t operator()(U data) const {
     static_assert(std::is_same_v<T, U>,
                   "implicit integer conversions are not allowed");
     return std::hash<T>()(data);
@@ -34,42 +33,38 @@ struct hasher<T, std::enable_if_t<std::is_integral_v<T>>> {
 };
 
 template <class T>
-struct hasher<T*> {
-  std::size_t operator()(T* data) const noexcept {
-    return std::hash<T*>()(data);
-  }
+struct Hasher<T*> {
+  std::size_t operator()(T* data) const { return std::hash<T*>()(data); }
 };
 
 template <>
-struct hasher<std::string_view> {
-  std::size_t operator()(std::string_view s) const noexcept {
+struct Hasher<std::string_view> {
+  std::size_t operator()(std::string_view s) const {
     return std::hash<std::string_view>()(s);
   }
 };
 template <>
-struct hasher<std::string> : hasher<std::string_view> {};
+struct Hasher<std::string> : Hasher<std::string_view> {};
 
 #if QLJS_HAVE_CHAR8_T
 template <>
-struct hasher<string8_view> {
-  std::size_t operator()(string8_view s) const noexcept {
-    return std::hash<string8_view>()(s);
+struct Hasher<String8_View> {
+  std::size_t operator()(String8_View s) const {
+    return std::hash<String8_View>()(s);
   }
 };
 template <>
-struct hasher<string8> : hasher<string8_view> {};
+struct Hasher<String8> : Hasher<String8_View> {};
 #endif
 
 template <class T1, class T2>
-struct hasher<std::pair<T1, T2>> {
+struct Hasher<std::pair<T1, T2>> {
   template <class U1, class U2>
-  std::size_t operator()(const std::pair<U1, U2>& x) const noexcept {
-    return mix_hashes(hasher<U1>()(x.first), hasher<U2>()(x.second));
+  std::size_t operator()(const std::pair<U1, U2>& x) const {
+    return mix_hashes(Hasher<U1>()(x.first), Hasher<U2>()(x.second));
   }
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

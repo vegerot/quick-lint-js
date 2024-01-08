@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_GLOBAL_DECLARED_VARIABLE_SET_H
-#define QUICK_LINT_JS_FE_GLOBAL_DECLARED_VARIABLE_SET_H
+#pragma once
 
 #include <optional>
 #include <quick-lint-js/container/hash-map.h>
@@ -12,58 +11,67 @@
 #include <vector>
 
 namespace quick_lint_js {
-struct global_declared_variable {
-  string8_view name;
+struct Global_Declared_Variable {
+  String8_View name;
   bool is_writable;
   // If false, the variable was already lexically declared in the module thus
   // cannot be declared by the user with 'let'.
   bool is_shadowable;
+  // If true, the variable is only visible in type expressions, not in normal
+  // expressions.
+  bool is_type_only;
 
-  variable_kind kind() const noexcept;
+  Variable_Kind kind() const;
+  Variable_Declaration_Flags flags() const {
+    return Variable_Declaration_Flags::none;
+  }
 };
 
-class global_declared_variable_set {
+class Global_Declared_Variable_Set {
  public:
-  using found_variable_type = std::optional<global_declared_variable>;
+  using Found_Variable_Type = std::optional<Global_Declared_Variable>;
 
-  void add_predefined_global_variable(const char8 *name, bool is_writable);
+  explicit Global_Declared_Variable_Set();
 
-  void add_global_variable(global_declared_variable);
+  void add_predefined_global_variable(const Char8 *name, bool is_writable);
+
+  void add_global_variable(Global_Declared_Variable);
 
   void add_literally_everything();
 
   void reserve_more_global_variables(std::size_t extra_count,
                                      bool is_shadowable, bool is_writable);
 
-  std::optional<global_declared_variable> find(identifier name) const noexcept;
-  std::optional<global_declared_variable> find(string8_view name) const
-      noexcept;
+  // See Variable_Analyzer::Declared_Variable_Set::find.
+  std::optional<Global_Declared_Variable> find(
+      Identifier name, Is_Runtime_Or_Type options) const;
 
-  // See variable_analyzer::declared_variable_set::find_runtime.
-  std::optional<global_declared_variable> find_runtime(identifier name) const
-      noexcept;
+  // Like find(name, {.is_runtime = true, .is_type = true}).
+  std::optional<Global_Declared_Variable> find_runtime_or_type(
+      Identifier name) const;
+  std::optional<Global_Declared_Variable> find_runtime_or_type(
+      String8_View name) const;
 
-  // See variable_analyzer::declared_variable_set::find_type.
-  std::optional<global_declared_variable> find_type(identifier name) const
-      noexcept;
+  // Return this Global_Declared_Variable_Set to its default-constructed state.
+  void clear();
 
   // For testing only:
-  std::vector<string8_view> get_all_variable_names() const;
+  std::vector<String8_View> get_all_variable_names() const;
 
  private:
-  struct variable_options {
-    // See global_declared_variable::is_writable.
+  struct Variable_Options {
+    // See Global_Declared_Variable::is_writable.
     bool is_writable;
-    // See global_declared_variable::is_shadowable.
+    // See Global_Declared_Variable::is_shadowable.
     bool is_shadowable;
+    // See Global_Declared_Variable::is_type_only.
+    bool is_type_only;
   };
 
-  hash_map<string8_view, variable_options> variables_;
-  bool all_variables_declared_ = false;
+  Hash_Map<String8_View, Variable_Options> variables_;
+  bool all_variables_declared_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

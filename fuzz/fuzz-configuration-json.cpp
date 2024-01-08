@@ -5,16 +5,16 @@
 #include <cstdint>
 #include <quick-lint-js/configuration/configuration.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diag-reporter.h>
+#include <quick-lint-js/diag/diag-reporter.h>
 #include <quick-lint-js/port/char8.h>
 
 extern "C" {
 int LLVMFuzzerTestOneInput(const std::uint8_t *data, std::size_t size) {
   using namespace quick_lint_js;
 
-  padded_string json(string8(reinterpret_cast<const char8 *>(data), size));
-  configuration c;
-  c.load_from_json(&json, &null_diag_reporter::instance);
+  Padded_String json(String8(reinterpret_cast<const Char8 *>(data), size));
+  Configuration c;
+  c.load_from_json(&json, &Null_Diag_Reporter::instance);
 
   return 0;
 }

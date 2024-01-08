@@ -1,88 +1,87 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_C_API_DIAG_REPORTER_H
-#define QUICK_LINT_JS_C_API_DIAG_REPORTER_H
+#pragma once
 
 #include <cstdint>
 #include <optional>
+#include <quick-lint-js/c-api.h>
 #include <quick-lint-js/container/monotonic-allocator.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diag-reporter.h>
-#include <quick-lint-js/fe/diagnostic-formatter.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
-#include <quick-lint-js/fe/diagnostic.h>
+#include <quick-lint-js/container/vector.h>
+#include <quick-lint-js/diag/diag-reporter.h>
+#include <quick-lint-js/diag/diagnostic-formatter.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/warning.h>
 #include <quick-lint-js/web-demo-location.h>
-#include <vector>
-
-struct qljs_web_demo_diagnostic;
 
 namespace quick_lint_js {
 template <class Diagnostic, class Locator>
-class c_api_diag_formatter;
+class C_API_Diag_Formatter;
 
 template <class Diagnostic, class Locator>
-class c_api_diag_reporter final : public diag_reporter {
+class C_API_Diag_Reporter final : public Diag_Reporter {
  public:
-  explicit c_api_diag_reporter();
+  explicit C_API_Diag_Reporter();
 
-  void set_input(padded_string_view input);
+  void set_input(Padded_String_View input);
   // Does not reset translator.
   void reset();
 
-  void set_translator(translator);
+  void set_translator(Translator);
 
   const Diagnostic *get_diagnostics();
 
-  void report_impl(diag_type type, void *diag) override;
+  void report_impl(Diag_Type type, void *diag) override;
 
  private:
-  char8 *allocate_c_string(string8_view);
+  Char8 *allocate_c_string(String8_View);
 
-  translator translator_;
-  std::vector<Diagnostic> diagnostics_;
-  const char8 *input_;
+  Translator translator_;
+  Monotonic_Allocator allocator_{"C_API_Diag_Reporter::allocator_"};
+  Vector<Diagnostic> diagnostics_{"C_API_Diag_Reporter::diagnostics_",
+                                  &this->allocator_};
+  const Char8 *input_;
   std::optional<Locator> locator_;
-  monotonic_allocator string_allocator_{
+  Monotonic_Allocator string_allocator_{
       "c_api_diag_reporter::string_allocator_"};
 
-  friend c_api_diag_formatter<Diagnostic, Locator>;
+  friend C_API_Diag_Formatter<Diagnostic, Locator>;
 };
 
 template <class Diagnostic, class Locator>
-class c_api_diag_formatter
-    : public diagnostic_formatter<c_api_diag_formatter<Diagnostic, Locator>> {
+class C_API_Diag_Formatter
+    : public Diagnostic_Formatter<C_API_Diag_Formatter<Diagnostic, Locator>> {
  public:
-  explicit c_api_diag_formatter(
-      c_api_diag_reporter<Diagnostic, Locator> *reporter);
+  explicit C_API_Diag_Formatter(
+      C_API_Diag_Reporter<Diagnostic, Locator> *reporter);
 
-  void write_before_message(std::string_view code, diagnostic_severity,
-                            const source_code_span &origin);
-  void write_message_part(std::string_view code, diagnostic_severity,
-                          string8_view);
-  void write_after_message(std::string_view code, diagnostic_severity,
-                           const source_code_span &origin);
+  void write_before_message(std::string_view code, Diagnostic_Severity,
+                            const Source_Code_Span &origin);
+  void write_message_part(std::string_view code, Diagnostic_Severity,
+                          String8_View);
+  void write_after_message(std::string_view code, Diagnostic_Severity,
+                           const Source_Code_Span &origin);
 
  private:
-  c_api_diag_reporter<Diagnostic, Locator> *reporter_;
-  string8 current_message_;
+  C_API_Diag_Reporter<Diagnostic, Locator> *reporter_;
+  Vector<Char8> current_message_{"C_API_Diag_Reporter::current_message_",
+                                 &this->reporter_->string_allocator_};
 };
 
 QLJS_WARNING_PUSH
 QLJS_WARNING_IGNORE_CLANG("-Wweak-template-vtables")
 
-extern template class c_api_diag_formatter<qljs_web_demo_diagnostic,
-                                           web_demo_locator>;
-extern template class c_api_diag_reporter<qljs_web_demo_diagnostic,
-                                          web_demo_locator>;
+extern template class C_API_Diag_Formatter<QLJS_Web_Demo_Diagnostic,
+                                           Web_Demo_Locator>;
+extern template class C_API_Diag_Reporter<QLJS_Web_Demo_Diagnostic,
+                                          Web_Demo_Locator>;
 
 QLJS_WARNING_POP
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

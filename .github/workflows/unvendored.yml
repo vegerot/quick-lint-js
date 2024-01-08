@@ -18,7 +18,6 @@ jobs:
           pacman -Syyuu --noconfirm \
             base-devel \
             benchmark \
-            boost \
             cmake \
             git \
             gtest \
@@ -45,7 +44,7 @@ jobs:
         run: git config --global --add safe.directory /__w/quick-lint-js/quick-lint-js
 
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: configure
         run: |
@@ -56,7 +55,6 @@ jobs:
             -DBUILD_TESTING=YES \
             -DQUICK_LINT_JS_ENABLE_BENCHMARKS=YES \
             -DQUICK_LINT_JS_HAVE_WORKING_FCHAR8_T=NO \
-            -DQUICK_LINT_JS_USE_BUNDLED_BOOST=NO \
             -DQUICK_LINT_JS_USE_BUNDLED_GOOGLE_BENCHMARK=NO \
             -DQUICK_LINT_JS_USE_BUNDLED_GOOGLE_TEST=NO \
             -DQUICK_LINT_JS_USE_BUNDLED_SIMDJSON=NO \
@@ -78,7 +76,7 @@ jobs:
             libgtest-dev
 
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: configure
         run: |

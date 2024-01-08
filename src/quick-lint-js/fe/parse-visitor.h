@@ -1,70 +1,78 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_PARSE_VISITOR_H
-#define QUICK_LINT_JS_FE_PARSE_VISITOR_H
+#pragma once
 
 #include <optional>
 #include <quick-lint-js/fe/identifier.h>
 #include <quick-lint-js/fe/language.h>
 
 namespace quick_lint_js {
-// TOdO(strager): Rename this class to parse_visitor.
-class parse_visitor_base {
+// TODO(strager): Rename this class to Parse_Visitor.
+class Parse_Visitor_Base {
  public:
-  parse_visitor_base() noexcept = default;
+  Parse_Visitor_Base() = default;
 
-  parse_visitor_base(const parse_visitor_base &) noexcept = default;
-  parse_visitor_base &operator=(const parse_visitor_base &) noexcept = default;
+  Parse_Visitor_Base(const Parse_Visitor_Base &) = default;
+  Parse_Visitor_Base &operator=(const Parse_Visitor_Base &) = default;
 
-  parse_visitor_base(parse_visitor_base &&) noexcept = default;
-  parse_visitor_base &operator=(parse_visitor_base &&) noexcept = default;
+  Parse_Visitor_Base(Parse_Visitor_Base &&) = default;
+  Parse_Visitor_Base &operator=(Parse_Visitor_Base &&) = default;
 
-  virtual ~parse_visitor_base() = default;
+  virtual ~Parse_Visitor_Base() = default;
 
   virtual void visit_enter_block_scope() = 0;
   virtual void visit_enter_with_scope() = 0;
+  virtual void visit_enter_class_construct_scope() = 0;
   virtual void visit_enter_class_scope() = 0;
   virtual void visit_enter_class_scope_body(
-      const std::optional<identifier> &class_name) = 0;
+      const std::optional<Identifier> &class_name) = 0;
+  virtual void visit_enter_conditional_type_scope() = 0;
+  virtual void visit_enter_declare_global_scope() = 0;
+  virtual void visit_enter_declare_scope() = 0;
   virtual void visit_enter_enum_scope() = 0;
   virtual void visit_enter_for_scope() = 0;
   virtual void visit_enter_function_scope() = 0;
   virtual void visit_enter_function_scope_body() = 0;
   virtual void visit_enter_index_signature_scope() = 0;
   virtual void visit_enter_interface_scope() = 0;
-  virtual void visit_enter_named_function_scope(identifier) = 0;
+  virtual void visit_enter_named_function_scope(Identifier) = 0;
   virtual void visit_enter_namespace_scope() = 0;
-  virtual void visit_enter_type_alias_scope() = 0;
+  virtual void visit_enter_type_scope() = 0;
   virtual void visit_exit_block_scope() = 0;
   virtual void visit_exit_with_scope() = 0;
+  virtual void visit_exit_class_construct_scope() = 0;
   virtual void visit_exit_class_scope() = 0;
+  virtual void visit_exit_conditional_type_scope() = 0;
+  virtual void visit_exit_declare_global_scope() = 0;
+  virtual void visit_exit_declare_scope() = 0;
   virtual void visit_exit_enum_scope() = 0;
   virtual void visit_exit_for_scope() = 0;
   virtual void visit_exit_function_scope() = 0;
   virtual void visit_exit_index_signature_scope() = 0;
   virtual void visit_exit_interface_scope() = 0;
   virtual void visit_exit_namespace_scope() = 0;
-  virtual void visit_exit_type_alias_scope() = 0;
-  virtual void visit_keyword_variable_use(identifier name) = 0;
+  virtual void visit_exit_type_scope() = 0;
+  virtual void visit_keyword_variable_use(Identifier name) = 0;
   virtual void visit_property_declaration(
-      const std::optional<identifier> &) = 0;
-  virtual void visit_variable_declaration(identifier name, variable_kind kind,
-                                          variable_init_kind init_kind) = 0;
-  virtual void visit_variable_assignment(identifier name) = 0;
-  virtual void visit_variable_delete_use(identifier name,
-                                         source_code_span delete_keyword) = 0;
-  virtual void visit_variable_export_use(identifier name) = 0;
-  virtual void visit_variable_namespace_use(identifier name) = 0;
-  virtual void visit_variable_type_predicate_use(identifier parameter_name) = 0;
-  virtual void visit_variable_type_use(identifier name) = 0;
-  virtual void visit_variable_typeof_use(identifier name) = 0;
-  virtual void visit_variable_use(identifier name) = 0;
+      const std::optional<Identifier> &) = 0;
+  virtual void visit_variable_declaration(Identifier name, Variable_Kind kind,
+                                          Variable_Declaration_Flags flags) = 0;
+  virtual void visit_variable_assignment(Identifier name,
+                                         Variable_Assignment_Flags flags) = 0;
+  virtual void visit_variable_assertion_signature_use(Identifier name) = 0;
+  virtual void visit_variable_delete_use(Identifier name,
+                                         Source_Code_Span delete_keyword) = 0;
+  virtual void visit_variable_export_default_use(Identifier name) = 0;
+  virtual void visit_variable_export_use(Identifier name) = 0;
+  virtual void visit_variable_namespace_use(Identifier name) = 0;
+  virtual void visit_variable_type_predicate_use(Identifier parameter_name) = 0;
+  virtual void visit_variable_type_use(Identifier name) = 0;
+  virtual void visit_variable_typeof_use(Identifier name) = 0;
+  virtual void visit_variable_use(Identifier name) = 0;
   virtual void visit_end_of_module() = 0;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

@@ -8,8 +8,8 @@
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/dirty-set.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
 #include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/parse-support.h>
@@ -23,34 +23,38 @@ using ::testing::ElementsAreArray;
 
 namespace quick_lint_js {
 namespace {
-class test_parse_typescript_ambiguous : public test_parse_expression {};
+class Test_Parse_TypeScript_Ambiguous : public Test_Parse_Expression {};
 
-TEST_F(test_parse_typescript_ambiguous, use_generic_variable_named_async) {
+TEST_F(Test_Parse_TypeScript_Ambiguous, use_generic_variable_named_async) {
   {
-    test_parser p(u8"async<T>();"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(u8"async<T>();"_sv, no_diags,
+                                                   typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",   // <
                               "visit_variable_type_use",  // T
+                              "visit_exit_type_scope",    // >
                               "visit_variable_use",       // async
                           }));
     EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"T", u8"async"}));
   }
 
   {
-    test_parser p(u8"async<T>;"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(u8"async<T>;"_sv, no_diags,
+                                                   typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_type_scope",   // <
                               "visit_variable_type_use",  // T
+                              "visit_exit_type_scope",    // >
                               "visit_variable_use",       // async
                           }));
     EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"T", u8"async"}));
   }
 }
 
-TEST_F(test_parse_typescript_ambiguous, async_variable_less_than_expression) {
+TEST_F(Test_Parse_TypeScript_Ambiguous, async_variable_less_than_expression) {
   {
-    test_parser p(u8"async < someexpr;"_sv, typescript_options);
-    p.parse_and_visit_statement();
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"async < someexpr;"_sv, no_diags, typescript_options);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_variable_use",  // async
                               "visit_variable_use",  // someexpr

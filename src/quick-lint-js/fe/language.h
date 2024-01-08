@@ -1,29 +1,40 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_LANGUAGE_H
-#define QUICK_LINT_JS_FE_LANGUAGE_H
+#pragma once
 
 #include <iosfwd>
+#include <quick-lint-js/port/char8.h>
 
 namespace quick_lint_js {
-enum class statement_kind {
+// TODO(strager): Rename this because it doesn't only contain kinds of
+// statements anymore.
+enum class Statement_Kind {
   do_while_loop,
   for_loop,  // TODO(strager): c_style_for_loop + for_in_loop + for_of_loop?
   if_statement,
   while_loop,
   with_statement,
   labelled_statement,
+
+  class_implements_clause,
+  class_extends_clause,
+  interface_extends_clause,
+  typeof_type,
 };
 
-enum class enum_kind {
+std::ostream& operator<<(std::ostream&, Statement_Kind);
+
+enum class Enum_Kind {
   declare_const_enum,
   const_enum,
   declare_enum,
   normal,
 };
 
-enum class variable_kind {
+std::ostream& operator<<(std::ostream&, Enum_Kind);
+
+enum class Variable_Kind : unsigned char {
   _arrow_parameter,
   _catch,
   _class,
@@ -37,6 +48,7 @@ enum class variable_kind {
   _import_alias,               // TypeScript only
   _import_type,                // TypeScript only
   _index_signature_parameter,  // TypeScript only
+  _infer_type,                 // TypeScript only
   _interface,                  // TypeScript only
   _let,
   _namespace,   // TypeScript only
@@ -44,36 +56,85 @@ enum class variable_kind {
   _var,
 };
 
-enum class variable_init_kind {
-  // Examples:
+// For debugging.
+String8_View to_string(Variable_Kind);
+std::ostream& operator<<(std::ostream&, Variable_Kind);
+
+enum class Variable_Declaration_Flags : unsigned char {
+  none = 0,
+
+  // Only valid for _const, _let, and _var.
+  //
+  // Examples set:
+  //   let x = 42;
+  //   const [x] = xs;
+  //   for (var x = null in xs) {}
+  // Examples unset:
   //   class C {}
   //   (param, defaultParam = null) => {}
   //   let x, y, z;
   //   for (let x of xs) {}
-  normal,
+  initialized_with_equals = 1 << 0,
+
+  // Only valid for _namespace.
+  //
+  // Examples set:
+  //   namespace ns {;}
+  //   namespace ns { export class C {} }
+  // Examples unset:
+  //   namespace ns {}
+  //   module ns { namespace subns {} }
+  //
+  // See also NOTE[non-empty-namespace] and
+  // Parser::is_current_typescript_namespace_non_empty_.
+  non_empty_namespace = 1 << 1,
 
   // Only valid for _const, _let, and _var.
   //
-  // Examples:
-  //   let x = 42;
-  //   const [x] = xs;
-  //   for (var x = null in xs) {}
-  initialized_with_equals,
+  // Examples set:
+  //   for (let x = 0, y = 42; x < xs.length; ++x);
+  //   for (var [x] of xs);
+  //   for (const key in o);
+  // Examples unset:
+  //   for (x of xs) var y;
+  //   let x;
+  inside_for_loop_head = 1 << 2,
+
+  inside_for_loop_head_initialized_with_equals =
+      inside_for_loop_head | initialized_with_equals,
 };
 
-std::ostream& operator<<(std::ostream&, variable_kind);
+enum class Variable_Assignment_Flags : unsigned char {
+  none = 0,
 
-enum class function_attributes {
+  // The assigned variable was casted with a TypeScript angle type assertion, an
+  // 'as' type assertion, or a 'satisifes' type assertion. For example:
+  //
+  // type_asserted is not set for a non-null assertion.
+  //
+  // Examples set:
+  //   (x as T) = y;
+  // Examples unset:
+  //   (x) = y;
+  //   x! = y;
+  type_asserted = 1 << 0,
+};
+
+enum class Function_Attributes {
   async,
   async_generator,
   generator,
   normal,
 };
 
-std::ostream& operator<<(std::ostream&, function_attributes);
-}
+std::ostream& operator<<(std::ostream&, Function_Attributes);
 
-#endif
+struct Is_Runtime_Or_Type {
+  // Invariant: is_runtime || is_type
+  bool is_runtime;
+  bool is_type;
+};
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

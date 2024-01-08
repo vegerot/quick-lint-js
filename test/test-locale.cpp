@@ -4,43 +4,53 @@
 #include <gmock/gmock.h>
 #include <quick-lint-js/i18n/locale.h>
 #include <quick-lint-js/util/algorithm.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 
 using ::testing::ElementsAreArray;
 using namespace std::literals::string_view_literals;
 
 namespace quick_lint_js {
 namespace {
-TEST(test_locale, combinations_for_language) {
+std::vector<std::string> locale_name_combinations(const char* locale_name) {
+  std::vector<std::string> locale_names;
+  enumerate_locale_name_combinations(
+      locale_name, [&](std::string_view current_locale) -> bool {
+        locale_names.emplace_back(current_locale);
+        return true;
+      });
+  return locale_names;
+}
+
+TEST(Test_Locale, combinations_for_language) {
   EXPECT_THAT(locale_name_combinations("en"), ElementsAreArray({"en"}));
 }
 
-TEST(test_locale, combinations_for_language_with_territory) {
+TEST(Test_Locale, combinations_for_language_with_territory) {
   EXPECT_THAT(locale_name_combinations("fr_FR"),
               ElementsAreArray({"fr_FR", "fr"}));
 }
 
-TEST(test_locale, combinations_for_language_with_codeset) {
+TEST(Test_Locale, combinations_for_language_with_codeset) {
   EXPECT_THAT(locale_name_combinations("fr.utf8"),
               ElementsAreArray({"fr.utf8", "fr"}));
 }
 
-TEST(test_locale, combinations_for_language_with_modifier) {
+TEST(Test_Locale, combinations_for_language_with_modifier) {
   EXPECT_THAT(locale_name_combinations("fr@bon"),
               ElementsAreArray({"fr@bon", "fr"}));
 }
 
-TEST(test_locale, combinations_for_language_with_territory_and_modifier) {
+TEST(Test_Locale, combinations_for_language_with_territory_and_modifier) {
   EXPECT_THAT(locale_name_combinations("fr_FR@bon"),
               ElementsAreArray({"fr_FR@bon", "fr@bon", "fr_FR", "fr"}));
 }
 
-TEST(test_locale, combinations_for_language_with_territory_and_codeset) {
+TEST(Test_Locale, combinations_for_language_with_territory_and_codeset) {
   EXPECT_THAT(locale_name_combinations("fr_FR.utf8"),
               ElementsAreArray({"fr_FR.utf8", "fr_FR", "fr.utf8", "fr"}));
 }
 
-TEST(test_locale,
+TEST(Test_Locale,
      combinations_for_language_with_territory_and_codeset_and_modifier) {
   EXPECT_THAT(
       locale_name_combinations("fr_FR.utf8@bon"),
@@ -48,7 +58,7 @@ TEST(test_locale,
                         "fr_FR.utf8", "fr_FR", "fr.utf8", "fr"}));
 }
 
-TEST(test_locale, modifier_can_contain_underscores_and_at_signs) {
+TEST(Test_Locale, modifier_can_contain_underscores_and_at_signs) {
   EXPECT_THAT(locale_name_combinations("fr@a_b@c"),
               ElementsAreArray({"fr@a_b@c", "fr"}));
 }
@@ -71,7 +81,7 @@ std::string make_locales_string(const std::vector<std::string_view>& locales) {
   return locales_string;
 }
 
-TEST(test_locale, exact_match_locale) {
+TEST(Test_Locale, exact_match_locale) {
   for_each_locale_permutation(
       {
           "fr_FR"sv,
@@ -90,7 +100,7 @@ TEST(test_locale, exact_match_locale) {
       });
 }
 
-TEST(test_locale, no_match) {
+TEST(Test_Locale, no_match) {
   for_each_locale_permutation(
       {
           "fr_FR"sv,
@@ -102,7 +112,7 @@ TEST(test_locale, no_match) {
       });
 }
 
-TEST(test_locale, match_subset_of_locale_name) {
+TEST(Test_Locale, match_subset_of_locale_name) {
   for_each_locale_permutation(
       {
           "fr"sv,

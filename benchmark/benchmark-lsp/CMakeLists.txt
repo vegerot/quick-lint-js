@@ -1,14 +1,14 @@
 # Copyright (C) 2020  Matthew "strager" Glazar
 # See end of file for extended copyright information.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
 include(CheckCXXSourceCompiles)
 include(CheckIncludeFileCXX)
 include(QuickLintJSTarget)
 
 check_include_file_cxx(
-  experimental/coroutine
-  QUICK_LINT_JS_HAVE_EXPERIMENTAL_COROUTINE
+  coroutine
+  QUICK_LINT_JS_HAVE_COROUTINE
 )
 check_cxx_source_compiles(
   "#include <filesystem>
@@ -18,9 +18,10 @@ int main() {
   QUICK_LINT_JS_HAVE_FILESYSTEM_CHAR8
 )
 if (
-  QUICK_LINT_JS_HAVE_EXPERIMENTAL_COROUTINE AND
+  QUICK_LINT_JS_HAVE_COROUTINE AND
   QUICK_LINT_JS_HAVE_FILESYSTEM_CHAR8 AND
-  NOT EMSCRIPTEN  # We don't support Emscripten.
+  NOT EMSCRIPTEN AND  # We don't support Emscripten.
+  NOT WIN32  # We don't support Windows yet.
 )
   quick_lint_js_add_executable(
     quick-lint-js-benchmark-lsp-servers
@@ -38,8 +39,6 @@ if (
   target_link_libraries(
     quick-lint-js-benchmark-lsp-servers
     PRIVATE
-    boost_json
-    quick-lint-js-boost-json
     quick-lint-js-lib
     simdjson
   )

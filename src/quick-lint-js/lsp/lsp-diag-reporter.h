@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_LSP_LSP_DIAG_REPORTER_H
-#define QUICK_LINT_JS_LSP_LSP_DIAG_REPORTER_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No LSP on the web.
@@ -11,51 +10,49 @@
 #include <optional>
 #include <quick-lint-js/container/byte-buffer.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diag-reporter.h>
-#include <quick-lint-js/fe/diagnostic-formatter.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
-#include <quick-lint-js/fe/diagnostic.h>
+#include <quick-lint-js/diag/diag-reporter.h>
+#include <quick-lint-js/diag/diagnostic-formatter.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/lsp/lsp-location.h>
 #include <string>
 
 namespace quick_lint_js {
-class lsp_diag_formatter;
+class LSP_Diag_Formatter;
 
-class lsp_diag_reporter final : public diag_reporter {
+class LSP_Diag_Reporter final : public Diag_Reporter {
  public:
-  explicit lsp_diag_reporter(translator, byte_buffer &output,
-                             padded_string_view input);
+  explicit LSP_Diag_Reporter(Translator, Byte_Buffer &output,
+                             Padded_String_View input);
 
   void finish();
 
-  void report_impl(diag_type type, void *diag) override;
+  void report_impl(Diag_Type type, void *diag) override;
 
  private:
-  byte_buffer &output_;
-  lsp_locator locator_;
-  translator translator_;
+  Byte_Buffer &output_;
+  LSP_Locator locator_;
+  Translator translator_;
   bool need_comma_ = false;
 };
 
-class lsp_diag_formatter : public diagnostic_formatter<lsp_diag_formatter> {
+class LSP_Diag_Formatter : public Diagnostic_Formatter<LSP_Diag_Formatter> {
  public:
-  explicit lsp_diag_formatter(byte_buffer &output, lsp_locator &, translator);
-  void write_before_message(std::string_view code, diagnostic_severity,
-                            const source_code_span &origin);
-  void write_message_part(std::string_view code, diagnostic_severity,
-                          string8_view);
-  void write_after_message(std::string_view code, diagnostic_severity,
-                           const source_code_span &origin);
+  explicit LSP_Diag_Formatter(Byte_Buffer &output, LSP_Locator &, Translator);
+  void write_before_message(std::string_view code, Diagnostic_Severity,
+                            const Source_Code_Span &origin);
+  void write_message_part(std::string_view code, Diagnostic_Severity,
+                          String8_View);
+  void write_after_message(std::string_view code, Diagnostic_Severity,
+                           const Source_Code_Span &origin);
 
  private:
-  byte_buffer &output_;
-  lsp_locator &locator_;
+  Byte_Buffer &output_;
+  LSP_Locator &locator_;
 };
 }
-
-#endif
 
 #endif
 

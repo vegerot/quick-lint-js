@@ -32,12 +32,12 @@
 (defcustom flymake-quicklintjs-program "quick-lint-js"
   "Path to quick-lint-js program to run."
   :group 'flymake-quicklintjs
-  :type 'stringp)
+  :type '(file :must-match t))
 
 (defcustom flymake-quicklintjs-args nil
   "Arguments to quick-lint-js."
   :group 'flymake-quicklintjs
-  :type '(repeat 'string))
+  :type '(repeat string))
 
 (defvar-local flymake-quicklintjs--proc nil
   "Internal variable for `flymake-quicklintjs'")
@@ -61,17 +61,20 @@ quick-lint-js process that is passed the current buffer's contents via stdin.
 REPORT-FN is Flymake's callback."
   (when (process-live-p flymake-quicklintjs--proc)
     (kill-process flymake-quicklintjs--proc))
-  (let ((src-buf (current-buffer)))
+  (let ((src-buf (current-buffer))
+        (stdout-buf (generate-new-buffer "*flymake-quicklintjs*"))
+        (stderr-buf (generate-new-buffer "*flymake-quicklintjs-stderr*")))
     (setq flymake-quicklintjs--proc
           (make-process
            :name "flymake-quicklintjs"
            :connection-type 'pipe
            :noquery t
-           :buffer (get-buffer-create " *flymake-quicklintjs*")
+           :buffer stdout-buf
+           :stderr stderr-buf
            :command `(,flymake-quicklintjs-program
                       ,@(let ((file (buffer-file-name)))
                           (if file
-                            `("--path-for-config-search" ,file)
+                            `("--stdin-path" ,file)
                             ()))
                       "--stdin" "--output-format=emacs-lisp"
                       ,@flymake-quicklintjs-args)
@@ -80,12 +83,18 @@ REPORT-FN is Flymake's callback."
              (unwind-protect
                  (when (and (eq 'exit (process-status p))
                             (eq p flymake-quicklintjs--proc))
-                   (with-current-buffer (process-buffer p)
-                     (let ((diags (flymake-quicklintjs--make-diagnostics
-                                  src-buf
-                                  (car (read-from-string
-                                        (buffer-substring-no-properties
-                                         (point-min) (point-max)))))))
+                   (with-current-buffer stderr-buf
+                     (let ((stderr-data (buffer-substring-no-properties
+                                         (point-min) (point-max))))
+                       (if (not (string-empty-p stderr-data))
+                           (flymake-log :warning "%S" stderr-data))))
+                   (let ((diags (flymake-quicklintjs--make-diagnostics
+                                 src-buf
+                                 (car (read-from-string
+                                       (with-current-buffer stdout-buf
+                                         (buffer-substring-no-properties
+                                          (point-min) (point-max))))))))
+                     (with-current-buffer src-buf
                        (if (or diags (zerop (process-exit-status p)))
                            (funcall report-fn diags
                                     :region (cons (point-min) (point-max)))
@@ -95,7 +104,8 @@ REPORT-FN is Flymake's callback."
                                    (point-min) (progn (goto-char (point-min))
                                                       (line-end-position))))))))
                (unless (process-live-p p)
-                 (kill-buffer (process-buffer p)))))))
+                 (kill-buffer stdout-buf)
+                 (kill-buffer stderr-buf))))))
     (process-send-region flymake-quicklintjs--proc (point-min) (point-max))
     (process-send-eof flymake-quicklintjs--proc)))
 

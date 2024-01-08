@@ -1,14 +1,14 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_PORT_BIT_H
-#define QUICK_LINT_JS_PORT_BIT_H
+#pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 namespace quick_lint_js {
 // TODO(strager): Use std::countr_zero if available.
-inline int countr_zero(std::uint32_t x) noexcept {
+inline int countr_zero(std::uint32_t x) {
 #if defined(__GNUC__)
   if (x == 0) {
     return 32;
@@ -26,7 +26,7 @@ inline int countr_zero(std::uint32_t x) noexcept {
 }
 
 // TODO(strager): Use std::countr_one if available.
-inline int countr_one(std::uint32_t x) noexcept {
+inline int countr_one(std::uint32_t x) {
 #if defined(__GNUC__)
   return countr_zero(~x);
 #else
@@ -41,16 +41,24 @@ inline int countr_one(std::uint32_t x) noexcept {
 }
 
 // TODO(strager): Use std::countl_zero if available.
-inline int countl_zero(std::uint32_t x) noexcept {
+template <class T>
+int countl_zero(T x) {
+  constexpr int width = sizeof(T) * 8;
 #if defined(__GNUC__)
   if (x == 0) {
-    return 32;
+    return width;
   }
-  return __builtin_clz(x);
+  if constexpr (std::is_same_v<T, unsigned>) {
+    return __builtin_clz(x);
+  } else if constexpr (std::is_same_v<T, unsigned long>) {
+    return __builtin_clzl(x);
+  } else if constexpr (std::is_same_v<T, unsigned long long>) {
+    return __builtin_clzll(x);
+  }
 #else
   int i;
-  for (i = 0; i < 32; ++i) {
-    if ((x & (std::uint32_t(1) << (32 - i - 1))) != 0) {
+  for (i = 0; i < width; ++i) {
+    if ((x & (T(1) << (width - i - 1))) != 0) {
       break;
     }
   }
@@ -59,10 +67,34 @@ inline int countl_zero(std::uint32_t x) noexcept {
 }
 
 // TODO(strager): Use std::bit_width if available.
-inline int bit_width(std::uint32_t x) noexcept { return 32 - countl_zero(x); }
+inline int bit_width(std::uint32_t x) { return 32 - countl_zero(x); }
+
+// TODO(strager): Use std::has_single_bit if available.
+template <class T>
+bool has_single_bit(T x) {
+  if (x == 0) {
+    return false;
+  }
+  if (((x - 1) & x) != 0) {
+    return false;
+  }
+  return true;
 }
 
-#endif
+// TODO(strager): Use std::bit_ceil if available.
+template <class T>
+T bit_ceil(T x) {
+  constexpr int width = sizeof(T) * 8;
+  if (x == 0) {
+    return 1;
+  }
+  if (has_single_bit(x)) {
+    return x;
+  }
+  int shift = width - countl_zero(x);
+  return (T(1) << shift);
+}
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

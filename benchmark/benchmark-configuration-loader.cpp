@@ -7,7 +7,7 @@
 #include <quick-lint-js/configuration/configuration-loader.h>
 #include <quick-lint-js/io/file.h>
 #include <quick-lint-js/io/temporary-directory.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <string>
 
 namespace quick_lint_js {
@@ -26,7 +26,7 @@ void benchmark_no_config_file(::benchmark::State& state) {
   write_file_or_exit(path, u8"");
 
   for (auto _ : state) {
-    configuration_loader loader(basic_configuration_filesystem::instance());
+    Configuration_Loader loader(Basic_Configuration_Filesystem::instance());
     auto config = loader.load_for_file(path);
     ::benchmark::DoNotOptimize(config);
   }
@@ -40,8 +40,8 @@ BENCHMARK(benchmark_no_config_file)
     ->Arg(48)
     ->Arg(64);
 #endif
-}  // namespace
-}  // namespace quick_lint_js
+}
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

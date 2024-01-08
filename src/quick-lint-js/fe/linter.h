@@ -1,16 +1,15 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_LINTER_H
-#define QUICK_LINT_JS_FE_LINTER_H
+#pragma once
 
 namespace quick_lint_js {
-class diag_reporter;
-class global_declared_variable_set;
-class padded_string_view;
+class Diag_Reporter;
+class Global_Declared_Variable_Set;
+class Padded_String_View;
 
 // TODO(#465): Accept parser options from quick-lint-js.config or CLI options.
-struct linter_options {
+struct Linter_Options {
   // If true, parse and lint JSX language extensions:
   // https://facebook.github.io/jsx/
   bool jsx = true;
@@ -18,15 +17,21 @@ struct linter_options {
   // If true, parse and lint TypeScript instead of JavaScript.
   bool typescript = false;
 
+  // If true, parse as a TypeScript definition file (.d.ts).
+  //
+  // Invariant: typescript_definition implies typescript.
+  bool typescript_definition = false;
+
   // If true, print a human-readable representation of parser visits to stderr.
   bool print_parser_visits = false;
+
+  friend bool operator==(Linter_Options, Linter_Options);
+  friend bool operator!=(Linter_Options, Linter_Options);
 };
 
-void parse_and_lint(padded_string_view code, diag_reporter&,
-                    const global_declared_variable_set&, linter_options);
+void parse_and_lint(Padded_String_View code, Diag_Reporter&,
+                    const Global_Declared_Variable_Set&, Linter_Options);
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

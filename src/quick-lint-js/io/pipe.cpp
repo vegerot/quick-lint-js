@@ -24,7 +24,7 @@
 
 namespace quick_lint_js {
 #if QLJS_HAVE_PIPE
-pipe_fds make_pipe() {
+Pipe_FDs make_pipe() {
   int fds[2];
   int rc = ::pipe(fds);
   if (rc == -1) {
@@ -32,34 +32,34 @@ pipe_fds make_pipe() {
                  std::strerror(errno));
     std::abort();
   }
-  rc = ::fcntl(fds[0], F_SETFD, FD_CLOEXEC);
-  if (rc == -1) {
-    std::fprintf(stderr, "warning: failed to make pipe reader CLOEXEC: %s\n",
-                 std::strerror(errno));
+  for (int fd : fds) {
+    rc = ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+    if (rc == -1) {
+      std::fprintf(stderr, "warning: failed to make pipe CLOEXEC: %s\n",
+                   std::strerror(errno));
+    }
   }
-  rc = ::fcntl(fds[1], F_SETFD, FD_CLOEXEC);
-  if (rc == -1) {
-    std::fprintf(stderr, "warning: failed to make pipe writer CLOEXEC: %s\n",
-                 std::strerror(errno));
-  }
-  return pipe_fds{
-      .reader = posix_fd_file(fds[0]),
-      .writer = posix_fd_file(fds[1]),
+  return Pipe_FDs{
+      .reader = POSIX_FD_File(fds[0]),
+      .writer = POSIX_FD_File(fds[1]),
   };
 }
 #elif defined(_WIN32)
-pipe_fds make_pipe() {
+Pipe_FDs make_pipe() {
   HANDLE readPipe;
   HANDLE writePipe;
-  if (!::CreatePipe(&readPipe, &writePipe, /*lpPipeAttributes=*/nullptr,
+  ::SECURITY_ATTRIBUTES attributes = {};
+  attributes.nLength = sizeof(attributes);
+  attributes.bInheritHandle = true;
+  if (!::CreatePipe(&readPipe, &writePipe, /*lpPipeAttributes=*/&attributes,
                     /*nSize=*/0)) {
     std::fprintf(stderr, "error: failed to create pipe: %s\n",
                  windows_last_error_message().c_str());
     std::abort();
   }
-  return pipe_fds{
-      .reader = windows_handle_file(readPipe),
-      .writer = windows_handle_file(writePipe),
+  return Pipe_FDs{
+      .reader = Windows_Handle_File(readPipe),
+      .writer = Windows_Handle_File(writePipe),
   };
 }
 #endif

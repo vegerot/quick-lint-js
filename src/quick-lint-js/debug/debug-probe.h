@@ -1,18 +1,25 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_DEBUG_DEBUG_PROBE_H
-#define QUICK_LINT_JS_DEBUG_DEBUG_PROBE_H
+#pragma once
 
 namespace quick_lint_js {
-// Call this occasionally after using quick_lint_js::vector.
+template <class Data>
+class Synchronized;
+struct LSP_Documents;
+
+// Call this occasionally after modifying lsp_documents.
+//
+// If the debug server is enabled, this function will push document data to
+// opened browsers.
+void debug_probe_publish_lsp_documents();
+
+// Call this occasionally after using quick_lint_js::Vector.
 //
 // If the debug server is enabled, this function will push vector profiling
 // statistics to opened browsers.
 void debug_probe_publish_vector_profile();
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

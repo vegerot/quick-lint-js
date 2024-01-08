@@ -1,11 +1,14 @@
+<!---{
+"title": "Errors and warnings for quick-lint-js",
+"description": "quick-lint-js provides helpful error messages."
+}--->
+
 <!DOCTYPE html>
 <!-- Copyright (C) 2020  Matthew "strager" Glazar -->
 <!-- See end of file for extended copyright information. -->
 <html lang="en">
   <head>
-    <%- await include("../common-head.ejs.html", { title: `Errors and warnings
-    for quick-lint-js`, description: `quick-lint-js provides helpful error
-    messages.` }) %>
+    <%- await include("../common-head.ejs.html") %>
     <script>
       //<%
       let url = await import("url");
@@ -44,7 +47,7 @@
     </script>
 
     <main>
-      <h2>Error codes</h2>
+      <h1>Error codes</h1>
 
       <p>
         quick-lint-js can find the following warnings and errors in your code:

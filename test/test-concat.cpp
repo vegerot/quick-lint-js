@@ -12,20 +12,20 @@ using namespace std::literals::string_view_literals;
 
 namespace quick_lint_js {
 namespace {
-TEST(test_concat, string_literals) {
-  EXPECT_EQ(concat("hello", "world"), "helloworld"s);
-  EXPECT_EQ(concat("hello", "beautiful", "world"), "hellobeautifulworld"s);
-  EXPECT_EQ(concat("hello", "beautiful", "world", "!"),
-            "hellobeautifulworld!"s);
+TEST(Test_Concat, string_literals_are_not_supported) {
+  // TODO(strager): Compile test.
+#if 0
+  concat("hello", "world");
+  concat("hello", "beautiful", "world");
+  concat("hello", "beautiful", "world", "!");
 
-  EXPECT_EQ(concat(u8"hello", u8"world"), u8"helloworld"s);
-  EXPECT_EQ(concat(u8"hello", u8"beautiful", u8"world"),
-            u8"hellobeautifulworld"s);
-  EXPECT_EQ(concat(u8"hello", u8"beautiful", u8"world", u8"!"),
-            u8"hellobeautifulworld!"s);
+  concat(u8"hello", u8"world");
+  concat(u8"hello", u8"beautiful", u8"world");
+  concat(u8"hello", u8"beautiful", u8"world", u8"!");
+#endif
 }
 
-TEST(test_concat, string_views) {
+TEST(Test_Concat, string_views) {
   EXPECT_EQ(concat("hello"sv, "world"sv), "helloworld"s);
   EXPECT_EQ(concat("hello"sv, "beautiful"sv, "world"sv),
             "hellobeautifulworld"s);
@@ -39,7 +39,7 @@ TEST(test_concat, string_views) {
             u8"hellobeautifulworld!"s);
 }
 
-TEST(test_concat, std_strings) {
+TEST(Test_Concat, std_strings) {
   EXPECT_EQ(concat("hello"s, "world"s), "helloworld"s);
   EXPECT_EQ(concat("hello"s, "beautiful"s, "world"s), "hellobeautifulworld"s);
   EXPECT_EQ(concat("hello"s, "beautiful"s, "world"s, "!"s),

@@ -4,14 +4,18 @@
 #include <ostream>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/port/char8.h>
+#include <simdjson.h>
 
 namespace quick_lint_js {
-std::ostream& operator<<(std::ostream& out, const padded_string& x) {
+static_assert(Padded_String::padding_size >= ::simdjson::SIMDJSON_PADDING,
+              "Padded_String must have enough padded to satisfy simdjson");
+
+std::ostream& operator<<(std::ostream& out, const Padded_String& x) {
   out << out_string8(x.string_view());
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const padded_string_view& x) {
+std::ostream& operator<<(std::ostream& out, const Padded_String_View& x) {
   out << out_string8(x.string_view());
   return out;
 }

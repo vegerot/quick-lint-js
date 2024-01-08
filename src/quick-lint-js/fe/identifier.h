@@ -1,37 +1,39 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_IDENTIFIER_H
-#define QUICK_LINT_JS_FE_IDENTIFIER_H
+#pragma once
 
 #include <cstddef>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/port/char8.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/port/warning.h>
+#include <quick-lint-js/util/cast.h>
 
 namespace quick_lint_js {
-class identifier {
+class Identifier {
  public:
   // For tests only.
-  explicit identifier(source_code_span span) noexcept
+  explicit Identifier(Source_Code_Span span)
       : span_begin_(span.begin()),
         normalized_begin_(this->span_begin_),
-        span_size_(narrow_cast<int>(span.end() - span.begin())),
+        span_size_(narrow_cast<unsigned>(span.end() - span.begin())),
         normalized_size_(this->span_size_) {}
 
-  explicit identifier(source_code_span span, string8_view normalized) noexcept
+  explicit Identifier(Source_Code_Span span, String8_View normalized)
       : span_begin_(span.begin()),
         normalized_begin_(normalized.data()),
-        span_size_(narrow_cast<int>(span.end() - span.begin())),
-        normalized_size_(narrow_cast<int>(normalized.size())) {}
+        span_size_(narrow_cast<unsigned>(span.end() - span.begin())),
+        normalized_size_(narrow_cast<unsigned>(normalized.size())) {}
 
-  explicit identifier(source_code_span span,
-                      const char8* normalized) noexcept = delete;
+  explicit Identifier(Source_Code_Span span, const Char8* normalized) = delete;
 
-  source_code_span span() const noexcept {
-    return source_code_span(this->span_begin_,
+  QLJS_WARNING_PUSH
+  QLJS_WARNING_IGNORE_GCC("-Wnull-dereference")
+  Source_Code_Span span() const {
+    return Source_Code_Span(this->span_begin_,
                             this->span_begin_ + this->span_size_);
   }
+  QLJS_WARNING_POP
 
   // normalized_name returns the variable's name with escape sequences resolved.
   //
@@ -41,20 +43,21 @@ class identifier {
   // The returned pointers might not reside within the source code string. In
   // other words, the normalized name might be heap-allocated. Call span()
   // instead if you want pointers within the source code input.
-  string8_view normalized_name() const noexcept {
-    return string8_view(this->normalized_begin_,
-                        narrow_cast<std::size_t>(this->normalized_size_));
+  String8_View normalized_name() const {
+    return String8_View(this->normalized_begin_, this->normalized_size_);
+  }
+
+  bool is_private_identifier() const {
+    return this->normalized_begin_[0] == u8'#';
   }
 
  private:
-  const char8* span_begin_;
-  const char8* normalized_begin_;
-  int span_size_;
-  int normalized_size_;
+  const Char8* span_begin_;
+  const Char8* normalized_begin_;
+  unsigned span_size_;
+  unsigned normalized_size_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/null-visitor.h>
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/io/file.h>
@@ -27,24 +27,24 @@ void benchmark_parse_file(benchmark::State &state) {
                  source_path_env_var);
     std::exit(1);
   }
-  padded_string source = quick_lint_js::read_file_or_exit(source_path);
+  Padded_String source = quick_lint_js::read_file_or_exit(source_path);
 
-  parser_options p_options;
+  Parser_Options p_options;
   for (auto _ : state) {
-    parser p(&source, &null_diag_reporter::instance, p_options);
-    null_visitor visitor;
+    Parser p(&source, &Null_Diag_Reporter::instance, p_options);
+    Null_Visitor visitor;
     p.parse_and_visit_module(visitor);
   }
 }
 BENCHMARK(benchmark_parse_file);
 #endif
 
-void benchmark_parse(benchmark::State &state, string8_view raw_source) {
-  padded_string source(raw_source);
-  parser_options p_options;
+void benchmark_parse(benchmark::State &state, String8_View raw_source) {
+  Padded_String source(raw_source);
+  Parser_Options p_options;
   for (auto _ : state) {
-    parser p(&source, &null_diag_reporter::instance, p_options);
-    null_visitor visitor;
+    Parser p(&source, &Null_Diag_Reporter::instance, p_options);
+    Null_Visitor visitor;
     p.parse_and_visit_module(visitor);
   }
 }
@@ -111,8 +111,8 @@ await a =>
 await a =>
 a
 )"_sv);
-}  // namespace
-}  // namespace quick_lint_js
+}
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

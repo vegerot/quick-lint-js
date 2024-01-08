@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_MOCK_WIN32_H
-#define QUICK_LINT_JS_MOCK_WIN32_H
+#pragma once
 
 #include <quick-lint-js/configuration/change-detecting-filesystem.h>
 #include <quick-lint-js/port/have.h>
@@ -13,19 +12,18 @@
 
 namespace quick_lint_js {
 #if defined(_WIN32)
-class mock_win32_watch_error_guard {
+class Mock_Win32_Watch_Error_Guard {
  public:
-  explicit mock_win32_watch_error_guard(::DWORD* to_mock,
-                                        ::DWORD error) noexcept
+  explicit Mock_Win32_Watch_Error_Guard(::DWORD* to_mock, ::DWORD error)
       : to_mock_(to_mock), old_error_(*this->to_mock_) {
     *this->to_mock_ = error;
   }
 
-  mock_win32_watch_error_guard(const mock_win32_watch_error_guard&) = delete;
-  mock_win32_watch_error_guard& operator=(const mock_win32_watch_error_guard&) =
+  Mock_Win32_Watch_Error_Guard(const Mock_Win32_Watch_Error_Guard&) = delete;
+  Mock_Win32_Watch_Error_Guard& operator=(const Mock_Win32_Watch_Error_Guard&) =
       delete;
 
-  ~mock_win32_watch_error_guard() { *this->to_mock_ = this->old_error_; }
+  ~Mock_Win32_Watch_Error_Guard() { *this->to_mock_ = this->old_error_; }
 
  private:
   ::DWORD* to_mock_;
@@ -33,8 +31,6 @@ class mock_win32_watch_error_guard {
 };
 #endif
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

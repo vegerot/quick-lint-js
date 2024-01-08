@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_PERMISSIONS_H
-#define QUICK_LINT_JS_PERMISSIONS_H
+#pragma once
 
 #include <quick-lint-js/port/have.h>
 
@@ -11,7 +10,7 @@
 #endif
 
 namespace quick_lint_js {
-inline bool process_ignores_filesystem_permissions() noexcept {
+inline bool process_ignores_filesystem_permissions() {
 #if QLJS_HAVE_UNISTD_H
   return ::geteuid() == 0;
 #else
@@ -19,8 +18,6 @@ inline bool process_ignores_filesystem_permissions() noexcept {
 #endif
 }
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

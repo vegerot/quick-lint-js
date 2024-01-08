@@ -10,79 +10,102 @@
 #include <vector>
 
 namespace quick_lint_js {
-variable_kind global_declared_variable::kind() const noexcept {
+Variable_Kind Global_Declared_Variable::kind() const {
+  if (this->is_type_only) {
+    // TODO(strager): What should we do here? Will this ever be called?
+    return Variable_Kind::_let;
+  }
+
   if (this->is_writable) {
-    return variable_kind::_let;
+    return Variable_Kind::_let;
   } else {
-    return variable_kind::_const;
+    return Variable_Kind::_const;
   }
 }
 
-void global_declared_variable_set::add_predefined_global_variable(
-    const char8 *name, bool is_writable) {
-  this->add_global_variable(global_declared_variable{
-      .name = name, .is_writable = is_writable, .is_shadowable = true});
+Global_Declared_Variable_Set::Global_Declared_Variable_Set() { this->clear(); }
+
+void Global_Declared_Variable_Set::add_predefined_global_variable(
+    const Char8 *name, bool is_writable) {
+  this->add_global_variable(Global_Declared_Variable{
+      .name = name,
+      .is_writable = is_writable,
+      .is_shadowable = true,
+      .is_type_only = false,
+  });
 }
 
-void global_declared_variable_set::add_global_variable(
-    global_declared_variable global_variable) {
-  this->variables_[global_variable.name] = variable_options{
+void Global_Declared_Variable_Set::add_global_variable(
+    Global_Declared_Variable global_variable) {
+  this->variables_[global_variable.name] = Variable_Options{
       .is_writable = global_variable.is_writable,
       .is_shadowable = global_variable.is_shadowable,
+      .is_type_only = global_variable.is_type_only,
   };
 }
 
-void global_declared_variable_set::add_literally_everything() {
+void Global_Declared_Variable_Set::add_literally_everything() {
   this->all_variables_declared_ = true;
 }
 
-void global_declared_variable_set::reserve_more_global_variables(
+void Global_Declared_Variable_Set::reserve_more_global_variables(
     std::size_t extra_count, [[maybe_unused]] bool is_shadowable,
     [[maybe_unused]] bool is_writable) {
   this->variables_.reserve(this->variables_.size() + extra_count);
 }
 
-std::optional<global_declared_variable> global_declared_variable_set::find(
-    identifier name) const noexcept {
-  return this->find(name.normalized_name());
+std::optional<Global_Declared_Variable>
+Global_Declared_Variable_Set::find_runtime_or_type(Identifier name) const {
+  return this->find_runtime_or_type(name.normalized_name());
 }
 
-std::optional<global_declared_variable> global_declared_variable_set::find(
-    string8_view name) const noexcept {
+std::optional<Global_Declared_Variable>
+Global_Declared_Variable_Set::find_runtime_or_type(String8_View name) const {
   auto it = this->variables_.find(name);
   if (it != this->variables_.end()) {
-    return global_declared_variable{
+    return Global_Declared_Variable{
         .name = name,
         .is_writable = it->second.is_writable,
         .is_shadowable = it->second.is_shadowable,
+        .is_type_only = it->second.is_type_only,
     };
   }
   if (this->all_variables_declared_) {
-    return global_declared_variable{
+    return Global_Declared_Variable{
         .name = name,
         .is_writable = true,
         .is_shadowable = true,
+        .is_type_only = false,
     };
   }
   return std::nullopt;
 }
 
-std::optional<global_declared_variable>
-global_declared_variable_set::find_runtime(identifier name) const noexcept {
-  // global_declared_variable_set doesn't support type-only variables. All
-  // variables are accessible at run-time.
-  return this->find(name);
-}
-
-std::optional<global_declared_variable> global_declared_variable_set::find_type(
-    identifier name) const noexcept {
+std::optional<Global_Declared_Variable> Global_Declared_Variable_Set::find(
+    Identifier name, Is_Runtime_Or_Type options) const {
+  std::optional<Global_Declared_Variable> var =
+      this->find_runtime_or_type(name);
+  if (!var.has_value()) {
+    return std::nullopt;
+  }
   // TODO(#690): Do not treat all globals as type-visible.
-  return this->find(name);
+  bool var_is_type = true;
+  bool var_is_runtime = !var->is_type_only;
+  if (var_is_type == options.is_type || var_is_runtime == options.is_runtime) {
+    return var;
+  } else {
+    return std::nullopt;
+  }
 }
 
-std::vector<string8_view> global_declared_variable_set::get_all_variable_names()
+void Global_Declared_Variable_Set::clear() {
+  this->variables_.clear();
+  this->all_variables_declared_ = false;
+}
+
+std::vector<String8_View> Global_Declared_Variable_Set::get_all_variable_names()
     const {
-  std::vector<string8_view> result;
+  std::vector<String8_View> result;
   result.reserve(this->variables_.size());
   for (auto &[name, _options] : this->variables_) {
     result.push_back(name);

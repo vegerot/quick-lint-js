@@ -1,87 +1,74 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_SPY_LSP_ENDPOINT_REMOTE_H
-#define QUICK_LINT_JS_SPY_LSP_ENDPOINT_REMOTE_H
+#pragma once
 
-#include <boost/json/value.hpp>
 #include <gtest/gtest.h>
 #include <quick-lint-js/container/byte-buffer.h>
-#include <quick-lint-js/lsp/lsp-endpoint.h>
-#include <quick-lint-js/parse-json.h>
+#include <quick-lint-js/lsp/lsp-json-rpc-message-parser.h>
 #include <quick-lint-js/port/char8.h>
+#include <quick-lint-js/tjson.h>
 #include <vector>
 
 namespace quick_lint_js {
-class spy_lsp_endpoint_remote final : public lsp_endpoint_remote {
+class Spy_LSP_Endpoint_Remote final : public LSP_Endpoint_Remote {
  public:
-  void send_message(byte_buffer&& message) override {
-    // TODO(strager): SCOPED_TRACE(message);
-    ::boost::json::value parsed_message = parse_boost_json(message);
-    if (auto object = parsed_message.if_object()) {
-      EXPECT_EQ((*object)["jsonrpc"], "2.0");
-    } else if (auto array = parsed_message.if_array()) {
-      // Visual Studio Code's LSP client does not support batch JSON-RPC
-      // messages (as of vscode-jsonrpc version 6.0.0):
-      // https://github.com/microsoft/vscode-languageserver-node/issues/781
-      if (!this->allow_batch_messages) {
-        ADD_FAILURE() << "JSON-RPC batch messages are poorly supported by LSP "
-                         "clients, but quick-lint-js gave the client a batch "
-                         "message. Send multiple messages instead.";
-      }
-
-      for (::boost::json::value& sub_message : *array) {
-        EXPECT_EQ(look_up(sub_message, "jsonrpc"), "2.0");
+  void send_message(Byte_Buffer&& message) override {
+    TJSON parsed_message(message);
+    if (parsed_message.root().is_object()) {
+      EXPECT_EQ(parsed_message[u8"jsonrpc"_sv], u8"2.0"_sv);
+    } else if (parsed_message.root().is_array()) {
+      ADD_FAILURE() << "JSON-RPC batch messages are poorly supported by LSP "
+                       "clients, but quick-lint-js gave the client a batch "
+                       "message. Send multiple messages instead.";
+      for (TJSON_Value sub_message :
+           parsed_message.root().get_array_or_empty()) {
+        EXPECT_EQ(sub_message[u8"jsonrpc"_sv], u8"2.0"_sv);
       }
     }
 
-    this->messages.push_back(parsed_message);
+    this->messages.push_back(std::move(parsed_message));
   }
 
-  std::vector<::boost::json::object> requests() const {
+  std::vector<TJSON_Value> requests() const {
     return this->collect_message_objects(is_request);
   }
 
-  std::vector<::boost::json::object> responses() const {
+  std::vector<TJSON_Value> responses() const {
     return this->collect_message_objects(is_response);
   }
 
-  std::vector<::boost::json::object> notifications() const {
+  std::vector<TJSON_Value> notifications() const {
     return this->collect_message_objects(is_notification);
   }
 
   template <class Predicate>
-  std::vector<::boost::json::object> collect_message_objects(
-      Predicate&& include) const {
-    std::vector<::boost::json::object> result;
-    for (const ::boost::json::value& message_value : this->messages) {
-      if (const ::boost::json::object* message = message_value.if_object()) {
-        if (include(*message)) {
-          result.push_back(*message);
-        }
+  std::vector<TJSON_Value> collect_message_objects(Predicate&& include) const {
+    std::vector<TJSON_Value> result;
+    for (const TJSON& message : this->messages) {
+      if (include(message)) {
+        result.push_back(message.root());
       }
     }
     return result;
   }
 
-  static bool is_request(const ::boost::json::object& message) {
-    return message.contains("id") && message.contains("method");
+  static bool is_request(const TJSON& message) {
+    return message[u8"id"_sv].exists() && message[u8"method"_sv].exists();
   }
 
-  static bool is_response(const ::boost::json::object& message) {
-    return message.contains("id") && !message.contains("method");
+  static bool is_response(const TJSON& message) {
+    return message[u8"id"_sv].exists() && !message[u8"method"_sv].exists();
   }
 
-  static bool is_notification(const ::boost::json::object& message) {
-    return !message.contains("id") && message.contains("method");
+  static bool is_notification(const TJSON& message) {
+    return !message[u8"id"_sv].exists() && message[u8"method"_sv].exists();
   }
 
-  std::vector<::boost::json::value> messages;
+  std::vector<TJSON> messages;
   bool allow_batch_messages = false;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

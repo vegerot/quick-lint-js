@@ -1,11 +1,14 @@
+<!---{
+"title": "Install quick-lint-js CLI on GNU/Linux",
+"description": "Install quick-lint-js's CLI on GNU/Linux"
+}--->
+
 <!DOCTYPE html>
 <!-- Copyright (C) 2020  Matthew "strager" Glazar -->
 <!-- See end of file for extended copyright information. -->
 <html lang="en">
   <head>
-    <%- await include("../../../common-head.ejs.html", { title: `Install
-    quick-lint-js CLI on GNU/Linux`, description: `Install quick-lint-js's CLI
-    on GNU/Linux` }) %>
+    <%- await include("../../../common-head.ejs.html") %>
     <link href="../../../main.css" rel="stylesheet" />
   </head>
   <body class="side-bar-nav">
@@ -13,13 +16,13 @@
     (GNU/Linux)`}) %>
 
     <main>
-      <h2>
+      <h1>
         <qljs-icon name="cli-and-lsp-server" size="29" /><qljs-icon
           name="linux"
           size="29"
         />
         Install CLI and LSP server on GNU/Linux
-      </h2>
+      </h1>
 
       <%- await include("../../common-static.ejs.html", {os: "linux"}) %>
     </main>

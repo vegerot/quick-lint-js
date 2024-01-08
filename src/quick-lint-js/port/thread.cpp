@@ -7,7 +7,7 @@
 #include <quick-lint-js/io/file-handle.h>
 #include <quick-lint-js/port/have.h>
 #include <quick-lint-js/port/thread.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/util/cast.h>
 #include <utility>
 
 #if defined(QLJS_THREADS_WINDOWS)
@@ -42,49 +42,66 @@
 
 namespace quick_lint_js {
 #if defined(QLJS_THREADS_NONE)
-void mutex::lock() {}
+void Mutex::lock() {}
 
-void mutex::unlock() {}
+void Mutex::unlock() {}
 
-condition_variable::condition_variable() {}
+Condition_Variable::Condition_Variable() {}
 
-condition_variable::~condition_variable() {}
+Condition_Variable::~Condition_Variable() {}
 
-void condition_variable::wait(std::unique_lock<mutex>&) {
+void Condition_Variable::wait(std::unique_lock<Mutex>&) {
   // For single-threaded programs, wait() would hang. Let's crash instead.
   QLJS_CRASH_ALLOWING_CORE_DUMP();
 }
 
-void condition_variable::notify_one() {}
+void Condition_Variable::wait_raw(Mutex*) {
+  // For single-threaded programs, wait_raw() would hang. Let's crash instead.
+  QLJS_CRASH_ALLOWING_CORE_DUMP();
+}
 
-void condition_variable::notify_all() {}
+void Condition_Variable::notify_one() {}
+
+void Condition_Variable::notify_all() {}
 #endif
 
 #if defined(QLJS_THREADS_WINDOWS)
-thread::thread() noexcept : thread_handle_(nullptr) {}
+Thread::Thread() : thread_handle_(nullptr) {}
 
-thread& thread::operator=(thread&& other) {
+Thread& Thread::operator=(Thread&& other) {
   QLJS_ASSERT(!this->thread_handle_.valid());
 
   this->thread_handle_ = std::move(other.thread_handle_);
+  this->closure_ = std::exchange(other.closure_, nullptr);
+  this->destroy_closure_ = std::exchange(other.destroy_closure_, nullptr);
 
   QLJS_ASSERT(!other.thread_handle_.valid());
   return *this;
 }
 
-thread::~thread() { QLJS_ASSERT(!this->thread_handle_.valid()); }
+Thread::~Thread() { QLJS_ASSERT(!this->thread_handle_.valid()); }
 
-bool thread::joinable() const noexcept { return this->thread_handle_.valid(); }
+bool Thread::joinable() const { return this->thread_handle_.valid(); }
 
-void thread::join() {
+void Thread::join() {
   QLJS_ASSERT(this->joinable());
   ::DWORD rc = ::WaitForSingleObject(this->thread_handle_.get(), INFINITE);
   QLJS_ALWAYS_ASSERT(rc != WAIT_FAILED);
   QLJS_ASSERT(rc == WAIT_OBJECT_0);
   this->thread_handle_.close();
+
+  this->destroy_closure_(this->closure_);
+  this->closure_ = nullptr;
+  this->destroy_closure_ = nullptr;
 }
 
-void thread::start(os_thread_routine thread_routine, void* user_data) {
+void Thread::terminate() {
+  QLJS_ASSERT(this->joinable());
+  ::BOOL ok = ::TerminateThread(this->thread_handle_.get(), 0);
+  QLJS_ASSERT(ok);
+}
+
+void Thread::start(OS_Thread_Routine thread_routine, void* user_data) {
   QLJS_ASSERT(!this->thread_handle_.valid());
 
   std::uintptr_t thread_handle = ::_beginthreadex(
@@ -96,62 +113,73 @@ void thread::start(os_thread_routine thread_routine, void* user_data) {
       /*thrdaddr=*/nullptr);
   QLJS_ALWAYS_ASSERT(thread_handle != 0);
   this->thread_handle_ =
-      windows_handle_file(reinterpret_cast<::HANDLE>(thread_handle));
+      Windows_Handle_File(reinterpret_cast<::HANDLE>(thread_handle));
 }
 
-void mutex::lock() { ::AcquireSRWLockExclusive(&this->mutex_handle_); }
+void Mutex::lock() { ::AcquireSRWLockExclusive(&this->mutex_handle_); }
 
-void mutex::unlock() { ::ReleaseSRWLockExclusive(&this->mutex_handle_); }
+void Mutex::unlock() { ::ReleaseSRWLockExclusive(&this->mutex_handle_); }
 
-condition_variable::condition_variable() {
+Condition_Variable::Condition_Variable() {
   ::InitializeConditionVariable(&this->cond_var_handle_);
 }
 
-condition_variable::~condition_variable() = default;
+Condition_Variable::~Condition_Variable() = default;
 
-void condition_variable::wait(std::unique_lock<mutex>& lock) {
-  ::BOOL ok = ::SleepConditionVariableSRW(
-      &this->cond_var_handle_, &lock.mutex()->mutex_handle_,
-      /*dwMilliseconds=*/INFINITE, /*Flags=*/0);
+void Condition_Variable::wait(std::unique_lock<Mutex>& lock) {
+  this->wait_raw(lock.mutex());
+}
+
+void Condition_Variable::wait_raw(Mutex* lock) {
+  ::BOOL ok =
+      ::SleepConditionVariableSRW(&this->cond_var_handle_, &lock->mutex_handle_,
+                                  /*dwMilliseconds=*/INFINITE, /*Flags=*/0);
   QLJS_ALWAYS_ASSERT(ok);
 }
 
-void condition_variable::notify_one() {
+void Condition_Variable::notify_one() {
   ::WakeConditionVariable(&this->cond_var_handle_);
 }
 
-void condition_variable::notify_all() {
+void Condition_Variable::notify_all() {
   ::WakeAllConditionVariable(&this->cond_var_handle_);
 }
 #endif
 
 #if defined(QLJS_THREADS_POSIX)
-thread::thread() noexcept = default;
+Thread::Thread() = default;
 
-thread& thread::operator=(thread&& other) {
+Thread& Thread::operator=(Thread&& other) {
   QLJS_ASSERT(!this->thread_is_running_);
 
   std::memcpy(&this->thread_handle_, &other.thread_handle_,
               sizeof(this->thread_handle_));
   this->thread_is_running_ = std::exchange(other.thread_is_running_, false);
+  this->closure_ = std::exchange(other.closure_, nullptr);
+  this->destroy_closure_ = std::exchange(other.destroy_closure_, nullptr);
 
   QLJS_ASSERT(!other.thread_is_running_);
   return *this;
 }
 
-thread::~thread() { QLJS_ASSERT(!this->thread_is_running_); }
+Thread::~Thread() { QLJS_ASSERT(!this->thread_is_running_); }
 
-bool thread::joinable() const noexcept { return this->thread_is_running_; }
+bool Thread::joinable() const { return this->thread_is_running_; }
 
-void thread::join() {
+void Thread::join() {
   QLJS_ASSERT(this->joinable());
 
   int rc = ::pthread_join(this->thread_handle_, /*retval=*/nullptr);
   QLJS_ALWAYS_ASSERT(rc == 0);
+
+  this->destroy_closure_(this->closure_);
+  this->closure_ = nullptr;
+  this->destroy_closure_ = nullptr;
+
   this->thread_is_running_ = false;
 }
 
-void thread::start(os_thread_routine thread_routine, void* user_data) {
+void Thread::start(OS_Thread_Routine thread_routine, void* user_data) {
   QLJS_ASSERT(!this->thread_is_running_);
 
   int rc = ::pthread_create(/*thread=*/&this->thread_handle_,
@@ -162,44 +190,47 @@ void thread::start(os_thread_routine thread_routine, void* user_data) {
   this->thread_is_running_ = true;
 }
 
-void mutex::lock() {
+void Mutex::lock() {
   int rc = ::pthread_mutex_lock(&this->mutex_handle_);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 
-void mutex::unlock() {
+void Mutex::unlock() {
   int rc = ::pthread_mutex_unlock(&this->mutex_handle_);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 
-condition_variable::condition_variable() {
+Condition_Variable::Condition_Variable() {
   int rc = ::pthread_cond_init(&this->cond_var_handle_, /*attr=*/nullptr);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 
-condition_variable::~condition_variable() {
+Condition_Variable::~Condition_Variable() {
   int rc = ::pthread_cond_destroy(&this->cond_var_handle_);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 
-void condition_variable::wait(std::unique_lock<mutex>& lock) {
-  int rc = ::pthread_cond_wait(&this->cond_var_handle_,
-                               &lock.mutex()->mutex_handle_);
+void Condition_Variable::wait(std::unique_lock<Mutex>& lock) {
+  this->wait_raw(lock.mutex());
+}
+
+void Condition_Variable::wait_raw(Mutex* lock) {
+  int rc = ::pthread_cond_wait(&this->cond_var_handle_, &lock->mutex_handle_);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 
-void condition_variable::notify_one() {
+void Condition_Variable::notify_one() {
   int rc = ::pthread_cond_signal(&this->cond_var_handle_);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 
-void condition_variable::notify_all() {
+void Condition_Variable::notify_all() {
   int rc = ::pthread_cond_broadcast(&this->cond_var_handle_);
   QLJS_ALWAYS_ASSERT(rc == 0);
 }
 #endif
 
-std::uint64_t get_current_thread_id() noexcept {
+std::uint64_t get_current_thread_id() {
 #if QLJS_HAVE_WINDOWS_H
   return ::GetCurrentThreadId();
 #elif QLJS_HAVE_GETTID

@@ -1,13 +1,13 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
+#include <mutex>
 #include <quick-lint-js/feature.h>
 
 #if QLJS_FEATURE_DEBUG_SERVER
 
 #include <cstddef>
 #include <mongoose.h>
-#include <mutex>
 #include <quick-lint-js/debug/mongoose.h>
 #include <string>
 

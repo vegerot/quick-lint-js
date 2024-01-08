@@ -1,14 +1,14 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONFIGURATION_CONFIGURATION_H
-#define QUICK_LINT_JS_CONFIGURATION_CONFIGURATION_H
+#pragma once
 
 #include <array>
 #include <cstddef>
 #include <optional>
 #include <quick-lint-js/container/monotonic-allocator.h>
 #include <quick-lint-js/container/padded-string.h>
+#include <quick-lint-js/container/vector.h>
 #include <quick-lint-js/fe/global-declared-variable-set.h>
 #include <quick-lint-js/fe/global-variables.h>
 #include <quick-lint-js/port/char8.h>
@@ -16,46 +16,49 @@
 #include <vector>
 
 namespace quick_lint_js {
-class diag_reporter;
+class Diag_Reporter;
 
-class configuration {
+class Configuration {
  public:
-  explicit configuration();
+  explicit Configuration();
 
-  const global_declared_variable_set& globals() noexcept;
+  const Global_Declared_Variable_Set& globals();
 
   void reset_global_groups();
-  bool add_global_group(string8_view group_name);
+  bool add_global_group(String8_View group_name);
 
-  void add_global_variable(global_declared_variable);
-  void remove_global_variable(string8_view name);
+  void add_global_variable(Global_Declared_Variable);
 
-  void load_from_json(padded_string_view, diag_reporter*);
+  // For testing and internal use only.
+  //
+  // name must live as long as this Configuration object.
+  void remove_global_variable(String8_View name);
+
+  void load_from_json(Padded_String_View, Diag_Reporter*);
 
   void reset();
 
  private:
-  bool load_global_groups_from_json(simdjson::ondemand::value&, diag_reporter*);
-  bool load_globals_from_json(simdjson::ondemand::object&, diag_reporter*);
+  bool load_global_groups_from_json(simdjson::ondemand::value&, Diag_Reporter*);
+  bool load_globals_from_json(simdjson::ondemand::object&, Diag_Reporter*);
 
-  bool should_remove_global_variable(string8_view name);
+  bool should_remove_global_variable(String8_View name);
 
   [[gnu::noinline]] void build_globals_from_groups();
 
-  void report_json_error(padded_string_view json, diag_reporter*);
+  void report_json_error(Padded_String_View json, Diag_Reporter*);
 
-  global_declared_variable_set globals_;
-  std::vector<string8> globals_to_remove_;
+  Monotonic_Allocator allocator_{"Configuration::allocator_"};
+  Global_Declared_Variable_Set globals_;
+  Vector<String8_View> globals_to_remove_{"Configuration::globals_to_remove_",
+                                          &this->allocator_};
   bool did_add_globals_from_groups_ = false;
   std::array<bool, global_group_count> enabled_global_groups_;
   bool literally_anything_global_group_enabled_ = false;
-  monotonic_allocator string_allocator_{"configuration::string_allocator_"};
 
-  string8_view save_string(std::string_view s);
+  String8_View save_string(std::string_view s);
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

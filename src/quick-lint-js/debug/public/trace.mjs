@@ -1,6 +1,8 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
+import { TraceReaderError, parseEvent } from "./trace-generated.mjs";
+
 export const TraceEventType = {
   INIT: 1,
   VSCODE_DOCUMENT_OPENED: 2,
@@ -10,6 +12,13 @@ export const TraceEventType = {
   LSP_CLIENT_TO_SERVER_MESSAGE: 6,
   VECTOR_MAX_SIZE_HISTOGRAM_BY_OWNER: 7,
   PROCESS_ID: 8,
+  LSP_DOCUMENTS: 9,
+};
+
+export const TraceLSPDocumentType = {
+  UNKNOWN: 0,
+  CONFIG: 1,
+  LINTABLE: 2,
 };
 
 // Reads quick-lint-js trace streams as documented in docs/TRACING.md.
@@ -21,11 +30,18 @@ export class TraceReader {
 
   _queue = new Uint8Array();
 
-  appendBytes(buffer, offset = 0) {
+  /**
+   * @param {Uint8Array} bytes
+   * @param {number} offset
+   */
+  appendBytes(bytes, offset = 0) {
+    if (!(bytes instanceof Uint8Array)) {
+      throw new TypeError("appendBytes expects a Uint8Array");
+    }
     if (this.error !== null) {
       return;
     }
-    this._queueBytes(buffer, offset);
+    this._queueBytes(bytes, offset);
 
     let r = new TraceByteReader(this._queue.buffer, this._queue.byteOffset);
     let committedOffset = 0;
@@ -54,141 +70,25 @@ export class TraceReader {
     return events;
   }
 
-  _queueBytes(buffer, offset) {
+  /**
+   * @param {Uint8Array} bytes
+   */
+  _queueBytes(bytes, offset) {
     if (this._queue.byteLength > 0) {
       let newQueue = new Uint8Array(
-        this._queue.byteLength + buffer.byteLength - offset
+        this._queue.byteLength + bytes.byteLength - offset
       );
       newQueue.set(this._queue, 0);
-      newQueue.set(new Uint8Array(buffer, offset), this._queue.byteLength);
+      newQueue.set(bytes.subarray(offset), this._queue.byteLength);
       this._queue = newQueue;
     } else {
-      this._queue = new Uint8Array(buffer, offset);
+      this._queue = bytes.subarray(offset);
     }
   }
 
   _parseOne(r) {
     if (this.hasHeader) {
-      let timestamp = r.u64BigInt();
-      let eventType = r.u8();
-
-      switch (eventType) {
-        case TraceEventType.INIT: {
-          let version = r.utf8ZString();
-          this._event({ timestamp, eventType, version });
-          return;
-        }
-
-        case TraceEventType.VSCODE_DOCUMENT_OPENED: {
-          let documentID = r.u64BigInt();
-          let uri = r.utf16String();
-          let languageID = r.utf16String();
-          let content = r.utf16String();
-          this._event({
-            timestamp,
-            eventType,
-            documentID,
-            uri,
-            languageID,
-            content,
-          });
-          return;
-        }
-
-        case TraceEventType.VSCODE_DOCUMENT_CLOSED: {
-          let documentID = r.u64BigInt();
-          let uri = r.utf16String();
-          let languageID = r.utf16String();
-          this._event({
-            timestamp,
-            eventType,
-            documentID,
-            uri,
-            languageID,
-          });
-          return;
-        }
-
-        case TraceEventType.VSCODE_DOCUMENT_CHANGED: {
-          let documentID = r.u64BigInt();
-          let changes = [];
-          let changeCount = r.u64BigInt();
-          for (let i = 0n; i < changeCount; ++i) {
-            changes.push({
-              range: {
-                start: {
-                  line: r.u64BigInt(),
-                  character: r.u64BigInt(),
-                },
-                end: {
-                  line: r.u64BigInt(),
-                  character: r.u64BigInt(),
-                },
-              },
-              rangeOffset: r.u64BigInt(),
-              rangeLength: r.u64BigInt(),
-              text: r.utf16String(),
-            });
-          }
-          this._event({
-            timestamp,
-            eventType,
-            documentID,
-            changes,
-          });
-          return;
-        }
-
-        case TraceEventType.VSCODE_DOCUMENT_SYNC: {
-          let documentID = r.u64BigInt();
-          let uri = r.utf16String();
-          let languageID = r.utf16String();
-          let content = r.utf16String();
-          this._event({
-            timestamp,
-            eventType,
-            documentID,
-            uri,
-            languageID,
-            content,
-          });
-          return;
-        }
-
-        case TraceEventType.LSP_CLIENT_TO_SERVER_MESSAGE: {
-          let body = r.utf8String();
-          this._event({ timestamp, eventType, body });
-          return;
-        }
-
-        case TraceEventType.VECTOR_MAX_SIZE_HISTOGRAM_BY_OWNER: {
-          let entryCount = r.u64BigInt();
-          let entries = [];
-          for (let i = 0n; i < entryCount; ++i) {
-            let owner = r.utf8ZString();
-            let maxSizeEntryCount = r.u64BigInt();
-            let maxSizeEntries = [];
-            for (let j = 0n; j < maxSizeEntryCount; ++j) {
-              maxSizeEntries.push({
-                maxSize: r.u64BigInt(),
-                count: r.u64BigInt(),
-              });
-            }
-            entries.push({ owner, maxSizeEntries });
-          }
-          this._event({ timestamp, eventType, entries });
-          return;
-        }
-
-        case TraceEventType.PROCESS_ID: {
-          let processID = r.u64BigInt();
-          this._event({ timestamp, eventType, processID });
-          return;
-        }
-
-        default:
-          throw new TraceReaderUnknownEventType();
-      }
+      this._event(parseEvent(r));
     } else {
       let magic = r.u32();
       let uuid0 = r.u32();
@@ -303,9 +203,23 @@ class TraceByteReader {
     this._offset += length * 2;
     return result;
   }
+
+  // Parse a u64 then calls the given function that many times.
+  sizedArray(parseItem) {
+    let count = this.u64BigInt();
+    let items = [];
+    for (let i = 0n; i < count; ++i) {
+      items.push(parseItem());
+    }
+    return items;
+  }
 }
 
-export class TraceReaderError extends Error {}
+export { TraceReaderError };
+export {
+  TraceReaderUnknownEventType,
+  TraceReaderInvalidLSPDocumentType,
+} from "./trace-generated.mjs";
 
 export class TraceReaderInvalidMagic extends TraceReaderError {
   constructor() {
@@ -322,12 +236,6 @@ export class TraceReaderInvalidUUID extends TraceReaderError {
 export class TraceReaderInvalidCompressionMode extends TraceReaderError {
   constructor() {
     super("invalid compression mode");
-  }
-}
-
-export class TraceReaderUnknownEventType extends TraceReaderError {
-  constructor() {
-    super("unrecognized event type");
   }
 }
 

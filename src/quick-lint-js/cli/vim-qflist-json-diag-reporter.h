@@ -1,70 +1,67 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CLI_VIM_QFLIST_JSON_DIAG_REPORTER_H
-#define QUICK_LINT_JS_CLI_VIM_QFLIST_JSON_DIAG_REPORTER_H
+#pragma once
 
 #include <optional>
 #include <quick-lint-js/cli/vim-location.h>
 #include <quick-lint-js/container/padded-string.h>
-#include <quick-lint-js/fe/diag-reporter.h>
-#include <quick-lint-js/fe/diagnostic-formatter.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diag-reporter.h>
+#include <quick-lint-js/diag/diagnostic-formatter.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/io/output-stream.h>
 #include <string>
 
 namespace quick_lint_js {
-class vim_qflist_json_diag_formatter;
+class Vim_QFList_JSON_Diag_Formatter;
 
-class vim_qflist_json_diag_reporter final : public diag_reporter {
+class Vim_QFList_JSON_Diag_Reporter final : public Diag_Reporter {
  public:
-  explicit vim_qflist_json_diag_reporter(translator, output_stream *output);
+  explicit Vim_QFList_JSON_Diag_Reporter(Translator, Output_Stream *output);
 
-  void set_source(padded_string_view input, const char *file_name,
+  void set_source(Padded_String_View input, const char *file_name,
                   int vim_bufnr);
-  void set_source(padded_string_view input, const char *file_name,
+  void set_source(Padded_String_View input, const char *file_name,
                   std::optional<int> vim_bufnr);
-  void set_source(padded_string_view input, const char *file_name);
-  void set_source(padded_string_view input, int vim_bufnr);
+  void set_source(Padded_String_View input, const char *file_name);
+  void set_source(Padded_String_View input, int vim_bufnr);
 
   void finish();
 
-  void report_impl(diag_type type, void *diag) override;
+  void report_impl(Diag_Type type, void *diag) override;
 
  private:
-  output_stream &output_;
-  translator translator_;
-  std::optional<vim_locator> locator_;
+  Output_Stream &output_;
+  Translator translator_;
+  std::optional<Vim_Locator> locator_;
   std::string bufnr_;
   std::string file_name_;
   bool need_comma_ = false;
 };
 
-class vim_qflist_json_diag_formatter
-    : public diagnostic_formatter<vim_qflist_json_diag_formatter> {
+class Vim_QFList_JSON_Diag_Formatter
+    : public Diagnostic_Formatter<Vim_QFList_JSON_Diag_Formatter> {
  public:
-  explicit vim_qflist_json_diag_formatter(translator, output_stream *output,
-                                          vim_locator &locator,
+  explicit Vim_QFList_JSON_Diag_Formatter(Translator, Output_Stream *output,
+                                          Vim_Locator &locator,
                                           std::string_view file_name,
                                           std::string_view bufnr);
-  void write_before_message(std::string_view code, diagnostic_severity,
-                            const source_code_span &origin);
-  void write_message_part(std::string_view code, diagnostic_severity,
-                          string8_view);
-  void write_after_message(std::string_view code, diagnostic_severity,
-                           const source_code_span &origin);
+  void write_before_message(std::string_view code, Diagnostic_Severity,
+                            const Source_Code_Span &origin);
+  void write_message_part(std::string_view code, Diagnostic_Severity,
+                          String8_View);
+  void write_after_message(std::string_view code, Diagnostic_Severity,
+                           const Source_Code_Span &origin);
 
  private:
-  output_stream &output_;
-  vim_locator &locator_;
+  Output_Stream &output_;
+  Vim_Locator &locator_;
   std::string_view file_name_;
   std::string_view bufnr_;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

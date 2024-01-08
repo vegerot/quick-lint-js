@@ -1,40 +1,42 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_LSP_LSP_WORKSPACE_CONFIGURATION_H
-#define QUICK_LINT_JS_LSP_LSP_WORKSPACE_CONFIGURATION_H
+#pragma once
 
 #if defined(__EMSCRIPTEN__)
 // No LSP on the web.
 #else
 
-#include <quick-lint-js/container/heap-function.h>
-#include <quick-lint-js/lsp/lsp-endpoint.h>
+#include <quick-lint-js/container/monotonic-allocator.h>
+#include <quick-lint-js/container/vector.h>
+#include <quick-lint-js/lsp/lsp-json-rpc-message-parser.h>
 #include <quick-lint-js/port/char8.h>
+#include <quick-lint-js/port/function-ref.h>
 #include <quick-lint-js/simdjson-fwd.h>
 #include <string>
-#include <vector>
 
 namespace quick_lint_js {
-class byte_buffer;
+class Byte_Buffer;
 
 // lsp_workspace_configuration manages the LSP protocol bits for configuration
 // (e.g. workspace/configuration).
-class lsp_workspace_configuration {
+class LSP_Workspace_Configuration {
  public:
+  explicit LSP_Workspace_Configuration(Monotonic_Allocator* allocator);
+
   // Register a configuration setting.
   //
   // callback is later called by process_response or process_notification.
   //
   // name must be have global lifetime (e.g. be a compile-time string).
   // name must be a JSON-encoded string (without surrounding quotation marks).
-  void add_item(string8_view name,
-                heap_function<void(std::string_view)>&& callback);
+  void add_item(String8_View name,
+                Async_Function_Ref<void(std::string_view)> callback);
 
   // Create a workspace/configuration JSON-RPC request to send to the LSP
   // client.
-  void build_request(lsp_endpoint_handler::request_id_type request_id,
-                     byte_buffer& request_json);
+  void build_request(JSON_RPC_Message_Handler::Request_ID_Type request_id,
+                     Byte_Buffer& request_json);
 
   // Handle a workspace/configuration JSON-RPC response sent by the LSP client.
   bool process_response(::simdjson::ondemand::value result);
@@ -43,20 +45,25 @@ class lsp_workspace_configuration {
   // LSP client.
   bool process_notification(::simdjson::ondemand::object settings);
 
+  // Handle params.initializationOptions.configuration from an initialize
+  // JSON-RPC request sent by the LSP client.
+  //
+  // This is custom to quick-lint-js and is not part of LSP itself.
+  bool process_initialization_options(
+      ::simdjson::ondemand::object initialization_options_configuration);
+
  private:
-  struct item {
-    string8_view name;
-    heap_function<void(std::string_view)> callback;
+  struct Item {
+    String8_View name;
+    Async_Function_Ref<void(std::string_view)> callback;
   };
 
-  item* find_item(string8_view name);
-  bool set_item(item&, ::simdjson::ondemand::value);
+  Item* find_item(String8_View name);
+  bool set_item(Item&, ::simdjson::ondemand::value);
 
-  std::vector<item> items_;
+  Vector<Item> items_;
 };
 }
-
-#endif
 
 #endif
 

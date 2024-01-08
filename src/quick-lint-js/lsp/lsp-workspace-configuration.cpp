@@ -6,8 +6,7 @@
 #else
 
 #include <quick-lint-js/container/byte-buffer.h>
-#include <quick-lint-js/container/heap-function.h>
-#include <quick-lint-js/lsp/lsp-endpoint.h>
+#include <quick-lint-js/lsp/lsp-json-rpc-message-parser.h>
 #include <quick-lint-js/lsp/lsp-workspace-configuration.h>
 #include <quick-lint-js/port/char8.h>
 #include <simdjson.h>
@@ -17,40 +16,44 @@
 using namespace std::literals::string_view_literals;
 
 namespace quick_lint_js {
-void lsp_workspace_configuration::add_item(
-    string8_view name, heap_function<void(std::string_view)>&& callback) {
-  this->items_.push_back(item{
+LSP_Workspace_Configuration::LSP_Workspace_Configuration(
+    Monotonic_Allocator* allocator)
+    : items_("LSP_Workspace_Configuration::items_", allocator) {}
+
+void LSP_Workspace_Configuration::add_item(
+    String8_View name, Async_Function_Ref<void(std::string_view)> callback) {
+  this->items_.push_back(Item{
       .name = name,
       .callback = std::move(callback),
   });
 }
 
-void lsp_workspace_configuration::build_request(
-    lsp_endpoint_handler::request_id_type request_id,
-    byte_buffer& request_json) {
-  request_json.append_copy(u8R"--({"id":)--"sv);
+void LSP_Workspace_Configuration::build_request(
+    JSON_RPC_Message_Handler::Request_ID_Type request_id,
+    Byte_Buffer& request_json) {
+  request_json.append_copy(u8R"--({"id":)--"_sv);
   request_json.append_decimal_integer(request_id);
   // clang-format off
   request_json.append_copy(
     u8R"--(,)--"
     u8R"--("method":"workspace/configuration",)--"
     u8R"--("params":{)--"
-      u8R"--("items":[)--"sv);
+      u8R"--("items":[)--"_sv);
   // clang-format on
   bool need_comma = false;
-  for (const item& i : this->items_) {
+  for (const Item& i : this->items_) {
     if (need_comma) {
       request_json.append_copy(u8',');
     }
-    request_json.append_copy(u8R"({"section":")"sv);
+    request_json.append_copy(u8R"({"section":")"_sv);
     request_json.append_copy(i.name);
-    request_json.append_copy(u8R"("})"sv);
+    request_json.append_copy(u8R"("})"_sv);
     need_comma = true;
   }
-  request_json.append_copy(u8R"--(]},"jsonrpc":"2.0"})--"sv);
+  request_json.append_copy(u8R"--(]},"jsonrpc":"2.0"})--"_sv);
 }
 
-bool lsp_workspace_configuration::process_response(
+bool LSP_Workspace_Configuration::process_response(
     ::simdjson::ondemand::value result) {
   ::simdjson::ondemand::array result_array;
   if (result.get_array().get(result_array) != ::simdjson::SUCCESS) {
@@ -80,9 +83,9 @@ bool lsp_workspace_configuration::process_response(
   return spec_it == spec_end && result_it == result_end;
 }
 
-bool lsp_workspace_configuration::process_notification(
+bool LSP_Workspace_Configuration::process_notification(
     ::simdjson::ondemand::object settings) {
-  for (simdjson::simdjson_result< ::simdjson::ondemand::field> setting_field :
+  for (simdjson::simdjson_result<::simdjson::ondemand::field> setting_field :
        settings) {
     std::string_view name;
     if (setting_field.unescaped_key().get(name) != ::simdjson::SUCCESS) {
@@ -92,7 +95,7 @@ bool lsp_workspace_configuration::process_notification(
     if (setting_field.value().get(value) != ::simdjson::SUCCESS) {
       return false;
     }
-    item* i = this->find_item(to_string8_view(name));
+    Item* i = this->find_item(to_string8_view(name));
     if (!i) {
       // Ignore unknown settings.
       continue;
@@ -104,9 +107,14 @@ bool lsp_workspace_configuration::process_notification(
   return true;
 }
 
-lsp_workspace_configuration::item* lsp_workspace_configuration::find_item(
-    string8_view name) {
-  for (item& i : this->items_) {
+bool LSP_Workspace_Configuration::process_initialization_options(
+    ::simdjson::ondemand::object initialization_options_configuration) {
+  return this->process_notification(initialization_options_configuration);
+}
+
+LSP_Workspace_Configuration::Item* LSP_Workspace_Configuration::find_item(
+    String8_View name) {
+  for (Item& i : this->items_) {
     if (i.name == name) {
       return &i;
     }
@@ -114,7 +122,7 @@ lsp_workspace_configuration::item* lsp_workspace_configuration::find_item(
   return nullptr;
 }
 
-bool lsp_workspace_configuration::set_item(item& i,
+bool LSP_Workspace_Configuration::set_item(Item& i,
                                            ::simdjson::ondemand::value value) {
   ::simdjson::ondemand::json_type type;
   if (value.type().get(type) != ::simdjson::SUCCESS) {

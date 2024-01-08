@@ -9,6 +9,8 @@
                           (expand-file-name default-directory)
                           ".melpa-cache/"))
 
+(setq quicklintjs-test-dir (file-name-directory (or load-file-name buffer-file-name)))
+
 (defun quicklintjs-install-deps (deps)
   (mapcar (lambda (pkg) (unless (package-installed-p pkg)
                           (if (> emacs-major-version 24)
@@ -18,8 +20,11 @@
 (defun quicklintjs-test-main ()
   (setq package-user-dir cache-dir-name
         package-check-signature nil)
+  ; NOTE(strager): MELPA (non-stable) only supports Emacs 25 and newer, causing
+  ; flycheck to fail to install. We choose MELPA Stable because it (as of
+  ; February 2023) supports Emacs version 24.
   (add-to-list 'package-archives
-               '("MELPA" . "https://melpa.org/packages/"))
+               '("MELPA Stable" . "https://stable.melpa.org/packages/"))
   (package-initialize)
 
   (unless package-archive-contents
@@ -36,6 +41,11 @@
 
 (defun def-flymake-tests ()
   (require 'flymake-quicklintjs)
+
+  ; Disable warning which causes tests to fail when run non-interactively:
+  ; "Disabling backend flymake-proc-legacy-flymake because (error Can’t find a suitable init function)"
+  (remove-hook 'flymake-diagnostic-functions 'flymake-proc-legacy-flymake)
+
   (ert-deftest quicklintjs-flymake-parse-errors-and-warnings ()
     (skip-unless (>= emacs-major-version 26))
     (let ((js-buf (generate-new-buffer "*js-buf*")))
@@ -86,7 +96,45 @@ foobar\")((16 . 22) 2 \"E0057\" \"use of undeclared variable: foobar\")(\
                         (point-min) (point-max)
                         flymake-quicklintjs-program nil
                         out-buf nil "--stdin"
-                        "--output-format=emacs-lisp") 0))))))
+                        "--output-format=emacs-lisp") 0)))))
+
+  (ert-deftest quicklintjs-flymake-check-errors-js ()
+    (with-temp-buffer
+      (javascript-mode)
+      (insert-file-contents-literally (expand-file-name "error.js" quicklintjs-test-dir) nil nil nil t)
+      (flymake-mode 1)
+      (add-hook 'flymake-diagnostic-functions #'flymake-quicklintjs nil t)
+      (flymake-start)
+
+      (with-timeout (5
+                     (ert-fail "Test timed out waiting for diagnostics."))
+        ;; TODO(strager): Assert specific diagnostics
+        (while (not (flymake-diagnostics))
+          (accept-process-output nil 0.01)))))
+
+  ;; This is a regression test. Buffers were mixed up causing
+  ;; diagnostics after a certain point (usually a few bytes in) to not
+  ;; be cleared.
+  (ert-deftest quicklintjs-flymake-fixing-error-clears-diagnostics ()
+    (with-temp-buffer
+      (javascript-mode)
+      (insert "/*xxx*/ consol")
+      (flymake-mode 1)
+      (add-hook 'flymake-diagnostic-functions #'flymake-quicklintjs nil t)
+      (flymake-start)
+
+      (with-timeout (5
+                     (ert-fail "Test timed out waiting for diagnostics."))
+        (while (not (flymake-diagnostics))
+          (accept-process-output nil 0.01)))
+
+      (insert "e")  ;; Buffer content: /*xxx*/ console
+      (flymake-start)
+
+      (with-timeout (5
+                     (ert-fail "Test timed out waiting for diagnostics to be removed."))
+        (while (flymake-diagnostics)
+          (accept-process-output nil 0.01))))))
 
 (defun def-eglot-tests ()
   (ert-deftest quicklintjs-is-in-eglot-servers ()
@@ -115,9 +163,9 @@ foobar\")((16 . 22) 2 \"E0057\" \"use of undeclared variable: foobar\")(\
          (inhibit-message 't))
      (flycheck-ert-should-syntax-check
       "test/error.js" 'js-mode
-      '(1 1 error "missing name in function statement"
+      '(1 9 error "missing name in function statement"
           :id "E0061" :checker javascript-quicklintjs
-          :end-line 1 :end-column 10)
+          :end-line 1 :end-column 9)
       '(1 12 error "unclosed code block; expected '}' by end of file"
           :id "E0134" :checker javascript-quicklintjs
           :end-line 1 :end-column 13)

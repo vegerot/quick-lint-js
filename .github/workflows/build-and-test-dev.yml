@@ -7,7 +7,7 @@ on:
   pull_request:
     types: [opened, synchronize]
 
-# Based on docs/BUILDING.md.
+# Based on website/public/contribute/build-from-source/.
 jobs:
   build:
     name: ${{ matrix.toolchain.name }}
@@ -18,17 +18,16 @@ jobs:
           - {docker_container: "archlinux:base", name: "Arch Linux", install_dependencies_script: "pacman -Syyuu --noconfirm cmake gcc ninja", extra_environment: ""}
           - {docker_container: "debian:bullseye", name: "Debian 11 Bullseye", install_dependencies_script: "apt-get update && apt-get install -y cmake g++ ninja-build", extra_environment: ""}
           - {docker_container: "debian:buster", name: "Debian 10 Buster", install_dependencies_script: "apt-get update && apt-get install -y cmake g++ ninja-build", extra_environment: ""}
-          - {docker_container: "fedora:35", name: "Fedora 35", install_dependencies_script: "dnf install -y cmake gcc-c++ ninja-build", extra_environment: ""}
-          - {docker_container: "fedora:36", name: "Fedora 36", install_dependencies_script: "dnf install -y cmake gcc-c++ ninja-build", extra_environment: ""}
-          - {docker_container: "ubuntu:18.04", name: "Ubuntu 18.04 LTS Bionic", install_dependencies_script: "apt-get update && apt-get install -y cmake g++-8 ninja-build", extra_environment: "CC=gcc-8 CXX=g++-8"}
+          - {docker_container: "fedora:38", name: "Fedora 38", install_dependencies_script: "dnf install -y cmake gcc-c++ ninja-build", extra_environment: ""}
           - {docker_container: "ubuntu:20.04", name: "Ubuntu 20.04 LTS Focal", install_dependencies_script: "apt-get update && apt-get install -y cmake g++ ninja-build", extra_environment: ""}
+          - {docker_container: "ubuntu:22.04", name: "Ubuntu 22.04 LTS Jammy", install_dependencies_script: "apt-get update && apt-get install -y cmake g++ ninja-build", extra_environment: ""}
     runs-on: ubuntu-latest
     container:
       image: ${{ matrix.toolchain.docker_container }}
 
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@8e5e7e5ab8b370d6c329ec480221332ada57f0ab # v3.5.2
 
       - name: 0. Install build dependencies
         run: ${{ matrix.toolchain.install_dependencies_script }}
@@ -36,7 +35,7 @@ jobs:
       - name: 1. Configure with CMake
         run: |
           mkdir build ; cd build ; ${{ matrix.toolchain.extra_environment }} cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug .. ; cd "$OLDPWD"
-          if ! [ -f docs/BUILDING.md ]; then
+          if ! [ -f docs/FUZZING.md ]; then
             printf 'error: cwd changed unexpectedly\n' >&2
             exit 1
           fi

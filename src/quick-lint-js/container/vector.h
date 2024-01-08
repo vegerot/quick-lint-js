@@ -1,18 +1,19 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_CONTAINER_VECTOR_H
-#define QUICK_LINT_JS_CONTAINER_VECTOR_H
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <quick-lint-js/assert.h>
+#include <quick-lint-js/container/linked-bump-allocator.h>
 #include <quick-lint-js/container/winkable.h>
 #include <quick-lint-js/feature.h>
 #include <quick-lint-js/port/attribute.h>
-#include <quick-lint-js/util/narrow-cast.h>
+#include <quick-lint-js/port/span.h>
+#include <quick-lint-js/util/cast.h>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -23,9 +24,9 @@
 
 namespace quick_lint_js {
 // Wraps a vector class so it has the same interface as
-// instrumented_vector<Vector> (but without the instrumentation overhead).
+// Instrumented_Vector<Vector> (but without the instrumentation overhead).
 template <class Vector>
-class uninstrumented_vector : private Vector {
+class Uninstrumented_Vector : private Vector {
  public:
   using typename Vector::allocator_type;
   using typename Vector::const_iterator;
@@ -38,27 +39,27 @@ class uninstrumented_vector : private Vector {
   using typename Vector::size_type;
   using typename Vector::value_type;
 
-  explicit uninstrumented_vector(
-      const char *, const typename Vector::allocator_type &allocator) noexcept
+  explicit Uninstrumented_Vector(
+      const char *, const typename Vector::allocator_type &allocator)
       : Vector(allocator) {}
 
-  explicit uninstrumented_vector(
+  explicit Uninstrumented_Vector(
       const char *, const typename Vector::allocator_type &allocator,
       const typename Vector::value_type *begin,
       const typename Vector::value_type *end)
       : Vector(begin, end, allocator) {}
 
-  uninstrumented_vector(const uninstrumented_vector &) = delete;
-  uninstrumented_vector &operator=(const uninstrumented_vector &) = delete;
+  Uninstrumented_Vector(const Uninstrumented_Vector &) = delete;
+  Uninstrumented_Vector &operator=(const Uninstrumented_Vector &) = delete;
 
-  uninstrumented_vector(uninstrumented_vector &&other) = default;
+  Uninstrumented_Vector(Uninstrumented_Vector &&other) = default;
 
-  uninstrumented_vector(const char *, uninstrumented_vector &&other)
-      : uninstrumented_vector(std::move(other)) {}
+  Uninstrumented_Vector(const char *, Uninstrumented_Vector &&other)
+      : Uninstrumented_Vector(std::move(other)) {}
 
-  uninstrumented_vector &operator=(uninstrumented_vector &&other) = default;
+  Uninstrumented_Vector &operator=(Uninstrumented_Vector &&other) = default;
 
-  ~uninstrumented_vector() = default;
+  ~Uninstrumented_Vector() = default;
 
   using Vector::back;
   using Vector::begin;
@@ -68,29 +69,51 @@ class uninstrumented_vector : private Vector {
   using Vector::emplace_back;
   using Vector::empty;
   using Vector::end;
+  using Vector::erase;
   using Vector::front;
   using Vector::get_allocator;
   using Vector::operator[];
   using Vector::pop_back;
   using Vector::push_back;
+  using Vector::push_front;
   using Vector::reserve;
   using Vector::resize;
   using Vector::size;
 
   // NOTE(strager): These are non-standard functions.
   using Vector::append;
-  using Vector::operator std::basic_string_view<value_type>;
+  using Vector::get_and_release;
+  using Vector::operator Span<const value_type>;
+  using Vector::operator Span<value_type>;
   using Vector::operator+=;
   using Vector::release;
+  using Vector::release_to_span;
+  using Vector::release_to_string_view;
+  using Vector::to_string_view;
+
+  void swap(Uninstrumented_Vector &other) {
+    static_cast<Vector &>(*this).swap(static_cast<Vector &>(other));
+  }
 };
 
-template <class T, class BumpAllocator>
-class raw_bump_vector {
+template <class V>
+void swap(Uninstrumented_Vector<V> &lhs, Uninstrumented_Vector<V> &rhs) {
+  lhs.swap(rhs);
+}
+
+using Vector_Size = std::ptrdiff_t;
+
+// Like std::pmr::vector. Some differences:
+//
+// * No exception safety.
+// * Extended interface for convenience.
+template <class T>
+class Raw_Vector {
  public:
   using value_type = T;
-  using allocator_type = BumpAllocator *;
-  using size_type = std::size_t;
-  using difference_type = std::ptrdiff_t;
+  using allocator_type = Memory_Resource *;
+  using size_type = Vector_Size;
+  using difference_type = Vector_Size;
   using reference = T &;
   using const_reference = const T &;
   using pointer = T *;
@@ -98,15 +121,18 @@ class raw_bump_vector {
   using iterator = T *;
   using const_iterator = const T *;
 
-  static_assert(is_winkable_v<T>);
+  // Create an empty vector.
+  explicit Raw_Vector(Memory_Resource *allocator) : allocator_(allocator) {}
 
-  explicit raw_bump_vector(BumpAllocator *allocator) noexcept
-      : allocator_(allocator) {}
+  Raw_Vector(const Raw_Vector &) = delete;
+  Raw_Vector &operator=(const Raw_Vector &) = delete;
 
-  raw_bump_vector(const raw_bump_vector &) = delete;
-  raw_bump_vector &operator=(const raw_bump_vector &) = delete;
-
-  raw_bump_vector(raw_bump_vector &&other)
+  // Move items from another Raw_Vector by taking its allocation.
+  //
+  // This function does not move individual items.
+  //
+  // Postcondition: other.empty()
+  Raw_Vector(Raw_Vector &&other)
       : data_(other.data_),
         data_end_(other.data_end_),
         capacity_end_(other.capacity_end_),
@@ -116,78 +142,100 @@ class raw_bump_vector {
     other.capacity_end_ = nullptr;
   }
 
-  ~raw_bump_vector() { this->clear(); }
+  // Destruct items in the container, as in this->clear(), then release the
+  // memory.
+  //
+  // If the allocator is a Linked_Bump_Allocator, then memory is only released
+  // if this Raw_Vector's capacity is the last thing allocated with that
+  // allocator.
+  ~Raw_Vector() { this->clear(); }
 
-  BumpAllocator *get_allocator() const noexcept { return this->allocator_; }
+  // Return the pointer given in Raw_Vector's constructor.
+  Memory_Resource *get_allocator() const { return this->allocator_; }
 
-  bool empty() const noexcept { return this->data_ == this->data_end_; }
-  std::size_t size() const noexcept {
-    return narrow_cast<std::size_t>(this->data_end_ - this->data_);
+  bool empty() const { return this->data_ == this->data_end_; }
+  size_type size() const {
+    return narrow_cast<size_type>(this->data_end_ - this->data_);
   }
-  std::size_t capacity() const noexcept {
-    return narrow_cast<std::size_t>(this->capacity_end_ - this->data_);
+  size_type capacity() const {
+    return narrow_cast<size_type>(this->capacity_end_ - this->data_);
   }
 
-  QLJS_FORCE_INLINE T *data() noexcept { return this->data_; }
-  QLJS_FORCE_INLINE const T *data() const noexcept { return this->data_; }
+  QLJS_FORCE_INLINE T *data() { return this->data_; }
+  QLJS_FORCE_INLINE const T *data() const { return this->data_; }
 
-  QLJS_FORCE_INLINE const T *begin() const noexcept { return this->data_; }
-  QLJS_FORCE_INLINE const T *end() const noexcept { return this->data_end_; }
+  QLJS_FORCE_INLINE const T *begin() const { return this->data_; }
+  QLJS_FORCE_INLINE const T *end() const { return this->data_end_; }
 
-  T &front() noexcept {
+  QLJS_FORCE_INLINE T *begin() { return this->data_; }
+  QLJS_FORCE_INLINE T *end() { return this->data_end_; }
+
+  T &front() {
     QLJS_ASSERT(!this->empty());
     return this->data_[0];
   }
-  T &back() noexcept {
+  T &back() {
     QLJS_ASSERT(!this->empty());
     return this->data_end_[-1];
   }
 
-  const T &front() const noexcept {
+  const T &front() const {
     QLJS_ASSERT(!this->empty());
     return this->data_[0];
   }
-  const T &back() const noexcept {
+  const T &back() const {
     QLJS_ASSERT(!this->empty());
     return this->data_end_[-1];
   }
 
-  T &operator[](size_type index) noexcept {
+  // Precondition: index is in bounds. This means that '&(*this)[this->size()]'
+  // (indexing one past the end) is invalid. To get one past the end, call
+  // this->end() instead or write '&this->data()[this->size()]'.
+  T &operator[](size_type index) {
+    QLJS_ASSERT(index < this->size());
+    return this->data_[index];
+  }
+  const T &operator[](size_type index) const {
     QLJS_ASSERT(index < this->size());
     return this->data_[index];
   }
 
-  void reserve(std::size_t new_capacity) {
+  // Precondition: (none)
+  void reserve(size_type new_capacity) {
+    QLJS_ASSERT(new_capacity >= 0);
     if (this->capacity() < new_capacity) {
       this->reserve_grow(new_capacity);
     }
   }
 
-  void reserve_grow(std::size_t new_capacity) {
+  // Precondition: new_capacity > this->capacity()
+  void reserve_grow(size_type new_capacity) {
     QLJS_ASSERT(new_capacity > this->capacity());
     if (this->data_) {
       bool grew = this->allocator_->try_grow_array_in_place(
           this->data_,
-          /*old_size=*/this->capacity(),
-          /*new_size=*/new_capacity);
+          /*old_size=*/narrow_cast<std::size_t>(this->capacity()),
+          /*new_size=*/narrow_cast<std::size_t>(new_capacity));
       if (grew) {
         this->capacity_end_ = this->data_ + new_capacity;
       } else {
-        T *new_data =
-            this->allocator_->template allocate_uninitialized_array<T>(
-                new_capacity);
-        T *new_data_end =
-            std::uninitialized_move(this->data_, this->data_end_, new_data);
+        Span<T> new_data =
+            this->allocator_->template allocate_uninitialized_span<T>(
+                narrow_cast<std::size_t>(new_capacity));
+        T *new_data_end = std::uninitialized_move(this->data_, this->data_end_,
+                                                  new_data.begin());
         this->clear();
-        this->data_ = new_data;
+        this->data_ = new_data.begin();
         this->data_end_ = new_data_end;
-        this->capacity_end_ = new_data + new_capacity;
+        this->capacity_end_ = new_data.end();
       }
     } else {
-      this->data_ = this->allocator_->template allocate_uninitialized_array<T>(
-          new_capacity);
+      Span<T> new_data =
+          this->allocator_->template allocate_uninitialized_span<T>(
+              narrow_cast<std::size_t>(new_capacity));
+      this->data_ = new_data.begin();
       this->data_end_ = this->data_;
-      this->capacity_end_ = this->data_ + new_capacity;
+      this->capacity_end_ = new_data.end();
     }
   }
 
@@ -221,13 +269,13 @@ class raw_bump_vector {
   }
 
   // Similar to std::basic_string::operator+=.
-  raw_bump_vector &operator+=(std::basic_string_view<T> values) {
+  Raw_Vector &operator+=(std::basic_string_view<T> values) {
     this->append(values.data(), values.data() + values.size());
     return *this;
   }
 
   // Similar to std::basic_string::operator+=.
-  raw_bump_vector &operator+=(T value) {
+  Raw_Vector &operator+=(T value) {
     this->emplace_back(value);
     return *this;
   }
@@ -235,6 +283,25 @@ class raw_bump_vector {
   void pop_back() {
     QLJS_ASSERT(!this->empty());
     this->data_end_ -= 1;
+  }
+
+  void push_front(value_type &&value) {
+    if (this->empty()) {
+      this->push_back(std::move(value));
+    } else {
+      if (this->capacity_end_ == this->data_end_) {
+        this->reserve_grow_by_at_least(1);
+      }
+      // Shift all items to the right one. The last item is move-constructed
+      // into place, and the remaining items are move-assigned into place right
+      // to left.
+      new (&this->data_end_[0]) value_type(std::move(this->data_end_[-1]));
+      for (value_type *p = this->data_end_; p-- > this->data_;) {
+        p[1] = p[0];
+      }
+      this->data_[0] = std::move(value);
+      this->data_end_ += 1;
+    }
   }
 
   // Like clear(), but doesn't touch the allocated memory. Objects remain alive
@@ -245,15 +312,62 @@ class raw_bump_vector {
     this->capacity_end_ = nullptr;
   }
 
+  // See release().
+  Span<value_type> get_and_release() {
+    Span<value_type> span(*this);
+    this->release();
+    return span;
+  }
+
+  // Call the destructor of each item, then deallocate memory used for the
+  // items.
+  //
+  // Postcondition: this->empty()
   void clear() {
     if (this->data_) {
       std::destroy(this->data_, this->data_end_);
-      this->allocator_->deallocate(this->data_, this->size() * sizeof(T),
-                                   alignof(T));
+      this->allocator_->deallocate(
+          this->data_,
+          narrow_cast<std::size_t>(this->size() *
+                                   static_cast<Vector_Size>(sizeof(T))),
+          alignof(T));
       this->release();
     }
   }
 
+  void erase(value_type *begin, value_type *end) {
+    // Shift items left (via move assignment), then destruct items on the right.
+
+    value_type *assign_to_begin = begin;
+    value_type *assign_from_begin = end;
+    value_type *assign_from_end = this->data_end_;
+    value_type *assign_to_end =
+        std::move(assign_from_begin, assign_from_end, assign_to_begin);
+
+    value_type *destroy_begin = assign_to_end;
+    value_type *destroy_end = this->data_end_;
+    std::destroy(destroy_begin, destroy_end);
+
+    this->data_end_ = destroy_begin;
+  }
+
+  void erase(value_type *item) { erase(item, item + 1); }
+
+  // Swap capacity pointers and sizes between *this and other. All items of
+  // *this and other are untouched.
+  //
+  // Precondition: this->get_allocator() == other.get_allocator()
+  void swap(Raw_Vector &other) {
+    QLJS_ALWAYS_ASSERT(this->get_allocator() == other.get_allocator());
+    std::swap(this->data_, other.data_);
+    std::swap(this->data_end_, other.data_end_);
+    std::swap(this->capacity_end_, other.capacity_end_);
+  }
+
+  // If new_size > this->size(): default-construct new items at the end.
+  // If new_size < this->size(): destruct items at the end.
+  //
+  // Postcondition: this->size() == new_size
   void resize(size_type new_size) {
     size_type old_size = this->size();
     if (new_size == old_size) {
@@ -275,15 +389,40 @@ class raw_bump_vector {
     }
   }
 
-  explicit operator std::basic_string_view<value_type>() const noexcept {
-    return std::basic_string_view<value_type>(this->data_, this->size());
+  std::basic_string_view<value_type> to_string_view() const {
+    return std::basic_string_view<value_type>(
+        this->data_, narrow_cast<std::size_t>(this->size()));
+  }
+
+  // Like this->to_string_view() followed by this->release().
+  std::basic_string_view<value_type> release_to_string_view() {
+    std::basic_string_view<value_type> result = this->to_string_view();
+    this->release();
+    return result;
+  }
+
+  // Like operator Span<T>() followed by this->release().
+  Span<value_type> release_to_span() {
+    Span<value_type> result = Span<value_type>(*this);
+    this->release();
+    return result;
+  }
+
+  explicit operator Span<value_type>() {
+    return Span<value_type>(this->data_, this->size());
+  }
+
+  explicit operator Span<const value_type>() const {
+    return Span<const value_type>(this->data_, this->size());
   }
 
  private:
-  void reserve_grow_by_at_least(std::size_t minimum_new_entries) {
-    std::size_t old_capacity = this->capacity();
-    constexpr std::size_t minimum_capacity = 4;
-    std::size_t new_size = (std::max)(
+  // Growth strategy.
+  [[gnu::noinline]] void reserve_grow_by_at_least(
+      size_type minimum_new_entries) {
+    size_type old_capacity = this->capacity();
+    constexpr size_type minimum_capacity = 4;
+    size_type new_size = (std::max)(
         (std::max)(minimum_capacity, old_capacity + minimum_new_entries),
         old_capacity * 2);
     this->reserve_grow(new_size);
@@ -293,19 +432,22 @@ class raw_bump_vector {
   T *data_end_ = nullptr;
   T *capacity_end_ = nullptr;
 
-  BumpAllocator *allocator_;
+  Memory_Resource *allocator_;
 };
 
-#if QLJS_FEATURE_VECTOR_PROFILING
-template <class T, class BumpAllocator>
-using bump_vector = instrumented_vector<raw_bump_vector<T, BumpAllocator>>;
-#else
-template <class T, class BumpAllocator>
-using bump_vector = uninstrumented_vector<raw_bump_vector<T, BumpAllocator>>;
-#endif
+template <class T>
+void swap(Raw_Vector<T> &lhs, Raw_Vector<T> &rhs) {
+  lhs.swap(rhs);
 }
 
+#if QLJS_FEATURE_VECTOR_PROFILING
+template <class T>
+using Vector = Instrumented_Vector<Raw_Vector<T>>;
+#else
+template <class T>
+using Vector = Uninstrumented_Vector<Raw_Vector<T>>;
 #endif
+}
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

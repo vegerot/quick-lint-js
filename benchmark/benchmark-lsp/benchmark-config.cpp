@@ -1,17 +1,17 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#include <boost/json/parse.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <quick-lint-js/benchmark-config.h>
-#include <quick-lint-js/boost-json.h>
 #include <quick-lint-js/io/file.h>
 #include <quick-lint-js/io/pipe.h>
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/have.h>
+#include <quick-lint-js/port/warning.h>
 #include <quick-lint-js/process.h>
+#include <simdjson.h>
 #include <spawn.h>
 #include <string>
 #include <unistd.h>
@@ -20,6 +20,8 @@
 #if QLJS_HAVE_CRT_EXTERNS_H
 #include <crt_externs.h>
 #endif
+
+QLJS_WARNING_IGNORE_GCC("-Wmissing-field-initializers")
 
 using namespace std::literals::string_literals;
 using namespace std::literals::string_view_literals;
@@ -40,9 +42,10 @@ std::vector<std::string_view> split(std::string_view s, char separator) {
   return result;
 }
 
+// TODO(strager): Reuse run_program from <quick-lint-js/port/child-process.h>.
 std::string run_program(std::vector<std::string> command,
                         std::optional<std::string> cwd) {
-  pipe_fds program_output = make_pipe();
+  Pipe_FDs program_output = make_pipe();
   ::posix_spawn_file_actions_t file_actions;
   posix_spawn_file_actions_init(&file_actions);
   posix_spawn_file_actions_adddup2(&file_actions, program_output.writer.get(),
@@ -102,19 +105,27 @@ std::map<std::string, std::string> get_yarn_packages_versions(
   std::string_view json = lines[lines.size() - 1];
   QLJS_ALWAYS_ASSERT(!json.empty());
 
-  ::boost::json::error_code error;
-  ::boost::json::value root =
-      ::boost::json::parse(to_boost_string_view(json), error);
-  if (error != ::boost::json::error_code()) {
+  ::simdjson::dom::parser parser;
+  ::simdjson::dom::element root;
+  if (parser.parse(json.data(), json.size()).get(root) != ::simdjson::SUCCESS) {
     std::fprintf(stderr, "error: parsing 'yarn list' JSON failed\n");
     std::exit(1);
   }
 
   std::map<std::string, std::string> package_versions;
-  ::boost::json::value packages = look_up(root, "data", "trees");
-  for (::boost::json::value package : packages.as_array()) {
-    std::string full_package_name(
-        to_string_view(look_up(package, "name").as_string()));
+  ::simdjson::dom::array packages;
+  if (root["data"]["trees"].get(packages) != ::simdjson::SUCCESS) {
+    std::fprintf(stderr, "error: 'yarn list' JSON missing .data.trees array\n");
+    std::exit(1);
+  }
+  for (::simdjson::dom::element package : packages) {
+    std::string_view full_package_name;
+    if (package["name"].get(full_package_name) != ::simdjson::SUCCESS) {
+      std::fprintf(
+          stderr,
+          "error: 'yarn list' JSON missing .name in .data.trees array\n");
+      std::exit(1);
+    }
     std::size_t version_separator_index = full_package_name.rfind('@');
     QLJS_ALWAYS_ASSERT(version_separator_index != full_package_name.npos);
     std::string_view package_name =
@@ -139,9 +150,9 @@ std::string get_nodejs_version() {
 }
 }
 
-benchmark_config benchmark_config::load() {
-  std::vector<benchmark_config_server> servers = {
-      benchmark_config_server{
+Benchmark_Config Benchmark_Config::load() {
+  std::vector<Benchmark_Config_Server> servers = {
+      Benchmark_Config_Server{
           .name = "vscode-eslint-airbnb",
           .program_name = "ESLint",
           .command = {"node",
@@ -158,7 +169,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "vscode-eslint-react",
           .program_name = "ESLint",
           .command = {"node",
@@ -176,7 +187,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "vscode-eslint-typescript",
           .program_name = "ESLint",
           .command = {"node",
@@ -194,7 +205,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "vscode-eslint-vanilla",
           .program_name = "ESLint",
           .command = {"node",
@@ -211,7 +222,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "vscode-eslint-vue",
           .program_name = "ESLint",
           .command = {"node",
@@ -228,7 +239,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "Deno",
           .program_name = "Deno",
           .command = {"deno", "lsp"},
@@ -248,7 +259,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "Deno-nolint",
           .program_name = "Deno",
           .command = {"deno", "lsp"},
@@ -260,6 +271,7 @@ benchmark_config benchmark_config::load() {
             "unstable": true
           })",
           .supports_jsx = true,
+          .parallelize_open = false,
           .workspace_configuration_json = R"({
             "enable": true,
             "lint": false,
@@ -267,7 +279,7 @@ benchmark_config benchmark_config::load() {
           })",
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "Flow",
           .program_name = "Flow",
           .command = {"./run.sh"},
@@ -277,35 +289,38 @@ benchmark_config benchmark_config::load() {
           .wait_for_empty_diagnostics_on_open = false,
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
+          .name = "oxlint",
+          .program_name = "oxlint",
+          .command = {"./extension/target/release/oxc_vscode"},
+          .cwd = "oxc/",
+          .need_files_on_disk = true,
+          .supports_jsx = true,
+      },
+
+      Benchmark_Config_Server{
           .name = "quick-lint-js",
           .program_name = "quick-lint-js",
           .command = {"quick-lint-js", "--lsp-server"},
           .supports_jsx = true,
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "RSLint",
           .program_name = "RSLint",
           .command = {"rslint-lsp"},
           .allow_incremental_changes = false,
       },
 
-      benchmark_config_server{
-          .name = "Rome",
-          .program_name = "Rome",
-          .command = {"rome_lsp"},
-          .allow_incremental_changes = false,
-          .parallelize_open = false,
-          .workspace_configuration_json = R"({
-            "analysis": {
-              "enableCodeActions": false,
-              "enableDiagnostics": true
-            }
-          })",
+      Benchmark_Config_Server{
+          .name = "Biome",
+          .program_name = "Biome",
+          .command = {"./run.sh"},
+          .cwd = "biome/",
+          .supports_jsx = true,
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "TypeScript",
           .program_name = "TypeScript",
           .command = {"node", "./node_modules/.bin/typescript-language-server",
@@ -315,7 +330,7 @@ benchmark_config benchmark_config::load() {
           .supports_jsx = false,
       },
 
-      benchmark_config_server{
+      Benchmark_Config_Server{
           .name = "TypeScript-JSX",
           .program_name = "TypeScript",
           .command = {"node", "./node_modules/.bin/typescript-language-server",
@@ -326,8 +341,8 @@ benchmark_config benchmark_config::load() {
       },
   };
 
-  std::vector<benchmark_config_program> programs = {
-      benchmark_config_program{
+  std::vector<Benchmark_Config_Program> programs = {
+      Benchmark_Config_Program{
           .name = "Deno",
           .get_metadata =
               []() {
@@ -353,7 +368,7 @@ benchmark_config benchmark_config::load() {
               },
       },
 
-      benchmark_config_program{
+      Benchmark_Config_Program{
           .name = "ESLint",
           .get_metadata =
               []() {
@@ -369,29 +384,38 @@ benchmark_config benchmark_config::load() {
                                package_json_content.error_to_string().c_str());
                   std::exit(1);
                 }
-                ::boost::json::error_code error;
-                ::boost::json::value package_info = ::boost::json::parse(
-                    to_boost_string_view(package_json_content->string_view()),
-                    error);
-                if (error != ::boost::json::error_code()) {
+                ::simdjson::dom::parser parser;
+                ::simdjson::dom::element root;
+                if (parser
+                        .parse(reinterpret_cast<const char*>(
+                                   package_json_content->data()),
+                               package_json_content->size())
+                        .get(root) != ::simdjson::SUCCESS) {
                   std::fprintf(stderr, "error: %s: parsing JSON failed\n",
                                package_json_path);
                   std::exit(1);
                 }
-                metadata["vscode-eslint"] = to_string_view(
-                    look_up(package_info, "dependencies", "vscode-eslint")
-                        .as_string());
+                std::string_view vscode_eslint_dependency;
+                if (root["dependencies"]["vscode-eslint"].get(
+                        vscode_eslint_dependency) != ::simdjson::SUCCESS) {
+                  std::fprintf(stderr,
+                               "error: %s: failed to extract "
+                               ".dependencies['vscode-eslint']\n",
+                               package_json_path);
+                  std::exit(1);
+                }
+                metadata["vscode-eslint"] = vscode_eslint_dependency;
 
                 return metadata;
               },
       },
 
-      benchmark_config_program{
+      Benchmark_Config_Program{
           .name = "Flow",
           .get_metadata = []() { return get_yarn_packages_versions("flow"); },
       },
 
-      benchmark_config_program{
+      Benchmark_Config_Program{
           .name = "quick-lint-js",
           .get_metadata =
               []() {
@@ -408,17 +432,12 @@ benchmark_config benchmark_config::load() {
               },
       },
 
-      benchmark_config_program{
-          .name = "Rome",
-          .get_metadata =
-              []() {
-                // TODO(strager): Add version information when Rome adopts a
-                // --version option.
-                return std::map<std::string, std::string>{};
-              },
+      Benchmark_Config_Program{
+          .name = "Biome",
+          .get_metadata = []() { return get_yarn_packages_versions("biome"); },
       },
 
-      benchmark_config_program{
+      Benchmark_Config_Program{
           .name = "TypeScript",
           .get_metadata =
               []() {
@@ -431,7 +450,7 @@ benchmark_config benchmark_config::load() {
       },
   };
 
-  return benchmark_config{
+  return Benchmark_Config{
       .servers = std::move(servers),
       .programs = std::move(programs),
   };

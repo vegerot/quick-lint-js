@@ -24,12 +24,12 @@
 namespace quick_lint_js {
 namespace {
 #if QLJS_HAVE_UNISTD_H
-TEST(test_temporary_directory, delete_directory_containing_unwritable_file) {
+TEST(Test_Temporary_Directory, delete_directory_containing_unwritable_file) {
   std::string temp_dir = make_temporary_directory();
   std::string sub_dir = temp_dir + "/subdir";
   create_directory_or_exit(sub_dir);
   std::string unwritable_file = sub_dir + "/unwritable";
-  write_file_or_exit(unwritable_file, u8"unwritable file");
+  write_file_or_exit(unwritable_file, u8"unwritable file"_sv);
   EXPECT_EQ(::chmod(unwritable_file.c_str(), 0000), 0)
       << "failed to make " << unwritable_file
       << " inaccessible: " << std::strerror(errno);
@@ -40,7 +40,7 @@ TEST(test_temporary_directory, delete_directory_containing_unwritable_file) {
   EXPECT_FILE_DOES_NOT_EXIST(sub_dir);
 }
 
-TEST(test_temporary_directory,
+TEST(Test_Temporary_Directory,
      delete_directory_containing_non_empty_untraversable_directory) {
   std::string temp_dir = make_temporary_directory();
   std::string sub_dir = temp_dir + "/sub_dir";
@@ -48,7 +48,7 @@ TEST(test_temporary_directory,
   std::string untraversable_dir = sub_dir + "/untraversable_dir";
   create_directory_or_exit(untraversable_dir);
   std::string unfindable_file = untraversable_dir + "/unfindable_file";
-  write_file_or_exit(unfindable_file, u8"can't see me!");
+  write_file_or_exit(unfindable_file, u8"can't see me!"_sv);
   EXPECT_EQ(::chmod(untraversable_dir.c_str(), 0600), 0)
       << "failed to make " << untraversable_dir
       << " untraversable: " << std::strerror(errno);
@@ -61,7 +61,7 @@ TEST(test_temporary_directory,
 }
 #endif
 
-TEST(test_temporary_directory,
+TEST(Test_Temporary_Directory,
      creating_directory_over_existing_directory_fails) {
   std::string temp_dir = make_temporary_directory();
 
@@ -74,11 +74,11 @@ TEST(test_temporary_directory,
   EXPECT_TRUE(result_2.error().is_directory_already_exists_error);
 }
 
-TEST(test_temporary_directory, creating_directory_over_existing_file_fails) {
+TEST(Test_Temporary_Directory, creating_directory_over_existing_file_fails) {
   std::string temp_dir = make_temporary_directory();
 
   std::string file = temp_dir + "/file";
-  write_file_or_exit(file, u8"hello");
+  write_file_or_exit(file, u8"hello"_sv);
 
   auto result_2 = create_directory(file);
   ASSERT_FALSE(result_2.ok());
@@ -86,7 +86,7 @@ TEST(test_temporary_directory, creating_directory_over_existing_file_fails) {
 }
 
 #if QLJS_HAVE_UNISTD_H
-TEST(test_temporary_directory,
+TEST(Test_Temporary_Directory,
      creating_directory_in_unwritable_directory_fails) {
   if (process_ignores_filesystem_permissions()) {
     GTEST_SKIP() << "cannot run test as root";
@@ -104,10 +104,10 @@ TEST(test_temporary_directory,
 }
 #endif
 
-TEST(test_temporary_directory, timestamped_directory) {
+TEST(Test_Temporary_Directory, timestamped_directory) {
   std::string temp_dir = make_temporary_directory();
 
-  result<std::string, platform_file_io_error> d =
+  Result<std::string, Platform_File_IO_Error> d =
       make_timestamped_directory(temp_dir, "dir_%Y-%m-%d-%H-%M-%S");
   ASSERT_TRUE(d.ok()) << d.error_to_string();
 
@@ -115,19 +115,19 @@ TEST(test_temporary_directory, timestamped_directory) {
   for (std::string& file : files) {
     file = temp_dir + QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR + file;
   }
-  EXPECT_THAT(files, ::testing::ElementsAre(*d));
+  EXPECT_THAT(files, ::testing::ElementsAreArray({*d}));
 }
 
-TEST(test_temporary_directory,
+TEST(Test_Temporary_Directory,
      timestamped_directory_is_uniquified_on_timestamp_collision) {
   std::string temp_dir = make_temporary_directory();
 
   // Collisions are likely because the directory name only includes the date,
   // not the time.
-  result<std::string, platform_file_io_error> d1 =
+  Result<std::string, Platform_File_IO_Error> d1 =
       make_timestamped_directory(temp_dir, "dir_%Y-%m-%d");
   ASSERT_TRUE(d1.ok()) << d1.error_to_string();
-  result<std::string, platform_file_io_error> d2 =
+  Result<std::string, Platform_File_IO_Error> d2 =
       make_timestamped_directory(temp_dir, "dir_%Y-%m-%d");
   ASSERT_TRUE(d2.ok()) << d2.error_to_string();
 
@@ -137,7 +137,144 @@ TEST(test_temporary_directory,
   for (std::string& file : files) {
     file = temp_dir + QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR + file;
   }
-  EXPECT_THAT(files, ::testing::UnorderedElementsAre(*d1, *d2));
+  EXPECT_THAT(files, ::testing::UnorderedElementsAreArray({*d1, *d2}));
+}
+
+class Test_Directory : public ::testing::Test, protected Filesystem_Test {};
+
+TEST_F(Test_Directory, list_directory) {
+  std::string temp_dir = this->make_temporary_directory();
+
+  write_file_or_exit(temp_dir + "/file-1", u8""_sv);
+
+  create_directory_or_exit(temp_dir + "/dir-a");
+  write_file_or_exit(temp_dir + "/dir-a/file-2", u8""_sv);
+  create_directory_or_exit(temp_dir + "/dir-a/subdir");
+
+  create_directory_or_exit(temp_dir + "/dir-b");
+
+  write_file_or_exit(temp_dir + "/file-3", u8""_sv);
+
+  std::vector<std::string> visited_files;
+  Result<void, Platform_File_IO_Error> list = list_directory(
+      temp_dir.c_str(),
+      [&](const char* path) -> void { visited_files.push_back(path); });
+  ASSERT_TRUE(list.ok()) << list.error_to_string();
+
+  EXPECT_THAT(visited_files, ::testing::UnorderedElementsAreArray({
+                                 "file-1",
+                                 "dir-a",
+                                 "dir-b",
+                                 "file-3",
+                             }));
+}
+
+TEST_F(Test_Directory, list_directory_on_regular_file_fails) {
+  std::string temp_dir = this->make_temporary_directory();
+  write_file_or_exit(temp_dir + "/testfile", u8""_sv);
+
+  Result<void, Platform_File_IO_Error> list =
+      list_directory((temp_dir + "/testfile").c_str(),
+                     [&](const char* path) -> void { ADD_FAILURE() << path; });
+  ASSERT_FALSE(list.ok());
+  SCOPED_TRACE(list.error_to_string());
+  EXPECT_TRUE(list.error().is_not_a_directory_error());
+#if QLJS_HAVE_UNISTD_H
+  EXPECT_EQ(list.error().error, ENOTDIR);
+#elif QLJS_HAVE_WINDOWS_H
+  EXPECT_EQ(list.error().error, ERROR_DIRECTORY);
+#else
+#error "Unknown platform"
+#endif
+}
+
+TEST_F(Test_Directory, list_directory_recursively) {
+  std::string temp_dir = this->make_temporary_directory();
+
+  create_directory_or_exit(temp_dir + "/dir-a");
+  write_file_or_exit(temp_dir + "/dir-a/file-1", u8""_sv);
+  write_file_or_exit(temp_dir + "/dir-a/file-2", u8""_sv);
+
+  create_directory_or_exit(temp_dir + "/dir-a/subdir");
+  write_file_or_exit(temp_dir + "/dir-a/subdir/file-3", u8""_sv);
+
+  create_directory_or_exit(temp_dir + "/dir-b");
+  write_file_or_exit(temp_dir + "/dir-b/file-4", u8""_sv);
+
+  create_directory_or_exit(temp_dir + "/dir-c");
+
+  struct Test_Visitor final : public List_Directory_Visitor {
+    void visit_file(const std::string& path) override {
+      this->visited_files.push_back(path);
+    }
+
+    void visit_directory_pre(const std::string& path) override {
+      this->visited_files.push_back(path + " (pre)");
+    }
+
+    void visit_directory_post(const std::string& path) override {
+      this->visited_files.push_back(path + " (post)");
+    }
+
+    void on_error(const Platform_File_IO_Error& error,
+                  [[maybe_unused]] int depth) override {
+      ADD_FAILURE() << error.to_string();
+    }
+
+    std::vector<std::string> visited_files;
+  };
+  Test_Visitor visitor;
+  list_directory_recursively(temp_dir.c_str(), visitor);
+
+#define SEP QLJS_PREFERRED_PATH_DIRECTORY_SEPARATOR
+  EXPECT_THAT(visitor.visited_files,
+              ::testing::UnorderedElementsAreArray({
+                  temp_dir + " (pre)",
+                  temp_dir + SEP "dir-a (pre)",
+                  temp_dir + SEP "dir-a" SEP "file-1",
+                  temp_dir + SEP "dir-a" SEP "file-2",
+                  temp_dir + SEP "dir-a" SEP "subdir (pre)",
+                  temp_dir + SEP "dir-a" SEP "subdir" SEP "file-3",
+                  temp_dir + SEP "dir-a" SEP "subdir (post)",
+                  temp_dir + SEP "dir-a (post)",
+                  temp_dir + SEP "dir-b (pre)",
+                  temp_dir + SEP "dir-b" SEP "file-4",
+                  temp_dir + SEP "dir-b (post)",
+                  temp_dir + SEP "dir-c (pre)",
+                  temp_dir + SEP "dir-c (post)",
+                  temp_dir + " (post)",
+              }));
+#undef SEP
+}
+
+TEST_F(Test_Directory, list_directory_recursively_on_regular_file_fails) {
+  std::string temp_dir = this->make_temporary_directory();
+  write_file_or_exit(temp_dir + "/testfile", u8""_sv);
+
+  struct Test_Visitor final : public List_Directory_Visitor {
+    void visit_file(const std::string& path) override { ADD_FAILURE() << path; }
+
+    void on_error(const Platform_File_IO_Error& error, int depth) override {
+      SCOPED_TRACE(error.to_string());
+      EXPECT_FALSE(this->did_error) << "on_error should only be called once";
+      this->did_error = true;
+      EXPECT_TRUE(error.is_not_a_directory_error());
+#if QLJS_HAVE_UNISTD_H
+      EXPECT_EQ(error.error, ENOTDIR);
+#elif QLJS_HAVE_WINDOWS_H
+      EXPECT_EQ(error.error, ERROR_DIRECTORY);
+#else
+#error "Unknown platform"
+#endif
+      EXPECT_EQ(depth, 0);
+    }
+
+    bool did_error = false;
+  };
+  Test_Visitor visitor;
+  list_directory_recursively((temp_dir + "/testfile").c_str(), visitor);
+
+  EXPECT_TRUE(visitor.did_error);
 }
 }
 }

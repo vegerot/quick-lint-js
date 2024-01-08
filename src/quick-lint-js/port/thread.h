@@ -6,11 +6,9 @@
 // GCC+MinGW's threading implementation on Windows is heavy-weight, increasing
 // binary size. Our classes use Win32 APIs directly, avoiding bloat.
 
-#ifndef QUICK_LINT_JS_PORT_THREAD_H
-#define QUICK_LINT_JS_PORT_THREAD_H
+#pragma once
 
 #include <cstdint>
-#include <memory>
 #include <mutex>
 #include <quick-lint-js/port/have.h>
 #include <quick-lint-js/port/warning.h>
@@ -35,50 +33,62 @@
 #endif
 
 namespace quick_lint_js {
+template <class Data>
+class Lock_Ptr;
+
 #if QLJS_HAVE_THREADS
 // A reimplementation of std::thread.
-class thread {
+class Thread {
 #if defined(QLJS_THREADS_WINDOWS)
-  using os_thread_routine = unsigned(__stdcall *)(void *user_data);
+  using OS_Thread_Routine = unsigned(__stdcall *)(void *user_data);
 #elif defined(QLJS_THREADS_POSIX)
-  using os_thread_routine = void *(*)(void *user_data);
+  using OS_Thread_Routine = void *(*)(void *user_data);
 #endif
 
  public:
-  explicit thread() noexcept;
+  explicit Thread();
 
   template <class Func>
-  explicit thread(Func &&func) : thread() {
+  explicit Thread(Func &&func) : Thread() {
     this->start(std::forward<Func>(func));
   }
 
-  thread(const thread &) = delete;
-  thread &operator=(const thread &) = delete;
+  Thread(const Thread &) = delete;
+  Thread &operator=(const Thread &) = delete;
 
-  thread(thread &&) = delete;  // TODO(strager)
-  thread &operator=(thread &&);
+  Thread(Thread &&) = delete;  // TODO(strager)
+  Thread &operator=(Thread &&);
 
-  ~thread();
+  ~Thread();
 
   template <class Func>
   void start(Func &&func) {
-    std::unique_ptr<thread_closure<Func>> closure =
-        std::make_unique<thread_closure<Func>>(std::forward<Func>(func));
-    this->start(thread_closure<Func>::run, closure.get());
-    closure.release();
+    using Closure = Thread_Closure<Func>;
+
+    Closure *closure = new Closure(std::forward<Func>(func));
+    this->start(Closure::run, closure);
+
+    this->closure_ = closure;
+    this->destroy_closure_ = &Closure::destroy;
   }
 
-  bool joinable() const noexcept;
+  bool joinable() const;
   void join();
 
+#if defined(QLJS_THREADS_WINDOWS)
+  // Call TerminateThread. This is pretty unsafe. Know what you are doing before
+  // calling this function.
+  void terminate();
+#endif
+
  private:
-  void start(os_thread_routine thread_routine, void *user_data);
+  void start(OS_Thread_Routine thread_routine, void *user_data);
 
   template <class Func>
-  struct thread_closure {
+  struct Thread_Closure {
     Func func;
 
-    explicit thread_closure(Func &&func) : func(std::move(func)) {}
+    explicit Thread_Closure(Func &&func) : func(std::move(func)) {}
 
     static
 #if defined(QLJS_THREADS_WINDOWS)
@@ -87,8 +97,7 @@ class thread {
         void *
 #endif
         run(void *user_data) {
-      std::unique_ptr<thread_closure> self(
-          static_cast<thread_closure *>(user_data));
+      Thread_Closure *self = static_cast<Thread_Closure *>(user_data);
       self->func();
 #if defined(QLJS_THREADS_WINDOWS)
       return 0;
@@ -96,23 +105,34 @@ class thread {
       return nullptr;
 #endif
     }
+
+    // NOTE(strager): destroy must be called from the main thread not from the
+    // spawned thread. If destroy was called from the spawned thread, then
+    // Thread::terminate would cause a memory leak.
+    static void destroy(void *user_data) {
+      delete static_cast<Thread_Closure *>(user_data);
+    }
   };
 
 #if defined(QLJS_THREADS_WINDOWS)
-  windows_handle_file thread_handle_;
+  Windows_Handle_File thread_handle_;
 #elif defined(QLJS_THREADS_POSIX)
   ::pthread_t thread_handle_;
+  // TODO(strager): Reuse this->closure_ != nullptr.
   bool thread_is_running_ = false;
 #endif
+
+  void *closure_ = nullptr;
+  void (*destroy_closure_)(void *) = nullptr;
 };
 #endif
 
 // A reimplementation of std::mutex.
-class mutex {
+class Mutex {
  public:
   QLJS_WARNING_PUSH
   QLJS_WARNING_IGNORE_GCC("-Wzero-as-null-pointer-constant")
-  explicit constexpr mutex() noexcept
+  explicit constexpr Mutex()
 #if defined(QLJS_THREADS_WINDOWS)
       : mutex_handle_(SRWLOCK_INIT)
 #elif defined(QLJS_THREADS_POSIX)
@@ -124,10 +144,10 @@ class mutex {
 
   // This destructor is technically constexpr, but the constexpr keyword is not
   // allowed in C++17.
-  /*constexpr*/ ~mutex() = default;
+  /*constexpr*/ ~Mutex() = default;
 
-  mutex(const mutex &) = delete;
-  mutex(mutex &&) = delete;
+  Mutex(const Mutex &) = delete;
+  Mutex(Mutex &&) = delete;
 
   void lock();
   void unlock();
@@ -139,26 +159,33 @@ class mutex {
   ::pthread_mutex_t mutex_handle_;
 #endif
 
-  friend class condition_variable;
+  friend class Condition_Variable;
 };
 
 // A reimplementation of std::condition_variable.
-class condition_variable {
+class Condition_Variable {
  public:
-  explicit condition_variable();
-  ~condition_variable();
+  explicit Condition_Variable();
+  ~Condition_Variable();
 
-  condition_variable(const condition_variable &) = delete;
-  condition_variable(condition_variable &&) = delete;
+  Condition_Variable(const Condition_Variable &) = delete;
+  Condition_Variable(Condition_Variable &&) = delete;
 
-  template <class Predicate>
-  void wait(std::unique_lock<mutex> &lock, Predicate stop_waiting) {
+  template <class Lock, class Predicate>
+  void wait(Lock &lock, Predicate stop_waiting) {
     while (!stop_waiting()) {
       this->wait(lock);
     }
   }
 
-  void wait(std::unique_lock<mutex> &);
+  void wait(std::unique_lock<Mutex> &);
+
+  template <class Data>
+  void wait(Lock_Ptr<Data> &locked) {
+    this->wait_raw(locked.get_mutex_unsafe());
+  }
+
+  void wait_raw(Mutex *);
 
   void notify_one();
   void notify_all();
@@ -171,10 +198,8 @@ class condition_variable {
 #endif
 };
 
-std::uint64_t get_current_thread_id() noexcept;
+std::uint64_t get_current_thread_id();
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

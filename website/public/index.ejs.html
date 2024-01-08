@@ -1,12 +1,14 @@
+<!---{
+"title": "quick-lint-js: find JavaScript bugs",
+"description": "quick-lint-js gives you instant feedback as you code. Find bugs in your JavaScript before your finger leaves the keyboard."
+}--->
+
 <!DOCTYPE html>
 <!-- Copyright (C) 2020  Matthew "strager" Glazar -->
 <!-- See end of file for extended copyright information. -->
 <html>
   <head>
-    <%- await include("./common-head.ejs.html", { title: `quick-lint-js: find
-    JavaScript bugs`, description: `quick-lint-js gives you instant feedback as
-    you code. Find bugs in your JavaScript before your finger leaves the
-    keyboard.` }) %>
+    <%- await include("./common-head.ejs.html") %>
     <link href="main.css" rel="stylesheet" />
     <style>
       .feature-comparison table {
@@ -27,6 +29,9 @@
       .feature-comparison tbody td,
       .feature-comparison tbody th {
         border-top-width: 1px;
+      }
+      .feature-comparison th {
+        font-weight: normal;
       }
 
       .feature-comparison td.quick-lint-js,
@@ -78,6 +83,21 @@
       }
       .feature-comparison td.has-link > a:hover {
         background-color: rgba(0, 0, 0, 0.05);
+      }
+      .feature-comparison td.has-link > a {
+        /* We want <br> in the markup to improve copy-paste. However, we don't
+           want the <br> to take up space because we already use display:flex to
+           place things on separate lines.
+
+           <br> doesn't take up any space in Firefox 115.0.3, but does take up
+           space in Safari 16.3 and Chromium 111.0.5563.110.
+
+           If we hide the <br>, copy-paste breaks.
+
+           Work around this issue by using &#x0a; and white-space:pre-line
+           instead of <br>. This seems to make copy-paste nice while making the
+           page look nice visually in all browsers. */
+        white-space: pre-line;
       }
       @media (prefers-color-scheme: dark) {
         .feature-comparison td.has-link > a:hover {
@@ -164,6 +184,7 @@
         margin: 0;
         padding: 1em 2em;
         font-size: 0.85rem;
+        overflow-x: auto;
       }
       #demonstration .footer-bar {
         background-color: #007ad3;
@@ -380,6 +401,13 @@
           width: auto;
         }
       }
+      /*decreasing the padding to make the horizontal scroll bar disappear */
+      @media only screen and (max-width: 24em) {
+        .feature-comparison td,
+        .feature-comparison th {
+          padding: 0.5rem 0.5rem 0.5rem 0.5rem;
+        }
+      }
     </style>
     <script>
       //<%
@@ -395,7 +423,7 @@
 
     <main>
       <p>
-        <a href="benchmarks/">Over <strong>130× faster</strong> than ESLint</a>,
+        <a href="benchmarks/">Over <strong>90× faster</strong> than ESLint</a>,
         quick-lint-js gives you <strong>instant feedback</strong> as you code.
         <strong>Find bugs</strong> in your JavaScript before your finger leaves
         the keyboard. Lint any JavaScript file with
@@ -440,111 +468,113 @@ const language = "JavaScript";
       <p><a href="demo/">Try it out in your browser.</a></p>
 
       <%- await spriteSheet.makeInlineHTMLAsync() %>
-
-      <h2>Install quick-lint-js</h2>
-      <p>
-        Latest version:
-        <a href="releases/" title="Release history"
-          ><%= qljsVersionInfo.version %></a
-        >
-        (released
-        <time datetime="<%= qljsVersionInfo.releaseDate %>"
-          ><%= new Intl.DateTimeFormat("en-US", {dateStyle: "long", timeZone:
-          "UTC"}).format(new Date(qljsVersionInfo.releaseDate)) %></time
-        >)
-      </p>
-
-      <ul class="install-options">
-        <li>
-          <a
-            href="https://marketplace.visualstudio.com/items?itemName=quick-lint.quick-lint-js"
-            ><qljs-icon
-              name="vscode"
-              size="19"
-              aria-labelledby="install-vs-code"
-            />
-            <span id="install-vs-code">install VS Code plugin</span></a
+      <section id="install-section">
+        <h2>Install quick-lint-js</h2>
+        <p>
+          Latest version:
+          <a href="releases/" title="Release history"
+            ><%= qljsVersionInfo.version %></a
           >
-        </li>
-        <li>
-          <a href="install/neovim/"
-            ><qljs-icon
-              name="neovim"
-              size="19"
-              aria-labelledby="install-neovim"
-            />
-            <span id="install-neovim">install Neovim plugin</span></a
-          >
-        </li>
-        <li>
-          <a href="install/vim/"
-            ><qljs-icon name="vim" size="19" aria-labelledby="install-vim" />
-            <span id="install-vim">install Vim plugin</span></a
-          >
-        </li>
-        <li>
-          <a href="install/cli/"
-            ><qljs-icon
-              name="cli-and-lsp-server"
-              size="19"
-              aria-labelledby="install-cli"
-            />
-            <span id="install-cli">install CLI</span></a
-          >
-        </li>
-        <li>
-          <a href="https://www.npmjs.com/package/quick-lint-js"
-            ><qljs-icon name="npm" size="19" aria-labelledby="install-npm" />
-            <span id="install-npm">install CLI on npm</span></a
-          >
-        </li>
-      </ul>
-      <p>
-        <a href="install/">see all installation options</a> &centerdot;
-        <a href="releases/">release history</a>
-      </p>
-
+          (released
+          <time datetime="<%= qljsVersionInfo.releaseDate %>"
+            ><%= new Intl.DateTimeFormat("en-US", {dateStyle: "long", timeZone:
+            "UTC"}).format(new Date(qljsVersionInfo.releaseDate)) %></time
+          >)
+        </p>
+        <ul class="install-options">
+          <li>
+            <a href="install/vscode/plugin/"
+              ><qljs-icon
+                name="vscode"
+                size="19"
+                aria-labelledby="install-vs-code"
+              />
+              <span id="install-vs-code">install VS Code plugin</span></a
+            >
+          </li>
+          <li>
+            <a href="install/neovim/"
+              ><qljs-icon
+                name="neovim"
+                size="19"
+                aria-labelledby="install-neovim"
+              />
+              <span id="install-neovim">install Neovim plugin</span></a
+            >
+          </li>
+          <li>
+            <a href="install/vim/"
+              ><qljs-icon name="vim" size="19" aria-labelledby="install-vim" />
+              <span id="install-vim">install Vim plugin</span></a
+            >
+          </li>
+          <li>
+            <a href="install/cli/"
+              ><qljs-icon
+                name="cli-and-lsp-server"
+                size="19"
+                aria-labelledby="install-cli"
+              />
+              <span id="install-cli">install CLI</span></a
+            >
+          </li>
+          <li>
+            <a href="https://www.npmjs.com/package/quick-lint-js"
+              ><qljs-icon name="npm" size="19" aria-labelledby="install-npm" />
+              <span id="install-npm">install CLI on npm</span></a
+            >
+          </li>
+        </ul>
+        <p>
+          <a href="install/">see all installation options</a> &centerdot;
+          <a href="releases/">release history</a>
+        </p>
+      </section>
       <h2 id="linter-feature-comparison">Features</h2>
       <figure class="comparison feature-comparison">
         <table>
           <thead>
             <tr class="header">
-              <th>feature</th>
+              <th class="hide-in-mobile">feature</th>
               <th class="quick-lint-js">quick-lint-js</th>
               <th><a href="https://eslint.org/">ESLint</a></th>
-              <th><a href="https://jshint.com/">JSHint</a></th>
-              <th><a href="https://rome.tools/">Rome</a></th>
-              <th><a href="https://deno.land/">Deno</a></th>
+              <th class="hide-in-mobile">
+                <a href="https://jshint.com/">JSHint</a>
+              </th>
+              <th><a href="https://biomejs.dev/">Biome</a></th>
+              <th class="hide-in-mobile">
+                <a href="https://deno.land/">Deno</a>
+              </th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <th><a href="benchmarks/">speed</a></th>
+              <th class="hide-in-mobile"><a href="benchmarks/">speed</a></th>
               <td class="good quick-lint-js has-link">
                 <a href="benchmarks/"
                   ><span aria-labelledby="feature-speed-qljs-quick">🚀</span
-                  ><br /><span id="feature-speed-qljs-quick">quick</span></a
+                  >&#x0a;<span id="feature-speed-qljs-quick">quick</span></a
                 >
               </td>
               <td class="meh">
                 <span aria-labelledby="feature-speed-eslint-capable">🐇</span
                 ><br /><span id="feature-speed-eslint-capable">capable</span>
               </td>
-              <td class="bad">
+              <td class="bad hide-in-mobile">
                 <span aria-labelledby="feature-speed-jshint-slow">🐢</span
                 ><br /><span id="feature-speed-jshint-slow">slow</span>
               </td>
               <td class="good">
-                <span aria-labelledby="feature-speed-rome-quick">🚀</span
-                ><br /><span id="feature-speed-rome-quick">quick</span>
+                <span aria-labelledby="feature-speed-biome-quick">🚀</span
+                ><br /><span id="feature-speed-biome-quick">quick</span>
               </td>
-              <td class="bad">
+              <td class="bad hide-in-mobile">
                 <span aria-labelledby="feature-speed-deno-lint-slow">🐢</span
                 ><br /><span id="feature-speed-deno-lint-slow">slow</span>
               </td>
             </tr>
             <tr>
-              <th>easy setup</th>
+              <th class="hide-in-mobile">easy setup</th>
               <td class="good quick-lint-js">
                 <span aria-label="easy">✅</span><br />zero config
               </td>
@@ -552,15 +582,17 @@ const language = "JavaScript";
                 <span aria-label="hard">❌</span><br />config or
                 <code>init</code>
               </td>
-              <td class="bad"><span aria-label="hard">❌</span><br />config</td>
+              <td class="bad hide-in-mobile">
+                <span aria-label="hard">❌</span><br />config
+              </td>
               <td class="good">
                 <span aria-label="easy">✅</span><br />config optional
               </td>
-              <td class="good">
+              <td class="good hide-in-mobile">
                 <span aria-label="easy">✅</span><br />zero config
               </td>
             </tr>
-            <tr>
+            <tr class="hide-in-mobile">
               <th>easy npm install</th>
               <td class="good quick-lint-js">
                 <span aria-label="easy">✅</span>
@@ -571,17 +603,18 @@ const language = "JavaScript";
               <td class="bad"><span aria-label="hard">❌</span></td>
             </tr>
             <tr>
-              <th>license</th>
+              <th class="hide-in-mobile">license</th>
               <td class="good quick-lint-js">free<br />GPLv3</td>
               <td class="meh">open source<br />MIT</td>
+              <td class="meh hide-in-mobile">open source<br />MIT</td>
               <td class="meh">open source<br />MIT</td>
-              <td class="meh">open source<br />MIT</td>
-              <td class="meh">open source<br />MIT</td>
+              <td class="meh hide-in-mobile">open source<br />MIT</td>
             </tr>
             <tr>
-              <th>JSX</th>
+              <th class="hide-in-mobile">JSX</th>
               <td class="good quick-lint-js">
-                <span aria-label="yes">✅</span>
+                <span aria-label="yes">✅</span
+                ><span class="show-in-mobile"><br />JSX</span>
               </td>
               <td class="meh">
                 <span aria-label="yes">✅</span
@@ -590,22 +623,24 @@ const language = "JavaScript";
                   title="with plugin"
                   class="footnote-marker"
                   >&nbsp;†</span
-                >
+                ><span class="show-in-mobile"><br />JSX</span>
               </td>
-              <td class="bad"><span aria-label="no">❌</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
+              <td class="bad hide-in-mobile">
+                <span aria-label="no">❌</span>
+              </td>
+              <td class="good">
+                <span aria-label="yes">✅</span
+                ><span class="show-in-mobile"><br />JSX</span>
+              </td>
+              <td class="good hide-in-mobile">
+                <span aria-label="yes">✅</span>
+              </td>
             </tr>
             <tr>
-              <th>TypeScript</th>
-              <td class="bad quick-lint-js">
-                <span aria-label="no">❌</span
-                ><span
-                  aria-label="planned"
-                  title="planned"
-                  class="footnote-marker"
-                  >&nbsp;*</span
-                >
+              <th class="hide-in-mobile">TypeScript</th>
+              <td class="good quick-lint-js">
+                <span aria-label="yes">✅</span
+                ><span class="show-in-mobile"><br />TypeScript</span>
               </td>
               <td class="meh">
                 <span aria-label="yes">✅</span
@@ -614,46 +649,60 @@ const language = "JavaScript";
                   title="with plugin"
                   class="footnote-marker"
                   >&nbsp;<a href="https://typescript-eslint.io/">†</a></span
-                >
+                ><span class="show-in-mobile"><br />TypeScript</span>
               </td>
-              <td class="bad"><span aria-label="no">❌</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
+              <td class="bad hide-in-mobile">
+                <span aria-label="no">❌</span>
+              </td>
+              <td class="good">
+                <span aria-label="yes">✅</span
+                ><span class="show-in-mobile"><br />TypeScript</span>
+              </td>
+              <td class="good hide-in-mobile">
+                <span aria-label="yes">✅</span>
+              </td>
             </tr>
 
             <tr>
-              <th>lint rules</th>
-              <td class="meh quick-lint-js"><a href="errors/">minimal</a></td>
-              <td class="good">
-                <a href="https://eslint.org/docs/rules/">zillions</a>
+              <th class="hide-in-mobile">lint rules</th>
+              <td class="meh quick-lint-js">
+                <a href="errors/">minimal</a
+                ><span class="show-in-mobile"><br />lint rules</span>
               </td>
-              <td class="meh">
+              <td class="good">
+                <a href="https://eslint.org/docs/rules/">zillions</a
+                ><span class="show-in-mobile"><br />of lint rules</span>
+              </td>
+              <td class="meh hide-in-mobile">
                 <a href="https://jshint.com/docs/options/">some</a>
               </td>
               <td class="meh">
-                <a href="https://rome.tools/docs/lint/rules/">some</a>
+                <a href="https://biomejs.dev/linter/rules/">some</a
+                ><span class="show-in-mobile"><br />lint rules</span>
               </td>
-              <td class="meh"><a href="https://lint.deno.land/">some</a></td>
+              <td class="meh hide-in-mobile">
+                <a href="https://lint.deno.land/">some</a>
+              </td>
             </tr>
-            <tr>
+            <tr class="hide-in-mobile">
               <th>stable</th>
               <td class="good quick-lint-js">
                 <span aria-label="stable">✅</span>
               </td>
               <td class="good"><span aria-label="stable">✅</span></td>
               <td class="good"><span aria-label="stable">✅</span></td>
-              <td class="bad"><span aria-label="unstable">❌</span></td>
+              <td class="good"><span aria-label="stable">✅</span></td>
               <td class="good"><span aria-label="stable">✅</span></td>
             </tr>
           </tbody>
 
-          <tbody class="editors">
+          <tbody class="editors hide-in-mobile">
             <tr class="header">
               <th>feature</th>
               <th class="quick-lint-js">quick-lint-js</th>
               <th><a href="https://eslint.org/">ESLint</a></th>
               <th><a href="https://jshint.com/">JSHint</a></th>
-              <th><a href="https://rome.tools/">Rome</a></th>
+              <th><a href="https://biomejs.dev/">Biome</a></th>
               <th><a href="https://deno.land/">Deno</a></th>
             </tr>
             <tr>
@@ -681,7 +730,7 @@ const language = "JavaScript";
               </td>
               <td class="good"><span aria-label="yes">✅</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="bad"><span aria-label="no">❌</span></td>
+              <td class="good"><span aria-label="yes">✅</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
             </tr>
             <tr>
@@ -696,7 +745,7 @@ const language = "JavaScript";
               </td>
               <td class="good"><span aria-label="yes">✅</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="bad"><span aria-label="no">❌</span></td>
+              <td class="good"><span aria-label="yes">✅</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
             </tr>
             <tr>
@@ -707,7 +756,7 @@ const language = "JavaScript";
               <td class="bad quick-lint-js"><span aria-label="no">❌</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="bad"><span aria-label="no">❌</span></td>
+              <td class="good"><span aria-label="yes">✅</span></td>
               <td class="good"><span aria-label="yes">✅</span></td>
             </tr>
             <tr>
@@ -736,17 +785,6 @@ const language = "JavaScript";
               <td class="good"><span aria-label="yes">✅</span></td>
               <td class="bad"><span aria-label="no">❌</span></td>
               <td class="bad"><span aria-label="no">❌</span></td>
-            </tr>
-            <tr>
-              <th>
-                Atom
-                <qljs-icon name="atom" size="19" />
-              </th>
-              <td class="bad quick-lint-js"><span aria-label="no">❌</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
-              <td class="bad"><span aria-label="no">❌</span></td>
-              <td class="good"><span aria-label="yes">✅</span></td>
             </tr>
             <tr>
               <th>
@@ -802,14 +840,33 @@ const language = "JavaScript";
           </tbody>
         </table>
         <figcaption>
-          <p id="footnote-planned">
-            <span aria-label="planned footnote">*</span> feature is planned
-          </p>
           <p id="footnote-with-plugin">
             <span aria-label="planned with plugin">†</span> feature requires a
             plugin
           </p>
         </figcaption>
+      </figure>
+      <figure id="editors-support" class="show-in-mobile">
+        <h2>Editor support</h2>
+        <div id="supported-editors">
+          <a href="install/vscode/"
+            ><qljs-icon name="vscode" size="32" /><br />VS Code</a
+          >
+
+          <a href="install/vim/"><qljs-icon name="vim" size="32" /><br />Vim</a>
+          <a href="install/neovim/"
+            ><qljs-icon name="neovim" size="32" /><br />Neovim</a
+          >
+          <a href="install/sublime/"
+            ><qljs-icon name="sublime-text" size="32" /><br />Sublime Text</a
+          >
+          <a href="install/emacs/"
+            ><qljs-icon name="emacs" size="32" /><br />Emacs</a
+          >
+          <a href="install/kate/"
+            ><qljs-icon name="kate" size="32" /><br />Kate</a
+          >
+        </div>
       </figure>
     </main>
 

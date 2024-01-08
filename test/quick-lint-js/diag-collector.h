@@ -1,70 +1,48 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_DIAG_COLLECTOR_H
-#define QUICK_LINT_JS_DIAG_COLLECTOR_H
+#pragma once
 
 #include <iosfwd>
 #include <quick-lint-js/assert.h>
-#include <quick-lint-js/fe/diag-reporter.h>
-#include <quick-lint-js/fe/diagnostic-types.h>
+#include <quick-lint-js/diag/diag-reporter.h>
+#include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/token.h>
 #include <quick-lint-js/port/char8.h>
 #include <utility>
 #include <vector>
 
 namespace quick_lint_js {
-struct diag_collector : public diag_reporter {
-  void report_impl(diag_type type, void *diag) override;
+struct Diag_Collector : public Diag_Reporter {
+  void report_impl(Diag_Type type, void *diag) override;
 
   // Like std::variant<(diag types)>, but with much faster compilation.
-  class diag {
+  class Diag {
    public:
-#define QLJS_DIAG_TYPE(name, code, severity, struct_body, format_call) \
-  explicit diag(const name &);
-    QLJS_X_DIAG_TYPES
-#undef QLJS_DIAG_TYPE
+#define QLJS_DIAG_TYPE_NAME(name) explicit Diag(const name &);
+    QLJS_X_DIAG_TYPE_NAMES
+#undef QLJS_DIAG_TYPE_NAME
 
-    diag_type type() const noexcept;
-    const char *error_code() const noexcept;
-    const void *data() const noexcept;
+    Diag_Type type() const;
+    const void *data() const;
 
-    template <class Diag>
-    friend const Diag &get(const diag &) noexcept;
-
-    template <class Diag>
-    friend bool holds_alternative(const diag &) noexcept;
-
-    friend void PrintTo(const diag &, std::ostream *);
+    friend void PrintTo(const Diag &, std::ostream *);
 
    private:
-    diag_type type_;
-    union {
-#define QLJS_DIAG_TYPE(name, code, severity, struct_body, format_call) \
-  name variant_##name##_;
-      QLJS_X_DIAG_TYPES
-#undef QLJS_DIAG_TYPE
-    };
+    explicit Diag(Diag_Type type, const void *data);
+
+    Diag_Type type_;
+    alignas(std::uint64_t) std::uint8_t storage_[48];
+
+    friend void diag_collector_static_assertions();
+    friend Diag_Collector;
   };
 
-  std::vector<diag> errors;
+  std::vector<Diag> errors;
 };
 
-template <class Diag>
-const Diag &get(const diag_collector::diag &) noexcept;
-
-template <class Diag>
-bool holds_alternative(const diag_collector::diag &) noexcept;
-
-void PrintTo(const diag_collector::diag &, std::ostream *);
-
-#define QLJS_DIAG_TYPE(name, code, severity, struct_body, format_call) \
-  void PrintTo(const name &, std::ostream *);
-QLJS_X_DIAG_TYPES
-#undef QLJS_DIAG_TYPE
+void PrintTo(const Diag_Collector::Diag &, std::ostream *);
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

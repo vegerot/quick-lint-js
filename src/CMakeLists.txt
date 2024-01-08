@@ -1,17 +1,13 @@
 # Copyright (C) 2020  Matthew "strager" Glazar
 # See end of file for extended copyright information.
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
 include(GNUInstallDirs)
 include(QuickLintJSCompiler)
 include(QuickLintJSCopyright)
 include(QuickLintJSTarget)
 
-set(NEED_THREADS TRUE)
-
-if (NEED_THREADS)
-  find_package(Threads REQUIRED)
-endif ()
+find_package(Threads REQUIRED)
 
 if (QUICK_LINT_JS_ENABLE_CLI)
   set(EXTRA_SOURCES)
@@ -34,19 +30,240 @@ if (QUICK_LINT_JS_ENABLE_CLI)
   install(TARGETS quick-lint-js RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif ()
 
+if (TARGET quick-lint-js-generate-diagnostic-metadata)
+  add_custom_command(
+    OUTPUT
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/diag/diagnostic-metadata-generated.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/diag/diagnostic-metadata-generated.h"
+    COMMAND
+      $<TARGET_FILE:quick-lint-js-generate-diagnostic-metadata>
+      --output-info-cpp "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/diag/diagnostic-metadata-generated.cpp"
+      --output-type-list-h "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/diag/diagnostic-metadata-generated.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/diag/diagnostic-types-2.h"
+    DEPENDS
+      quick-lint-js-generate-diagnostic-metadata
+      "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/diag/diagnostic-types-2.h"
+    COMMENT "Generating metadata of diagnostics for diagnostic-metadata-generated.h"
+  )
+endif ()
+# NOTE[generated-target]: We must create a target just for these generated
+# files. Otherwise, Ninja's build gets order-only dependencies from
+# diagnostic-metadata-generated.h to libquick-lint-js-debug.a, forming a
+# dependency cycle (because libquick-lint-js-debug.a depends on
+# diagnostic-types.h which depends on diagnostic-metadata-generated.h).
+#
+# DEPENDS_EXPLICIT_ONLY (CMake 3.27) might fix this, removing the need for an
+# intermediate target.
 quick_lint_js_add_library(
-  quick-lint-js-lib
+  quick-lint-js-diagnostic-metadata
+  STATIC
+  quick-lint-js/diag/diagnostic-metadata-generated.cpp
+  quick-lint-js/diag/diagnostic-metadata-generated.h
+)
+target_include_directories(quick-lint-js-diagnostic-metadata PUBLIC .)
+target_link_libraries(
+  quick-lint-js-diagnostic-metadata
+  PUBLIC
+  quick-lint-js-i18n
+)
+quick_lint_js_target_add_cxx_flag_if_supported(
+  quick-lint-js-diagnostic-metadata
+  /constexpr:steps9999999
+  QUICK_LINT_JS_HAVE_CONSTEXPR_STEPS
+)
+quick_lint_js_target_add_cxx_flag_if_supported(
+  quick-lint-js-diagnostic-metadata
+  -fconstexpr-steps=9999999
+  QUICK_LINT_JS_HAVE_FCONSTEXPR_STEPS
+)
+
+if (TARGET quick-lint-js-generate-lex-keyword)
+  add_custom_command(
+    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/fe/lex-keyword-generated.cpp"
+    COMMAND
+      $<TARGET_FILE:quick-lint-js-generate-lex-keyword>
+      --output
+      "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/fe/lex-keyword-generated.cpp"
+    DEPENDS quick-lint-js-generate-lex-keyword
+    COMMENT "Generating keyword hash table for lex-keyword-generated.cpp"
+  )
+endif ()
+
+if (TARGET quick-lint-js-generate-trace-sources)
+  add_custom_command(
+    OUTPUT
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/debug/public/trace-generated.mjs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-metadata-generated.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-reader-generated.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-reader-generated.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-writer-generated.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tools/trace.bt"
+    COMMAND
+      $<TARGET_FILE:quick-lint-js-generate-trace-sources>
+      --output-010-editor-template "${CMAKE_CURRENT_SOURCE_DIR}/../tools/trace.bt"
+      --output-metadata-cpp "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-metadata-generated.cpp"
+      --output-parser-cpp "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-reader-generated.cpp"
+      --output-parser-h "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-reader-generated.h"
+      --output-parser-js "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/debug/public/trace-generated.mjs"
+      --output-writer-h "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-writer-generated.h"
+      --trace-types-h "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-types.h"
+    DEPENDS
+      quick-lint-js-generate-trace-sources
+      "${CMAKE_CURRENT_SOURCE_DIR}/quick-lint-js/logging/trace-types.h"
+    COMMENT "Generating metadata files, parsers, and writers for tracing"
+  )
+endif ()
+# See NOTE[generated-target].
+quick_lint_js_add_library(
+  quick-lint-js-trace
+  STATIC
+  quick-lint-js/logging/trace-metadata-generated.cpp
+  quick-lint-js/logging/trace-reader-generated.cpp
+  quick-lint-js/logging/trace-reader-generated.h
+  quick-lint-js/logging/trace-writer-generated.h
+)
+target_include_directories(quick-lint-js-trace PUBLIC .)
+target_link_libraries(quick-lint-js-trace PUBLIC quick-lint-js-tool-lib)
+
+# C++ files which contain QLJS_TRANSLATABLE directives.
+set(
+  QLJS_TRANSLATION_SOURCES
+  ../benchmark/benchmark-translation.cpp
+  quick-lint-js/diag/diagnostic-formatter.cpp
+  quick-lint-js/diag/diagnostic-metadata-generated.cpp
+  quick-lint-js/diag/diagnostic-metadata-generated.h
+  ../test/test-diagnostic-formatter.cpp
+  ../test/test-vim-qflist-json-diag-reporter.cpp
+)
+
+# GNU gettext .po files which contain translation information.
+set(
+  QLJS_TRANSLATION_FILES
+  ../po/de.po
+  ../po/en_US@snarky.po
+  ../po/fr_FR.po
+  ../po/pt_BR.po
+  ../po/sv_SE.po
+)
+
+if (TARGET quick-lint-js-compile-translations)
+  set(COMMAND $<TARGET_FILE:quick-lint-js-compile-translations>)
+  set(DEPENDS quick-lint-js-compile-translations)
+  set(OUTPUTS)
+  set(WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+  macro (add_flag LIST FLAG PATH)
+    # Make the output of compile-translations deterministic by using relative
+    # paths.
+    file(RELATIVE_PATH _PATH "${WORKING_DIRECTORY}" "${CMAKE_CURRENT_SOURCE_DIR}/${PATH}")
+    list(APPEND COMMAND "${FLAG}" "${_PATH}")
+    list(APPEND "${LIST}" "${CMAKE_CURRENT_SOURCE_DIR}/${PATH}")
+  endmacro ()
+
+  foreach (SOURCE IN LISTS QLJS_TRANSLATION_SOURCES)
+    add_flag(DEPENDS --source "${SOURCE}")
+  endforeach ()
+  foreach (TRANSLATION_FILE IN LISTS QLJS_TRANSLATION_FILES)
+    add_flag(DEPENDS --po "${TRANSLATION_FILE}")
+  endforeach ()
+  add_flag(OUTPUTS --output-messages-pot ../po/messages.pot)
+  add_flag(OUTPUTS --output-translation-table-cpp quick-lint-js/i18n/translation-table-generated.cpp)
+  add_flag(OUTPUTS --output-translation-table-h quick-lint-js/i18n/translation-table-generated.h)
+  add_flag(OUTPUTS --output-translation-table-test quick-lint-js/i18n/translation-table-test-generated.h)
+
+  add_custom_command(
+    OUTPUT ${OUTPUTS}
+    COMMAND ${COMMAND}
+    DEPENDS ${DEPENDS}
+    COMMENT "Scanning sources for translatable strings and generating translation tables"
+    WORKING_DIRECTORY "${WORKING_DIRECTORY}"
+  )
+endif ()
+# See NOTE[generated-target].
+quick_lint_js_add_library(
+  quick-lint-js-i18n
+  STATIC
+  quick-lint-js/i18n/translation-table-generated.cpp
+  quick-lint-js/i18n/translation-table-generated.h
+  quick-lint-js/i18n/translation-table-test-generated.h
+)
+target_include_directories(quick-lint-js-i18n PUBLIC .)
+
+# These files are needed by some helper tools in addition to the core.
+quick_lint_js_add_library(
+  quick-lint-js-tool-lib
   quick-lint-js/assert.cpp
   quick-lint-js/assert.h
-  quick-lint-js/boost.cpp
-  quick-lint-js/c-api-diag-reporter.cpp
-  quick-lint-js/c-api-diag-reporter.h
-  quick-lint-js/c-api.cpp
-  quick-lint-js/c-api.h
   quick-lint-js/cli/arg-parser.cpp
   quick-lint-js/cli/arg-parser.h
   quick-lint-js/cli/cli-location.cpp
   quick-lint-js/cli/cli-location.h
+  quick-lint-js/container/flexible-array.h
+  quick-lint-js/container/linked-bump-allocator.cpp
+  quick-lint-js/container/linked-bump-allocator.h
+  quick-lint-js/container/padded-string.cpp
+  quick-lint-js/container/padded-string.h
+  quick-lint-js/container/string-view.h
+  quick-lint-js/container/vector-profiler.cpp
+  quick-lint-js/container/vector-profiler.h
+  quick-lint-js/container/vector.h
+  quick-lint-js/container/winkable.h
+  quick-lint-js/fe/keyword-lexer.h
+  quick-lint-js/fe/keyword-list.h
+  quick-lint-js/i18n/po-parser.cpp
+  quick-lint-js/i18n/po-parser.h
+  quick-lint-js/i18n/translation-table-compiler.cpp
+  quick-lint-js/i18n/translation-table-compiler.h
+  quick-lint-js/io/file-handle-posix.cpp
+  quick-lint-js/io/file-handle-win32.cpp
+  quick-lint-js/io/file-handle.h
+  quick-lint-js/io/file-path.cpp
+  quick-lint-js/io/file-path.h
+  quick-lint-js/io/file.cpp
+  quick-lint-js/io/file.h
+  quick-lint-js/io/io-error.h
+  quick-lint-js/io/output-stream.cpp
+  quick-lint-js/io/output-stream.h
+  quick-lint-js/port/char8.cpp
+  quick-lint-js/port/char8.h
+  quick-lint-js/port/have.h
+  quick-lint-js/port/in-range.h
+  quick-lint-js/port/limits.h
+  quick-lint-js/port/math.h
+  quick-lint-js/port/memory-resource.cpp
+  quick-lint-js/port/memory-resource.h
+  quick-lint-js/port/source-location.h
+  quick-lint-js/port/thread.cpp
+  quick-lint-js/port/thread.h
+  quick-lint-js/port/type-traits.h
+  quick-lint-js/port/warning.h
+  quick-lint-js/port/windows-error.cpp
+  quick-lint-js/port/windows-error.h
+  quick-lint-js/port/windows.h
+  quick-lint-js/reflection/cxx-parser.cpp
+  quick-lint-js/reflection/cxx-parser.h
+  quick-lint-js/util/cast.h
+  quick-lint-js/util/enum.h
+  quick-lint-js/util/float.cpp
+  quick-lint-js/util/float.h
+  quick-lint-js/util/integer.cpp
+  quick-lint-js/util/integer.h
+  quick-lint-js/util/utf-16.cpp
+  quick-lint-js/util/utf-16.h
+  quick-lint-js/util/utf-8.cpp
+  quick-lint-js/util/utf-8.h
+)
+target_include_directories(quick-lint-js-tool-lib PUBLIC .)
+if (WIN32)
+  target_link_libraries(quick-lint-js-tool-lib PUBLIC pathcch)
+endif ()
+
+quick_lint_js_add_library(
+  quick-lint-js-lib
+  quick-lint-js/c-api-diag-reporter.cpp
+  quick-lint-js/c-api-diag-reporter.h
+  quick-lint-js/c-api.cpp
+  quick-lint-js/c-api.h
   quick-lint-js/cli/emacs-lisp-diag-reporter.cpp
   quick-lint-js/cli/emacs-lisp-diag-reporter.h
   quick-lint-js/cli/emacs-location.cpp
@@ -75,41 +292,39 @@ quick_lint_js_add_library(
   quick-lint-js/container/async-byte-queue.h
   quick-lint-js/container/byte-buffer.cpp
   quick-lint-js/container/byte-buffer.h
+  quick-lint-js/container/c-string-list.h
   quick-lint-js/container/concat.h
+  quick-lint-js/container/fixed-vector.h
   quick-lint-js/container/hash-map.h
   quick-lint-js/container/hash-set.h
   quick-lint-js/container/hash.h
-  quick-lint-js/container/heap-function.h
-  quick-lint-js/container/linked-bump-allocator.h
   quick-lint-js/container/linked-vector.h
   quick-lint-js/container/optional.h
-  quick-lint-js/container/padded-string.cpp
-  quick-lint-js/container/padded-string.h
   quick-lint-js/container/result.h
-  quick-lint-js/container/vector.h
   quick-lint-js/debug/debug-probe.cpp
   quick-lint-js/debug/debug-probe.h
   quick-lint-js/debug/debug-server-fs.cpp
   quick-lint-js/debug/debug-server-fs.h
   quick-lint-js/debug/debug-server.cpp
   quick-lint-js/debug/debug-server.h
+  quick-lint-js/debug/find-debug-server.cpp
+  quick-lint-js/debug/find-debug-server.h
   quick-lint-js/debug/mongoose.cpp
   quick-lint-js/debug/mongoose.h
-  quick-lint-js/document.cpp
-  quick-lint-js/document.h
-  quick-lint-js/fe/buffering-diag-reporter.cpp
-  quick-lint-js/fe/buffering-diag-reporter.h
+  quick-lint-js/diag/buffering-diag-reporter.cpp
+  quick-lint-js/diag/buffering-diag-reporter.h
+  quick-lint-js/diag/diag-code-list.cpp
+  quick-lint-js/diag/diag-code-list.h
+  quick-lint-js/diag/diag-reporter.cpp
+  quick-lint-js/diag/diag-reporter.h
+  quick-lint-js/diag/diagnostic-formatter.cpp
+  quick-lint-js/diag/diagnostic-formatter.h
+  quick-lint-js/diag/diagnostic-types.h
+  quick-lint-js/diag/diagnostic.cpp
+  quick-lint-js/diag/diagnostic.h
+  quick-lint-js/diag/reported-diag-statistics.h
   quick-lint-js/fe/buffering-visitor.cpp
   quick-lint-js/fe/buffering-visitor.h
-  quick-lint-js/fe/diag-code-list.cpp
-  quick-lint-js/fe/diag-code-list.h
-  quick-lint-js/fe/diag-reporter.cpp
-  quick-lint-js/fe/diag-reporter.h
-  quick-lint-js/fe/diagnostic-formatter.cpp
-  quick-lint-js/fe/diagnostic-formatter.h
-  quick-lint-js/fe/diagnostic-types.h
-  quick-lint-js/fe/diagnostic.cpp
-  quick-lint-js/fe/diagnostic.h
   quick-lint-js/fe/expression.h
   quick-lint-js/fe/global-declared-variable-set.cpp
   quick-lint-js/fe/global-declared-variable-set.h
@@ -119,6 +334,8 @@ quick_lint_js_add_library(
   quick-lint-js/fe/identifier.h
   quick-lint-js/fe/jsx.cpp
   quick-lint-js/fe/jsx.h
+  quick-lint-js/fe/keyword-lexer.cpp
+  quick-lint-js/fe/language.cpp
   quick-lint-js/fe/language.h
   quick-lint-js/fe/lex-keyword-generated.cpp
   quick-lint-js/fe/lex-unicode-generated.cpp
@@ -136,7 +353,7 @@ quick_lint_js_add_library(
   quick-lint-js/fe/parse-visitor.h
   quick-lint-js/fe/parse.cpp
   quick-lint-js/fe/parse.h
-  quick-lint-js/fe/reported-diag-statistics.h
+  quick-lint-js/fe/source-code-span-debug.cpp
   quick-lint-js/fe/source-code-span.cpp
   quick-lint-js/fe/source-code-span.h
   quick-lint-js/fe/token.cpp
@@ -146,22 +363,16 @@ quick_lint_js_add_library(
   quick-lint-js/feature.h
   quick-lint-js/i18n/locale.cpp
   quick-lint-js/i18n/locale.h
-  quick-lint-js/i18n/translation-table-generated.cpp
-  quick-lint-js/i18n/translation-table-generated.h
   quick-lint-js/i18n/translation-table.h
   quick-lint-js/i18n/translation.cpp
   quick-lint-js/i18n/translation.h
+  quick-lint-js/io/event-loop-kqueue.cpp
+  quick-lint-js/io/event-loop-poll.cpp
+  quick-lint-js/io/event-loop-windows.cpp
+  quick-lint-js/io/event-loop.cpp
   quick-lint-js/io/event-loop.h
   quick-lint-js/io/file-canonical.cpp
   quick-lint-js/io/file-canonical.h
-  quick-lint-js/io/file-handle.cpp
-  quick-lint-js/io/file-handle.h
-  quick-lint-js/io/file-path.cpp
-  quick-lint-js/io/file-path.h
-  quick-lint-js/io/file.cpp
-  quick-lint-js/io/file.h
-  quick-lint-js/io/output-stream.cpp
-  quick-lint-js/io/output-stream.h
   quick-lint-js/io/pipe-writer.cpp
   quick-lint-js/io/pipe-writer.h
   quick-lint-js/io/pipe.cpp
@@ -176,15 +387,20 @@ quick_lint_js_add_library(
   quick-lint-js/logging/trace-flusher-directory-backend.cpp
   quick-lint-js/logging/trace-flusher.cpp
   quick-lint-js/logging/trace-flusher.h
-  quick-lint-js/logging/trace-metadata.cpp
   quick-lint-js/logging/trace-metadata.h
-  quick-lint-js/logging/trace-stream-reader.cpp
+  quick-lint-js/logging/trace-reader.cpp
+  quick-lint-js/logging/trace-reader.h
+  quick-lint-js/logging/trace-types.cpp
+  quick-lint-js/logging/trace-types.h
   quick-lint-js/logging/trace-writer.cpp
   quick-lint-js/logging/trace-writer.h
   quick-lint-js/lsp/lsp-diag-reporter.cpp
   quick-lint-js/lsp/lsp-diag-reporter.h
-  quick-lint-js/lsp/lsp-endpoint.cpp
-  quick-lint-js/lsp/lsp-endpoint.h
+  quick-lint-js/lsp/lsp-document-text.cpp
+  quick-lint-js/lsp/lsp-document-text.h
+  quick-lint-js/lsp/lsp-json-rpc-message-parser.cpp
+  quick-lint-js/lsp/lsp-json-rpc-message-parser.h
+  quick-lint-js/lsp/lsp-language.h
   quick-lint-js/lsp/lsp-location.cpp
   quick-lint-js/lsp/lsp-location.h
   quick-lint-js/lsp/lsp-message-parser.cpp
@@ -197,49 +413,47 @@ quick_lint_js_add_library(
   quick-lint-js/lsp/lsp-uri.h
   quick-lint-js/lsp/lsp-workspace-configuration.cpp
   quick-lint-js/lsp/lsp-workspace-configuration.h
+  quick-lint-js/lsp/outgoing-json-rpc-message-queue.cpp
+  quick-lint-js/lsp/outgoing-json-rpc-message-queue.h
   quick-lint-js/port/attribute.h
   quick-lint-js/port/bit.h
-  quick-lint-js/port/char8.cpp
-  quick-lint-js/port/char8.h
+  quick-lint-js/port/child-process.cpp
+  quick-lint-js/port/child-process.h
   quick-lint-js/port/consteval.h
+  quick-lint-js/port/constinit.h
   quick-lint-js/port/crash.h
+  quick-lint-js/port/endian.cpp
+  quick-lint-js/port/endian.h
   quick-lint-js/port/function-ref.h
-  quick-lint-js/port/have.h
-  quick-lint-js/port/in-range.h
-  quick-lint-js/port/integer.cpp
-  quick-lint-js/port/integer.h
-  quick-lint-js/port/limits.h
+  quick-lint-js/port/kqueue.h
   quick-lint-js/port/max-align.h
-  quick-lint-js/port/memory-resource.cpp
-  quick-lint-js/port/memory-resource.h
   quick-lint-js/port/process.cpp
   quick-lint-js/port/process.h
+  quick-lint-js/port/pty.cpp
+  quick-lint-js/port/pty.h
   quick-lint-js/port/simd.h
-  quick-lint-js/port/source-location.h
-  quick-lint-js/port/thread.cpp
-  quick-lint-js/port/thread.h
-  quick-lint-js/port/type-traits.h
+  quick-lint-js/port/span.h
+  quick-lint-js/port/thread-name.cpp
+  quick-lint-js/port/thread-name.h
   quick-lint-js/port/unreachable.h
-  quick-lint-js/port/warning.h
-  quick-lint-js/port/windows-error.cpp
-  quick-lint-js/port/windows-error.h
-  quick-lint-js/port/windows.h
   quick-lint-js/simdjson.cpp
   quick-lint-js/simdjson.h
+  quick-lint-js/util/ascii.h
   quick-lint-js/util/binary-reader.h
   quick-lint-js/util/binary-writer.h
+  quick-lint-js/util/classify-path.cpp
+  quick-lint-js/util/classify-path.h
   quick-lint-js/util/cpp.h
   quick-lint-js/util/instance-tracker.h
   quick-lint-js/util/math-overflow.h
-  quick-lint-js/util/narrow-cast.h
   quick-lint-js/util/pointer.h
+  quick-lint-js/util/synchronized.h
   quick-lint-js/util/try-catch-stack.h
   quick-lint-js/util/type-traits.h
-  quick-lint-js/util/utf-16.cpp
-  quick-lint-js/util/utf-16.h
-  quick-lint-js/util/utf-8.cpp
-  quick-lint-js/util/utf-8.h
+  quick-lint-js/util/uri.cpp
+  quick-lint-js/util/uri.h
   quick-lint-js/version.h
+  quick-lint-js/vscode/vscode-language.h
   quick-lint-js/web-demo-location.cpp
   quick-lint-js/web-demo-location.h
 )
@@ -249,25 +463,25 @@ target_compile_definitions(
   "QUICK_LINT_JS_VERSION=${QUICK_LINT_JS_VERSION}"
 )
 target_include_directories(quick-lint-js-lib PUBLIC .)
-target_link_libraries(quick-lint-js-lib PUBLIC boost simdjson)
+target_link_libraries(
+  quick-lint-js-lib
+  PUBLIC
+  quick-lint-js-diagnostic-metadata
+  quick-lint-js-i18n
+  quick-lint-js-tool-lib
+  quick-lint-js-trace
+  simdjson
+  PRIVATE
+  Threads::Threads
+)
 if (WIN32)
   target_link_libraries(quick-lint-js-lib PUBLIC pathcch)
-endif ()
-if (NEED_THREADS)
-  target_link_libraries(quick-lint-js-lib PRIVATE Threads::Threads)
 endif ()
 if (QUICK_LINT_JS_FEATURE_DEBUG_SERVER)
   target_link_libraries(quick-lint-js-lib PUBLIC mongoose)
 endif ()
-if (QUICK_LINT_JS_PRECOMPILE_HEADERS)
-  target_precompile_headers(
-    quick-lint-js-lib
-    PUBLIC
-    <cmath>
-    <cstring>
-    <simdjson.h>
-    <string>
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
+  target_link_libraries(quick-lint-js-lib PUBLIC kvm)
 endif ()
 
 if (QUICK_LINT_JS_FEATURE_DEBUG_SERVER)
@@ -286,27 +500,15 @@ endif ()
 
 if (QUICK_LINT_JS_FEATURE_VECTOR_PROFILING)
   target_compile_definitions(
-    quick-lint-js-lib
+    quick-lint-js-tool-lib
     PUBLIC
     QLJS_FEATURE_VECTOR_PROFILING=1
   )
 else ()
   target_compile_definitions(
-    quick-lint-js-lib
+    quick-lint-js-tool-lib
     PUBLIC
     QLJS_FEATURE_VECTOR_PROFILING=0
-  )
-endif ()
-if (QUICK_LINT_JS_FEATURE_VECTOR_PROFILING)
-  target_link_libraries(quick-lint-js-lib PRIVATE quick-lint-js-lib-debug)
-endif ()
-
-quick_lint_js_have_charconv(QUICK_LINT_JS_HAVE_CHARCONV)
-if (NOT QUICK_LINT_JS_HAVE_CHARCONV)
-  target_compile_definitions(
-    quick-lint-js-lib
-    PUBLIC
-    QLJS_HAVE_CHARCONV_HEADER=0
   )
 endif ()
 
@@ -323,30 +525,14 @@ quick_lint_js_add_library(
   quick-lint-js/cli/vim-location-debug.cpp
   quick-lint-js/container/padded-string-debug.cpp
   quick-lint-js/container/vector-profiler-debug.cpp
-  quick-lint-js/fe/diag-debug.cpp
+  quick-lint-js/diag/diag-debug.cpp
   quick-lint-js/fe/language-debug.cpp
   quick-lint-js/fe/lex-debug.cpp
+  quick-lint-js/i18n/po-parser-debug.cpp
   quick-lint-js/lsp/lsp-location-debug.cpp
   quick-lint-js/port/char8-debug.cpp
 )
-target_link_libraries(quick-lint-js-lib-debug PUBLIC boost quick-lint-js-lib)
-
-# HACK(strager): Work around GCC compiler bug. GCC 9.3.0 miscompiles a call to
-# strncmp, causing the length given to strncmp to be incorrect. (Perhaps we are
-# invoking undefined behaviour though with our string table offset pointer
-# arithmetic? Unsure.) The bug appears to be fixed in GCC 10.1.0.
-#
-# Possibly related: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92765
-#
-# To work around the bug, apply -fno-builtin to the target. If we apply it only
-# to the source file, the flag seems to be ignored when using precompiled
-# headers.
-if (
-  CMAKE_CXX_COMPILER_ID STREQUAL GNU
-  AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10.1.0
-)
-  target_compile_options(quick-lint-js-lib PRIVATE -fno-builtin)
-endif ()
+target_link_libraries(quick-lint-js-lib-debug PUBLIC quick-lint-js-lib)
 
 if (QUICK_LINT_JS_ENABLE_CLI)
   quick_lint_js_collect_copyright(
@@ -362,24 +548,6 @@ if (QUICK_LINT_JS_ENABLE_CLI)
     )
   endif ()
 endif ()
-
-quick_lint_js_add_library(
-  quick-lint-js-boost-json
-  quick-lint-js/boost-json.cpp
-  quick-lint-js/boost-json.h
-)
-target_include_directories(quick-lint-js-boost-json PUBLIC .)
-target_link_libraries(
-  quick-lint-js-boost-json
-  PUBLIC
-  boost_json
-  quick-lint-js-lib
-)
-target_compile_definitions(
-  quick-lint-js-boost-json
-  PRIVATE
-  QLJS_BUILDING_QLJS_BOOST_JSON
-)
 
 # quick-lint-js finds bugs in JavaScript programs.
 # Copyright (C) 2020  Matthew "strager" Glazar

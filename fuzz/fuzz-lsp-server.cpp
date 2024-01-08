@@ -6,33 +6,33 @@
 #include <cstdint>
 #include <cstdlib>
 #include <quick-lint-js/configuration/configuration-loader.h>
-#include <quick-lint-js/lsp/lsp-endpoint.h>
+#include <quick-lint-js/lsp/lsp-json-rpc-message-parser.h>
 #include <quick-lint-js/lsp/lsp-server.h>
 #include <quick-lint-js/port/char8.h>
 
 namespace quick_lint_js {
 namespace {
-class null_lsp_endpoint_remote {
+class Null_LSP_Endpoint_Remote {
  public:
-  void send_message(const byte_buffer&) {}
+  void send_message(const Byte_Buffer&) {}
 };
 
-class null_configuration_filesystem : public configuration_filesystem {
+class Null_Configuration_Filesystem : public Configuration_Filesystem {
  public:
-  result<canonical_path_result, canonicalize_path_io_error> canonicalize_path(
+  Result<Canonical_Path_Result, Canonicalize_Path_IO_Error> canonicalize_path(
       const std::string& path) override {
-    return canonical_path_result(std::string(path), /*existing_path_length=*/0);
+    return Canonical_Path_Result(std::string(path), /*existing_path_length=*/0);
   }
 
-  result<padded_string, read_file_io_error> read_file(
-      const canonical_path& path) override {
+  Result<Padded_String, Read_File_IO_Error> read_file(
+      const Canonical_Path& path) override {
 #if QLJS_HAVE_WINDOWS_H
-    windows_file_io_error io_error = {ERROR_FILE_NOT_FOUND};
+    Windows_File_IO_Error io_error = {ERROR_FILE_NOT_FOUND};
 #endif
 #if QLJS_HAVE_UNISTD_H
-    posix_file_io_error io_error = {ENOENT};
+    POSIX_File_IO_Error io_error = {ENOENT};
 #endif
-    return failed_result(read_file_io_error{
+    return failed_result(Read_File_IO_Error{
         .path = path.c_str(),
         .io_error = io_error,
     });
@@ -45,10 +45,10 @@ extern "C" {
 int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
   using namespace quick_lint_js;
 
-  null_configuration_filesystem fs;
-  lsp_javascript_linter linter;
-  lsp_endpoint<linting_lsp_server_handler, null_lsp_endpoint_remote> server(
-      std::forward_as_tuple(&fs, &linter), std::forward_as_tuple());
+  Null_Configuration_Filesystem fs;
+  LSP_JavaScript_Linter linter;
+  Linting_LSP_Server_Handler handler(&fs, &linter);
+  LSP_JSON_RPC_Message_Parser server(&handler);
 
   std::size_t i = 0;
   auto size_remaining = [&]() -> std::size_t { return size - i; };
@@ -61,7 +61,7 @@ int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     i += sizeof(chunk_size);
     chunk_size = std::min(chunk_size, size_remaining());
 
-    string8_view message(reinterpret_cast<const char8*>(&data[i]), chunk_size);
+    String8_View message(reinterpret_cast<const Char8*>(&data[i]), chunk_size);
     server.message_parsed(message);
     i += chunk_size;
   }

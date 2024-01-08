@@ -1,8 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_FE_BUFFERING_VISITOR_H
-#define QUICK_LINT_JS_FE_BUFFERING_VISITOR_H
+#pragma once
 
 #include <optional>
 #include <quick-lint-js/container/linked-vector.h>
@@ -19,26 +18,30 @@ QLJS_WARNING_PUSH
 QLJS_WARNING_IGNORE_MSVC(26495)  // Variable is uninitialized.
 
 namespace quick_lint_js {
-class buffering_visitor final : public parse_visitor_base {
+class Buffering_Visitor final : public Parse_Visitor_Base {
  public:
-  explicit buffering_visitor(memory_resource *memory);
+  explicit Buffering_Visitor(Memory_Resource *memory);
 
   // Copying is usually a bug, so disable copying.
-  buffering_visitor(const buffering_visitor &) = delete;
-  buffering_visitor &operator=(const buffering_visitor &) = delete;
+  Buffering_Visitor(const Buffering_Visitor &) = delete;
+  Buffering_Visitor &operator=(const Buffering_Visitor &) = delete;
 
-  buffering_visitor(buffering_visitor &&) = default;
-  buffering_visitor &operator=(buffering_visitor &&) = default;
+  Buffering_Visitor(Buffering_Visitor &&) = default;
+  Buffering_Visitor &operator=(Buffering_Visitor &&) = default;
 
-  void move_into(parse_visitor_base &target);
-  void copy_into(parse_visitor_base &target) const;
+  void move_into(Parse_Visitor_Base &target);
+  void copy_into(Parse_Visitor_Base &target) const;
 
   void visit_end_of_module() override;
   void visit_enter_block_scope() override;
   void visit_enter_with_scope() override;
+  void visit_enter_class_construct_scope() override;
   void visit_enter_class_scope() override;
   void visit_enter_class_scope_body(
-      const std::optional<identifier> &class_name) override;
+      const std::optional<Identifier> &class_name) override;
+  void visit_enter_conditional_type_scope() override;
+  void visit_enter_declare_global_scope() override;
+  void visit_enter_declare_scope() override;
   void visit_enter_enum_scope() override;
   void visit_enter_for_scope() override;
   void visit_enter_function_scope() override;
@@ -46,41 +49,52 @@ class buffering_visitor final : public parse_visitor_base {
   void visit_enter_index_signature_scope() override;
   void visit_enter_interface_scope() override;
   void visit_enter_namespace_scope() override;
-  void visit_enter_type_alias_scope() override;
-  void visit_enter_named_function_scope(identifier name) override;
+  void visit_enter_type_scope() override;
+  void visit_enter_named_function_scope(Identifier name) override;
   void visit_exit_block_scope() override;
   void visit_exit_with_scope() override;
+  void visit_exit_class_construct_scope() override;
   void visit_exit_class_scope() override;
+  void visit_exit_conditional_type_scope() override;
+  void visit_exit_declare_global_scope() override;
+  void visit_exit_declare_scope() override;
   void visit_exit_enum_scope() override;
   void visit_exit_for_scope() override;
   void visit_exit_function_scope() override;
   void visit_exit_index_signature_scope() override;
   void visit_exit_namespace_scope() override;
-  void visit_exit_type_alias_scope() override;
+  void visit_exit_type_scope() override;
   void visit_exit_interface_scope() override;
-  void visit_keyword_variable_use(identifier name) override;
+  void visit_keyword_variable_use(Identifier name) override;
   void visit_property_declaration(
-      const std::optional<identifier> &name) override;
-  void visit_variable_assignment(identifier name) override;
-  void visit_variable_declaration(identifier name, variable_kind kind,
-                                  variable_init_kind init_kind) override;
-  void visit_variable_delete_use(identifier name,
-                                 source_code_span delete_keyword) override;
-  void visit_variable_export_use(identifier name) override;
-  void visit_variable_namespace_use(identifier name) override;
-  void visit_variable_type_predicate_use(identifier parameter_name) override;
-  void visit_variable_type_use(identifier name) override;
-  void visit_variable_typeof_use(identifier name) override;
-  void visit_variable_use(identifier name) override;
+      const std::optional<Identifier> &name) override;
+  void visit_variable_assignment(Identifier name,
+                                 Variable_Assignment_Flags flags) override;
+  void visit_variable_declaration(Identifier name, Variable_Kind kind,
+                                  Variable_Declaration_Flags flags) override;
+  void visit_variable_assertion_signature_use(Identifier name) override;
+  void visit_variable_delete_use(Identifier name,
+                                 Source_Code_Span delete_keyword) override;
+  void visit_variable_export_default_use(Identifier name) override;
+  void visit_variable_export_use(Identifier name) override;
+  void visit_variable_namespace_use(Identifier name) override;
+  void visit_variable_type_predicate_use(Identifier parameter_name) override;
+  void visit_variable_type_use(Identifier name) override;
+  void visit_variable_typeof_use(Identifier name) override;
+  void visit_variable_use(Identifier name) override;
 
  private:
-  enum class visit_kind {
+  enum class Visit_Kind : unsigned char {
     end_of_module,
     enter_block_scope,
     enter_with_scope,
+    enter_class_construct_scope,
     enter_class_scope,
     enter_class_scope_body_with_name,
     enter_class_scope_body_without_name,
+    enter_conditional_type_scope,
+    enter_declare_global_scope,
+    enter_declare_scope,
     enter_enum_scope,
     enter_for_scope,
     enter_function_scope,
@@ -92,7 +106,11 @@ class buffering_visitor final : public parse_visitor_base {
     enter_type_alias_scope,
     exit_block_scope,
     exit_with_scope,
+    exit_class_construct_scope,
     exit_class_scope,
+    exit_conditional_type_scope,
+    exit_declare_global_scope,
+    exit_declare_scope,
     exit_enum_scope,
     exit_for_scope,
     exit_function_scope,
@@ -103,8 +121,10 @@ class buffering_visitor final : public parse_visitor_base {
     keyword_variable_use,
     property_declaration_with_name,
     property_declaration_without_name,
+    variable_assertion_signature_use,
     variable_assignment,
     variable_delete_use,
+    variable_export_default_use,
     variable_export_use,
     variable_namespace_use,
     variable_type_predicate_use,
@@ -115,63 +135,78 @@ class buffering_visitor final : public parse_visitor_base {
   };
 
   // These 'add' functions significantly reduces code size by discouraging the
-  // inlining of visit::visit and linked_vector<>::emplace_back.
-  [[gnu::noinline]] void add(visit_kind kind) {
+  // inlining of Visit::visit and Linked_Vector<>::emplace_back.
+  [[gnu::noinline]] void add(Visit_Kind kind) {
     this->visits_.emplace_back(kind);
   }
 
-  [[gnu::noinline]] void add(const identifier &name, visit_kind kind) {
+  [[gnu::noinline]] void add(const Identifier &name, Visit_Kind kind) {
     this->visits_.emplace_back(kind, name);
   }
 
-  struct visit {
-    explicit visit(visit_kind kind) noexcept : kind(kind) {}
+  struct Visit {
+    explicit Visit(Visit_Kind kind) : kind(kind) {}
 
-    explicit visit(visit_kind kind, identifier name) noexcept
-        : kind(kind), name(name) {}
+    explicit Visit(Visit_Kind kind, Identifier name) : kind(kind), name(name) {}
 
-    explicit visit(visit_kind kind, identifier name, variable_kind var_kind,
-                   variable_init_kind init_kind) noexcept
-        : kind(kind), name(name), var_decl{var_kind, init_kind} {}
+    explicit Visit(Visit_Kind kind, Identifier name,
+                   Variable_Assignment_Flags flags)
+        : kind(kind), name(name), variable_assignment_flags(flags) {}
 
-    explicit visit(visit_kind kind, identifier name,
-                   source_code_span extra_span) noexcept
+    explicit Visit(Visit_Kind kind, Identifier name, Variable_Kind var_kind,
+                   Variable_Declaration_Flags flags)
+        : kind(kind), name(name), var_decl{var_kind, flags} {}
+
+    explicit Visit(Visit_Kind kind, Identifier name,
+                   Source_Code_Span extra_span)
         : kind(kind), name(name), extra_span(extra_span) {}
 
-    visit_kind kind;
+    Visit_Kind kind;
 
     union {
-      // enter_named_function_scope, keyword_variable_use, property_declaration,
-      // variable_assignment, variable_declaration, variable_use
-      identifier name;
-      static_assert(is_winkable_v<identifier>);
+      // enter_class_scope_body_with_name
+      // enter_named_function_scope
+      // keyword_variable_use
+      // property_declaration
+      // variable_declaration
+      // variable_assignment
+      // variable_delete_use
+      // variable_export_use
+      // variable_namespace_use
+      // variable_type_predicate_use
+      // variable_type_use
+      // variable_typeof_use
+      // variable_use
+      Identifier name;
+      static_assert(is_winkable_v<Identifier>);
     };
 
-    struct var_decl_data {
-      variable_kind var_kind;
-      variable_init_kind var_init_kind;
+    struct Var_Decl_Data {
+      Variable_Kind var_kind;
+      Variable_Declaration_Flags flags;
     };
     union {
       // variable_declaration
-      var_decl_data var_decl;
-      static_assert(is_winkable_v<var_decl_data>);
+      Var_Decl_Data var_decl;
+      static_assert(is_winkable_v<Var_Decl_Data>);
 
       // variable_delete_use
-      source_code_span extra_span;
-      static_assert(is_winkable_v<source_code_span>);
+      Source_Code_Span extra_span;
+      static_assert(is_winkable_v<Source_Code_Span>);
+
+      // variable_assignment
+      Variable_Assignment_Flags variable_assignment_flags;
     };
   };
 
-  linked_vector<visit> visits_;
+  Linked_Vector<Visit> visits_;
 };
 
 template <>
-struct is_winkable<buffering_visitor> : std::true_type {};
+struct Is_Winkable<Buffering_Visitor> : std::true_type {};
 }
 
 QLJS_WARNING_POP
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

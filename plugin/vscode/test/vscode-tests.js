@@ -155,7 +155,26 @@ tests = {
     await waitUntilAnyDiagnosticsAsync(jsURI);
   },
 
-  "parser supports JSX": async ({ addCleanup }) => {
+  "parser supports JSX in vanilla JS files": async ({ addCleanup }) => {
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.js");
+    fs.writeFileSync(
+      helloFilePath,
+      "function MyComponent() { return <div></div>; }\n"
+    );
+    let helloURI = vscode.Uri.file(helloFilePath);
+
+    await loadExtensionAsync({ addCleanup });
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    await pollAsync(async () => {
+      let helloDiags = normalizeDiagnostics(helloURI);
+      assert.deepStrictEqual(helloDiags, []);
+    });
+  },
+
+  "parser supports JSX in JSX files": async ({ addCleanup }) => {
     let scratchDirectory = makeScratchDirectory({ addCleanup });
     let helloFilePath = path.join(scratchDirectory, "hello.jsx");
     fs.writeFileSync(
@@ -171,6 +190,76 @@ tests = {
     await pollAsync(async () => {
       let helloDiags = normalizeDiagnostics(helloURI);
       assert.deepStrictEqual(helloDiags, []);
+    });
+  },
+
+  "parser does not support TypeScript in JS files": async ({ addCleanup }) => {
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.js");
+    fs.writeFileSync(helloFilePath, "interface I { }");
+    let helloURI = vscode.Uri.file(helloFilePath);
+
+    await loadExtensionAsync({ addCleanup });
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    await pollAsync(async () => {
+      let helloDiags = normalizeDiagnostics(helloURI);
+      // E0213: TypeScript's interface feature is not allowed in JavaScript code
+      assert.deepStrictEqual(
+        helloDiags.map((diag) => diag.code.value),
+        ["E0213"]
+      );
+    });
+  },
+
+  "parser checks TypeScript files if opted in": async ({ addCleanup }) => {
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.ts");
+    fs.writeFileSync(
+      helloFilePath,
+      "interface MyTestInterface {}\nMyTestInterface();"
+    );
+    let helloURI = vscode.Uri.file(helloFilePath);
+
+    await loadExtensionAsync({ addCleanup });
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    await pollAsync(async () => {
+      let helloDiags = normalizeDiagnostics(helloURI);
+      // E0057: use of undeclared variable 'MyTestInterface'
+      // Should not report E0213 ('interface' not allowed in JavaScript).
+      assert.deepStrictEqual(
+        helloDiags.map((diag) => diag.code.value),
+        ["E0057"]
+      );
+    });
+  },
+
+  "parser checks TypeScript JSX files": async ({ addCleanup }) => {
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.tsx");
+    fs.writeFileSync(
+      helloFilePath,
+      "interface MyTestInterface {}\nconsole.log(<MyTestInterface />);"
+    );
+    let helloURI = vscode.Uri.file(helloFilePath);
+
+    await loadExtensionAsync({ addCleanup });
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    await pollAsync(async () => {
+      let helloDiags = normalizeDiagnostics(helloURI);
+      // E0057: use of undeclared variable 'MyTestInterface'
+      // Should not report E0213 ('interface' not allowed in JavaScript).
+      // Should not report E0177 (React/JSX is not allowed in vanilla JavaScript
+      //                          code).
+      assert.deepStrictEqual(
+        helloDiags.map((diag) => diag.code.value),
+        ["E0057"]
+      );
     });
   },
 
@@ -228,7 +317,7 @@ tests = {
             target: "https://quick-lint-js.com/errors/E0003/",
             value: "E0003",
           },
-          message: "assignment to const variable",
+          message: "cannot assign to a const variable",
           severity: vscode.DiagnosticSeverity.Error,
           source: "quick-lint-js",
           startLine: 1,
@@ -1446,9 +1535,11 @@ async function pollAsync(callback) {
 }
 
 async function resetConfigurationAsync() {
-  await vscode.workspace
-    .getConfiguration("quick-lint-js")
-    .update("logging", undefined, vscode.ConfigurationTarget.Workspace);
+  for (let setting of ["logging"]) {
+    await vscode.workspace
+      .getConfiguration("quick-lint-js")
+      .update(setting, undefined, vscode.ConfigurationTarget.Workspace);
+  }
 }
 
 async function runAsync() {
@@ -1463,6 +1554,7 @@ async function runAsync() {
   // because without its JavaScript file detection, our extension doesn't work.
   let vscodeConfig = vscode.workspace.getConfiguration();
   await vscodeConfig.update("javascript.validate.enable", false);
+  await vscodeConfig.update("typescript.validate.enable", false);
 
   // Clean up configuration in case a previous run didn't clean it up.
   await resetConfigurationAsync();
@@ -1471,7 +1563,16 @@ async function runAsync() {
     throw new Error(message);
   });
 }
-exports.run = runAsync;
+
+async function runCatchingErrorsAsync() {
+  try {
+    return await runAsync();
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
+}
+exports.run = runCatchingErrorsAsync;
 // vscode-test will invoke the exports.run for us.
 
 // quick-lint-js finds bugs in JavaScript programs.

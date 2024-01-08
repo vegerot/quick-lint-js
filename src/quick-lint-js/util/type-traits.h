@@ -1,23 +1,20 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_UTIL_TYPE_TRAITS_H
-#define QUICK_LINT_JS_UTIL_TYPE_TRAITS_H
+#pragma once
 
 namespace quick_lint_js {
-template <class MemberFunctionPointer>
-struct member_function_pointer_traits;
+template <class Member_Function_Pointer>
+struct Member_Function_Pointer_Traits;
 template <class Class, class Return, class... Args>
-struct member_function_pointer_traits<Return (Class::*)(Args...)> {
-  using class_type = Class;
+struct Member_Function_Pointer_Traits<Return (Class::*)(Args...)> {
+  using Class_Type = Class;
 };
 template <class Class, class Return, class... Args>
-struct member_function_pointer_traits<Return (Class::*)(Args...) noexcept> {
-  using class_type = Class;
+struct Member_Function_Pointer_Traits<Return (Class::*)(Args...) noexcept> {
+  using Class_Type = Class;
 };
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar

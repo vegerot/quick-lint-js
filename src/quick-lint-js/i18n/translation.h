@@ -1,14 +1,14 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
-#ifndef QUICK_LINT_JS_I18N_TRANSLATION_H
-#define QUICK_LINT_JS_I18N_TRANSLATION_H
+#pragma once
 
 #include <cstdint>
 #include <quick-lint-js/i18n/locale.h>
 #include <quick-lint-js/i18n/translation-table.h>
 #include <quick-lint-js/port/char8.h>
 #include <quick-lint-js/port/consteval.h>
+#include <quick-lint-js/port/span.h>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -16,49 +16,49 @@
 #define QLJS_TRANSLATABLE(...) (__VA_ARGS__##_translatable)
 
 namespace quick_lint_js {
-class translatable_message;
+class Translatable_Message;
 
 void initialize_translations_from_environment();
-void initialize_translations_from_locale(const char* locale_name);
+void initialize_translations_from_locale(std::string_view locale_name);
 
-class translator {
+class Translator {
  public:
   // Creates a translator which uses messages from the source code (i.e. no-op).
-  explicit translator() = default;
+  explicit Translator() = default;
 
   void use_messages_from_source_code();
-  bool use_messages_from_locale(const char* locale_name);
-  bool use_messages_from_locales(const std::vector<std::string>& locale_names);
+  bool use_messages_from_locale(std::string_view locale_name);
+  bool use_messages_from_locales(Span<const std::string_view> locale_names);
 
-  const char8* translate(const translatable_message& message);
+  const Char8* translate(const Translatable_Message& message);
 
  private:
   int locale_index_ = translation_table_locale_count;
 };
 
 // Global instance.
-extern translator qljs_messages;
+extern Translator qljs_messages;
 
 // An un-translated message.
-class translatable_message {
+class Translatable_Message {
  public:
-  /*implicit*/ constexpr translatable_message()
+  /*implicit*/ constexpr Translatable_Message()
       : translation_table_mapping_index_(
-            translation_table::unallocated_mapping_index) {}
+            Translation_Table::unallocated_mapping_index) {}
 
-  explicit QLJS_CONSTEVAL translatable_message(const char* raw_message,
+  explicit QLJS_CONSTEVAL Translatable_Message(const char* raw_message,
                                                int length)
       : translation_table_mapping_index_(
-            translation_table::mapping_index_for_untranslated_string(
+            Translation_Table::mapping_index_for_untranslated_string(
                 std::string_view(raw_message,
                                  static_cast<std::size_t>(length)))) {}
 
-  constexpr bool valid() const noexcept {
+  constexpr bool valid() const {
     return this->translation_table_mapping_index_ !=
-           translation_table::unallocated_mapping_index;
+           Translation_Table::unallocated_mapping_index;
   }
 
-  constexpr std::uint16_t translation_table_mapping_index() const noexcept {
+  constexpr std::uint16_t translation_table_mapping_index() const {
     return this->translation_table_mapping_index_;
   }
 
@@ -66,13 +66,11 @@ class translatable_message {
   std::uint16_t translation_table_mapping_index_;
 };
 
-inline QLJS_CONSTEVAL translatable_message
+inline QLJS_CONSTEVAL Translatable_Message
 operator""_translatable(const char* raw_message, std::size_t length) {
-  return translatable_message(raw_message, static_cast<int>(length));
+  return Translatable_Message(raw_message, static_cast<int>(length));
 }
 }
-
-#endif
 
 // quick-lint-js finds bugs in JavaScript programs.
 // Copyright (C) 2020  Matthew "strager" Glazar
