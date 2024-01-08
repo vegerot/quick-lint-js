@@ -1099,6 +1099,75 @@ TEST_F(
 }
 
 TEST_F(Test_Parse_TypeScript_Generic,
+       greater_equal_greater_is_split_into_two_tokens) {
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<T> => null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<T>=>null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<T>=> null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"let f = (): RT<RT<T>>=> null;"_sv, no_diags, typescript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_function_scope",       //
+                              "visit_enter_type_scope",           // :
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // RT
+                              "visit_variable_type_use",          // T
+                              "visit_exit_type_scope",            //
+                              "visit_enter_function_scope_body",  // {
+                              "visit_exit_function_scope",        // }
+                              "visit_variable_declaration",       // let f
+                          }));
+    EXPECT_THAT(p.variable_declarations,
+                ElementsAreArray({let_init_decl(u8"f")}));
+  }
+}
+
+TEST_F(Test_Parse_TypeScript_Generic,
        unambiguous_generic_arguments_are_parsed_in_javascript) {
   {
     Test_Parser p(u8"foo?.<T>(p)"_sv, javascript_options, capture_diags);
