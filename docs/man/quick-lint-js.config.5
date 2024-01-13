@@ -12,10 +12,10 @@
 .\"    Author: [see the "AUTHOR(S)" section]
 .\" Generator: Asciidoctor 2.0.17
 .\"    Manual: \ \&
-.\"    Source: quick-lint-js version ﻿ 3.0.0
+.\"    Source: quick-lint-js version ﻿ 3.1.0
 .\"  Language: English
 .\"
-.TH "QUICK\-LINT\-JS.CONFIG" "5" "" "quick\-lint\-js version ﻿ 3.0.0" "\ \&"
+.TH "QUICK\-LINT\-JS.CONFIG" "5" "" "quick\-lint\-js version ﻿ 3.1.0" "\ \&"
 .ie \n(.g .ds Aq \(aq
 .el       .ds Aq '
 .ss \n[.ss] 0
@@ -226,6 +226,57 @@ If \fBglobal\-groups\fP is a non\-empty array, then global variables are defined
 Each group name is a string.
 For the list of group names, see the GLOBAL GROUPS section.
 .RE
+.sp
+\fBjsx\-mode\fP
+.RS 4
+Optional.
+How to lint intrinsic JSX elements.
+.sp
+\fBjsx\-mode\fP is a string.
+Possible values are as follows:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.  sp -1
+.  IP \(bu 2.3
+.\}
+\fB"auto"\fP (default): Determine the JSX flavor automatically using various heuristics.
+See the \c
+.URL "https://quick\-lint\-js.com/errors/jsx/#auto" "JSX linting documentation" ""
+for more information about these heuristics.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.  sp -1
+.  IP \(bu 2.3
+.\}
+\fB"react"\fP: Assume that JSX is intended for the React.js framework.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.  sp -1
+.  IP \(bu 2.3
+.\}
+\fB"none"\fP: Disable all framework\-specific JSX linting rules.
+.RE
+.sp
+See the \c
+.URL "https://quick\-lint\-js.com/errors/jsx/" "JSX linting documentation" ""
+for more information on which rules are configured by \fBjsx\-mode\fP.
+.sp
+Introduced in quick\-lint\-js version 3.1.0.
+.RE
 .SH "GLOBALS"
 .sp
 The \fBglobals\fP configuration property tells quick\-lint\-js what global variables to assume exist.
@@ -305,7 +356,7 @@ The following groups are supported for the \fBglobal\-groups\fP configuration pr
 .RS 4
 all possible global variables.
 All global variables are defined as shadowable and writable.
-This in effect suppresses E0002, E0033, E0057, or E0059 entirely (except if variables are also configured using the \fBglobals\fP configuration property).
+This in effect suppresses E0002, E0033, E0057, E0059, or E0214 entirely (except if variables are also configured using the \fBglobals\fP configuration property).
 This group is not enabled by default.
 .RE
 .sp
@@ -407,7 +458,7 @@ Such an application might have the following \f(CRquick\-lint\-js.config\fP file
 .ce
 \l'\n(.lu*25u/100u\(ap'
 .sp
-If you want to suppress E0002, E0033, E0057, or E0059, configure \fBglobals\fP or \fBglobal\-groups\fP.
+If you want to suppress E0002, E0033, E0057, E0059, or E0214, configure \fBglobals\fP or \fBglobal\-groups\fP.
 For example, if you\(cqre seeing a spurious warning E0057 "use of undeclared variable: MyLibrary" (false positive), use the following configuration in \f(CRquick\-lint\-js.config\fP:
 .sp
 .if n .RS 4
@@ -422,7 +473,7 @@ For example, if you\(cqre seeing a spurious warning E0057 "use of undeclared var
 .fi
 .if n .RE
 .sp
-If you are not seeing E0002, E0033, E0057, or E0059 (false negative), but you want to see E0057 "use of undeclared variable: $", use one of the following configuration in \f(CRquick\-lint\-js.config\fP:
+If you are not seeing E0002, E0033, E0057, E0059, or E0214 (false negative), but you want to see E0057 "use of undeclared variable: $", use one of the following configuration in \f(CRquick\-lint\-js.config\fP:
 .sp
 .if n .RS 4
 .nf

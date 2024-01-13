@@ -1364,6 +1364,34 @@ const QLJS_CONSTINIT Diagnostic_Info all_diagnostic_infos[] = {
       },
     },
 
+    // Diag_Config_JSX_Mode_Type_Mismatch
+    {
+      .code = 456,
+      .severity = Diagnostic_Severity::error,
+      .message_formats = {
+        QLJS_TRANSLATABLE("\"jsx-mode\" must be a string; try \"none\" or \"react\""),
+      },
+      .message_args = {
+        {
+          Diagnostic_Message_Arg_Info(offsetof(Diag_Config_JSX_Mode_Type_Mismatch, value), Diagnostic_Arg_Type::source_code_span),
+        },
+      },
+    },
+
+    // Diag_Config_JSX_Mode_Unrecognized
+    {
+      .code = 455,
+      .severity = Diagnostic_Severity::error,
+      .message_formats = {
+        QLJS_TRANSLATABLE("unknown JSX mode; try \"none\" or \"react\""),
+      },
+      .message_args = {
+        {
+          Diagnostic_Message_Arg_Info(offsetof(Diag_Config_JSX_Mode_Unrecognized, value), Diagnostic_Arg_Type::source_code_span),
+        },
+      },
+    },
+
     // Diag_Depth_Limit_Exceeded
     {
       .code = 203,
@@ -6867,6 +6895,35 @@ const QLJS_CONSTINIT Diagnostic_Info all_diagnostic_infos[] = {
         },
         {
           Diagnostic_Message_Arg_Info(offsetof(Diag_Unintuitive_Bitshift_Precedence, and_operator), Diagnostic_Arg_Type::source_code_span),
+        },
+      },
+    },
+
+    // Diag_TypeScript_Namespace_Alias_Cannot_Use_Import_Type
+    {
+      .code = 717,
+      .severity = Diagnostic_Severity::error,
+      .message_formats = {
+        QLJS_TRANSLATABLE("namespace alias cannot use 'import type'"),
+      },
+      .message_args = {
+        {
+          Diagnostic_Message_Arg_Info(offsetof(Diag_TypeScript_Namespace_Alias_Cannot_Use_Import_Type, type_keyword), Diagnostic_Arg_Type::source_code_span),
+        },
+      },
+    },
+
+    // Diag_Using_Dot_After_Optional_Chaining
+    {
+      .code = 718,
+      .severity = Diagnostic_Severity::warning,
+      .message_formats = {
+        QLJS_TRANSLATABLE("using a '.' after a '?.' might fail, since '?.' might return 'undefined'."),
+      },
+      .message_args = {
+        {
+          Diagnostic_Message_Arg_Info(offsetof(Diag_Using_Dot_After_Optional_Chaining, dot_op), Diagnostic_Arg_Type::source_code_span),
+          Diagnostic_Message_Arg_Info(offsetof(Diag_Using_Dot_After_Optional_Chaining, optional_chain_op), Diagnostic_Arg_Type::source_code_span),
         },
       },
     },

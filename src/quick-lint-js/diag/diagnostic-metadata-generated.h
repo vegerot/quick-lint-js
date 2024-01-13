@@ -99,6 +99,8 @@ namespace quick_lint_js {
   QLJS_DIAG_TYPE_NAME(Diag_Config_Globals_Descriptor_Shadowable_Type_Mismatch) \
   QLJS_DIAG_TYPE_NAME(Diag_Config_Globals_Descriptor_Writable_Type_Mismatch) \
   QLJS_DIAG_TYPE_NAME(Diag_Config_Globals_Type_Mismatch) \
+  QLJS_DIAG_TYPE_NAME(Diag_Config_JSX_Mode_Type_Mismatch) \
+  QLJS_DIAG_TYPE_NAME(Diag_Config_JSX_Mode_Unrecognized) \
   QLJS_DIAG_TYPE_NAME(Diag_Depth_Limit_Exceeded) \
   QLJS_DIAG_TYPE_NAME(Diag_Dot_Not_Allowed_After_Generic_Arguments_In_Type) \
   QLJS_DIAG_TYPE_NAME(Diag_Dot_Dot_Is_Not_An_Operator) \
@@ -469,10 +471,12 @@ namespace quick_lint_js {
   QLJS_DIAG_TYPE_NAME(Diag_Class_Async_On_Getter_Or_Setter) \
   QLJS_DIAG_TYPE_NAME(Diag_Multiple_Export_Defaults) \
   QLJS_DIAG_TYPE_NAME(Diag_Unintuitive_Bitshift_Precedence) \
+  QLJS_DIAG_TYPE_NAME(Diag_TypeScript_Namespace_Alias_Cannot_Use_Import_Type) \
+  QLJS_DIAG_TYPE_NAME(Diag_Using_Dot_After_Optional_Chaining) \
   /* END */
 // clang-format on
 
-inline constexpr int Diag_Type_Count = 458;
+inline constexpr int Diag_Type_Count = 462;
 
 extern const Diagnostic_Info all_diagnostic_infos[Diag_Type_Count];
 }

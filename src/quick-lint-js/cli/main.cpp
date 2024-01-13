@@ -193,8 +193,6 @@ void init();
 [[noreturn]] void run(int argc, char **argv);
 [[noreturn]] void run(Options o);
 
-Linter_Options get_linter_options_from_language(Resolved_Input_File_Language);
-
 void list_debug_apps();
 void run_lsp_server();
 
@@ -283,7 +281,7 @@ void run(Options o) {
                                .is_stdin = false,
                                .vim_bufnr = std::nullopt,
                            });
-      config_file->errors.copy_into(reporter->get());
+      reporter->get()->report(config_file->errors);
       // To avoid repeating errors for a given config file, remember that we
       // already reported errors for this config file.
       loaded_config_files.insert(config_file);
@@ -301,12 +299,13 @@ void run(Options o) {
       if (!source.ok()) {
         source.error().print_and_exit();
       }
-      Linter_Options lint_options =
-          get_linter_options_from_language(get_language(file, o));
-      lint_options.print_parser_visits = o.print_parser_visits;
+      Linter_Options lint_options = {
+          .language = get_language(file, o),
+          .configuration = config,
+          .print_parser_visits = o.print_parser_visits,
+      };
       reporter->set_source(&*source, file);
-      parse_and_lint(&*source, *reporter->get(), config->globals(),
-                     lint_options);
+      parse_and_lint(&*source, *reporter->get(), lint_options);
     }
   }
   reporter->finish();
@@ -317,35 +316,6 @@ void run(Options o) {
   }
 
   std::exit(EXIT_SUCCESS);
-}
-
-Linter_Options get_linter_options_from_language(
-    Resolved_Input_File_Language language) {
-  Linter_Options o;
-  switch (language) {
-  case Resolved_Input_File_Language::javascript:
-    o.jsx = false;
-    o.typescript = false;
-    break;
-  case Resolved_Input_File_Language::javascript_jsx:
-    o.jsx = true;
-    o.typescript = false;
-    break;
-  case Resolved_Input_File_Language::typescript:
-    o.jsx = false;
-    o.typescript = true;
-    break;
-  case Resolved_Input_File_Language::typescript_definition:
-    o.jsx = false;
-    o.typescript = true;
-    o.typescript_definition = true;
-    break;
-  case Resolved_Input_File_Language::typescript_jsx:
-    o.jsx = true;
-    o.typescript = true;
-    break;
-  }
-  return o;
 }
 
 void list_debug_apps() {

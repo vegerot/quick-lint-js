@@ -27,7 +27,7 @@ struct Translated_String {
 };
 
 // clang-format off
-inline const Translated_String test_translation_table[601] = {
+inline const Translated_String test_translation_table[605] = {
     {
         "\"global-groups\" entries must be strings"_translatable,
         u8"\"global-groups\" entries must be strings",
@@ -92,6 +92,17 @@ inline const Translated_String test_translation_table[601] = {
             u8"\"globals\" doit \u00eatre un objet",
             u8"\"globals\" precisa ser um objeto",
             u8"\"globals\" must be an object",
+        },
+    },
+    {
+        "\"jsx-mode\" must be a string; try \"none\" or \"react\""_translatable,
+        u8"\"jsx-mode\" must be a string; try \"none\" or \"react\"",
+        {
+            u8"\"jsx-mode\" must be a string; try \"none\" or \"react\"",
+            u8"\"jsx-mode\" must be a string; try \"none\" or \"react\"",
+            u8"\"jsx-mode\" must be a string; try \"none\" or \"react\"",
+            u8"\"jsx-mode\" must be a string; try \"none\" or \"react\"",
+            u8"\"jsx-mode\" must be a string; try \"none\" or \"react\"",
         },
     },
     {
@@ -4924,6 +4935,17 @@ inline const Translated_String test_translation_table[601] = {
         },
     },
     {
+        "namespace alias cannot use 'import type'"_translatable,
+        u8"namespace alias cannot use 'import type'",
+        {
+            u8"namespace alias cannot use 'import type'",
+            u8"namespace alias cannot use 'import type'",
+            u8"namespace alias cannot use 'import type'",
+            u8"namespace alias cannot use 'import type'",
+            u8"namespace alias cannot use 'import type'",
+        },
+    },
+    {
         "namespace starts here"_translatable,
         u8"namespace starts here",
         {
@@ -6233,6 +6255,17 @@ inline const Translated_String test_translation_table[601] = {
         },
     },
     {
+        "unknown JSX mode; try \"none\" or \"react\""_translatable,
+        u8"unknown JSX mode; try \"none\" or \"react\"",
+        {
+            u8"unknown JSX mode; try \"none\" or \"react\"",
+            u8"unknown JSX mode; try \"none\" or \"react\"",
+            u8"unknown JSX mode; try \"none\" or \"react\"",
+            u8"unknown JSX mode; try \"none\" or \"react\"",
+            u8"unknown JSX mode; try \"none\" or \"react\"",
+        },
+    },
+    {
         "unmatched '}'"_translatable,
         u8"unmatched '}'",
         {
@@ -6395,6 +6428,17 @@ inline const Translated_String test_translation_table[601] = {
             u8"using '{0}' against an object literal always returns '{1}'",
             u8"usar '{0}' com um objeto sempre retorna '{1}'",
             u8"using '{0}' against an object literal always returns '{1}'",
+        },
+    },
+    {
+        "using a '.' after a '?.' might fail, since '?.' might return 'undefined'."_translatable,
+        u8"using a '.' after a '?.' might fail, since '?.' might return 'undefined'.",
+        {
+            u8"using a '.' after a '?.' might fail, since '?.' might return 'undefined'.",
+            u8"using a '.' after a '?.' might fail, since '?.' might return 'undefined'.",
+            u8"using a '.' after a '?.' might fail, since '?.' might return 'undefined'.",
+            u8"using a '.' after a '?.' might fail, since '?.' might return 'undefined'.",
+            u8"using a '.' after a '?.' might fail, since '?.' might return 'undefined'.",
         },
     },
     {

@@ -6,6 +6,38 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 quick-lint-js' version numbers are arbitrary. quick-lint-js does *not* adhere to
 Semantic Versioning.
 
+## 3.1.0 (2024-01-10)
+
+[Downloads](https://c.quick-lint-js.com/releases/3.1.0/)
+
+### Added
+
+* quick-lint-js's JSX diagnostics can now be configured via quick-lint-js's [JSX
+  mode][] mechanism. New JSX modes are `"none"`, `"react"`, and `"auto"`
+  (default).
+* Writing a namespace alias with `import type`, such as in
+  `import type ns = otherns;`, now reports [E0717][] ("namespace alias cannot
+  use 'import type'"). (Implemented by [koopiehoop][].) ([#1139][])
+* `x?.y.z` now reports [E0718][] ("using a '.' after a '?.' might fail, since
+  '?.' might return 'undefined'"). (Implemented by [Joshua Pepple][].)
+  ([#1128][])
+* `for await (...)` now reports [E0162][] ("'await' is only allowed in async
+  functions") when written in a non-async function. (Implemented by [Daniel La
+  Rocque][].) ([#1168][])
+
+### Fixed
+
+* quick-lint-js's tracing no longer crashes with an assertion failure when
+  setting its thread name on FreeBSD. ([#1155][])
+* React-specific JSX diagnostics, such as [E0193][] ("misspelled React
+  attribute; write 'className' instead"), are now only reported when 'react' is
+  imported and if 'preact' is not imported. This fixes false warnings in Preact
+  code. ([#1152][])
+* Commas are now allowed after methods in interfaces in `.d.ts` files. (They
+  were previously only allowed in `.ts` files.) ([#1171][])
+* quick-lint-js no longer reports warnings for web types such as `HeadersInit`
+  in TypeScript code. ([#1180][])
+
 ## 3.0.0 (2024-01-01)
 
 [Downloads](https://c.quick-lint-js.com/releases/3.0.0/)
@@ -1303,6 +1335,7 @@ Beta release.
 
 [Bun]: https://bun.sh/
 [Deno]: https://deno.land/
+[JSX Mode]: https://quick-lint-js.com/errors/jsx/
 [cli-language]: ../cli/#language
 [cmake-install-component-build-tools-patch]: https://github.com/quick-lint/quick-lint-js/commit/3923f0df76d24b73d57f15eec61ab190ea048093.patch
 [coc.nvim]: https://github.com/neoclide/coc.nvim
@@ -1330,6 +1363,7 @@ Beta release.
 [James Moles]: https://github.com/JPMoles
 [Jenny "Jennipuff" Wheat]: https://twitter.com/jennipaff
 [Jimmy Qiu]: https://github.com/lifeinData
+[Joshua Pepple]: https://github.com/pepplejoshua
 [Kate Conkright]: https://github.com/applepie23
 [Kim "Linden"]: https://github.com/Lindenbyte
 [Lee Wannacott]: https://github.com/LeeWannacott
@@ -1360,6 +1394,14 @@ Beta release.
 [toastin0]: https://github.com/toastin0
 [wagner riffel]: https://github.com/wgrr
 
+[#1128]: https://github.com/quick-lint/quick-lint-js/issues/1128
+[#1139]: https://github.com/quick-lint/quick-lint-js/issues/1139
+[#1152]: https://github.com/quick-lint/quick-lint-js/issues/1152
+[#1155]: https://github.com/quick-lint/quick-lint-js/issues/1155
+[#1168]: https://github.com/quick-lint/quick-lint-js/pull/1168
+[#1171]: https://github.com/quick-lint/quick-lint-js/issues/1171
+[#1180]: https://github.com/quick-lint/quick-lint-js/issues/1180
+
 [E0001]: https://quick-lint-js.com/errors/E0001/
 [E0003]: https://quick-lint-js.com/errors/E0003/
 [E0013]: https://quick-lint-js.com/errors/E0013/
@@ -1388,6 +1430,7 @@ Beta release.
 [E0069]: https://quick-lint-js.com/errors/E0069/
 [E0072]: https://quick-lint-js.com/errors/E0072/
 [E0073]: https://quick-lint-js.com/errors/E0073/
+[E0082]: https://quick-lint-js.com/errors/E0082/
 [E0086]: https://quick-lint-js.com/errors/E0086/
 [E0094]: https://quick-lint-js.com/errors/E0094/
 [E0101]: https://quick-lint-js.com/errors/E0101/
@@ -1405,6 +1448,8 @@ Beta release.
 [E0151]: https://quick-lint-js.com/errors/E0151/
 [E0155]: https://quick-lint-js.com/errors/E0155/
 [E0161]: https://quick-lint-js.com/errors/E0161/
+[E0162]: https://quick-lint-js.com/errors/E0162/
+[E0172]: https://quick-lint-js.com/errors/E0172/
 [E0173]: https://quick-lint-js.com/errors/E0173/
 [E0176]: https://quick-lint-js.com/errors/E0176/
 [E0177]: https://quick-lint-js.com/errors/E0177/
@@ -1441,6 +1486,7 @@ Beta release.
 [E0246]: https://quick-lint-js.com/errors/E0246/
 [E0247]: https://quick-lint-js.com/errors/E0247/
 [E0253]: https://quick-lint-js.com/errors/E0253/
+[E0254]: https://quick-lint-js.com/errors/E0254/
 [E0266]: https://quick-lint-js.com/errors/E0266/
 [E0270]: https://quick-lint-js.com/errors/E0270/
 [E0271]: https://quick-lint-js.com/errors/E0271/
@@ -1450,6 +1496,7 @@ Beta release.
 [E0287]: https://quick-lint-js.com/errors/E0287/
 [E0291]: https://quick-lint-js.com/errors/E0291/
 [E0311]: https://quick-lint-js.com/errors/E0311/
+[E0315]: https://quick-lint-js.com/errors/E0315/
 [E0325]: https://quick-lint-js.com/errors/E0325/
 [E0326]: https://quick-lint-js.com/errors/E0326/
 [E0327]: https://quick-lint-js.com/errors/E0327/
@@ -1460,6 +1507,7 @@ Beta release.
 [E0347]: https://quick-lint-js.com/errors/E0347/
 [E0348]: https://quick-lint-js.com/errors/E0348/
 [E0349]: https://quick-lint-js.com/errors/E0349/
+[E0351]: https://quick-lint-js.com/errors/E0351/
 [E0356]: https://quick-lint-js.com/errors/E0356/
 [E0357]: https://quick-lint-js.com/errors/E0357/
 [E0361]: https://quick-lint-js.com/errors/E0361/
@@ -1474,10 +1522,13 @@ Beta release.
 [E0381]: https://quick-lint-js.com/errors/E0381/
 [E0383]: https://quick-lint-js.com/errors/E0383/
 [E0384]: https://quick-lint-js.com/errors/E0384/
+[E0385]: https://quick-lint-js.com/errors/E0385/
 [E0398]: https://quick-lint-js.com/errors/E0398/
 [E0426]: https://quick-lint-js.com/errors/E0426/
 [E0427]: https://quick-lint-js.com/errors/E0427/
 [E0429]: https://quick-lint-js.com/errors/E0429/
+[E0432]: https://quick-lint-js.com/errors/E0432/
+[E0440]: https://quick-lint-js.com/errors/E0440/
 [E0450]: https://quick-lint-js.com/errors/E0450/
 [E0451]: https://quick-lint-js.com/errors/E0451/
 [E0452]: https://quick-lint-js.com/errors/E0452/
@@ -1490,3 +1541,5 @@ Beta release.
 [E0714]: https://quick-lint-js.com/errors/E0714/
 [E0715]: https://quick-lint-js.com/errors/E0715/
 [E0716]: https://quick-lint-js.com/errors/E0716/
+[E0717]: https://quick-lint-js.com/errors/E0717/
+[E0718]: https://quick-lint-js.com/errors/E0718/

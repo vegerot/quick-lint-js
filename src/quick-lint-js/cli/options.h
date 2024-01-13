@@ -6,6 +6,7 @@
 #include <optional>
 #include <quick-lint-js/container/monotonic-allocator.h>
 #include <quick-lint-js/diag/diag-code-list.h>
+#include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/port/span.h>
 #include <quick-lint-js/util/cast.h>
 
@@ -20,23 +21,15 @@ enum class Output_Format {
 };
 
 enum class Raw_Input_File_Language : unsigned char {
+  javascript = enum_to_int_cast(File_Language::javascript),
+  javascript_jsx = enum_to_int_cast(File_Language::javascript_jsx),
+  typescript = enum_to_int_cast(File_Language::typescript),
+  typescript_definition =
+      enum_to_int_cast(File_Language::typescript_definition),
+  typescript_jsx = enum_to_int_cast(File_Language::typescript_jsx),
+
   // Explicit (--language=default) or implicit (no --language).
   default_,
-
-  javascript,
-  javascript_jsx,
-  typescript,
-  typescript_definition,
-  typescript_jsx,
-};
-
-enum class Resolved_Input_File_Language : unsigned char {
-  javascript = enum_to_int_cast(Raw_Input_File_Language::javascript),
-  javascript_jsx = enum_to_int_cast(Raw_Input_File_Language::javascript_jsx),
-  typescript = enum_to_int_cast(Raw_Input_File_Language::typescript),
-  typescript_definition =
-      enum_to_int_cast(Raw_Input_File_Language::typescript_definition),
-  typescript_jsx = enum_to_int_cast(Raw_Input_File_Language::typescript_jsx),
 };
 
 enum class Option_When { auto_, always, never };
@@ -78,10 +71,8 @@ struct Options {
   bool dump_errors(Output_Stream &) const;
 };
 
-Resolved_Input_File_Language get_language(const File_To_Lint &file,
-                                          const Options &);
-Resolved_Input_File_Language get_language(const char *file,
-                                          Raw_Input_File_Language language);
+File_Language get_language(const File_To_Lint &file, const Options &);
+File_Language get_language(const char *file, Raw_Input_File_Language language);
 
 // Returns portions of argv and memory allocated by allocator.
 Options parse_options(int argc, char **argv, Monotonic_Allocator *allocator);

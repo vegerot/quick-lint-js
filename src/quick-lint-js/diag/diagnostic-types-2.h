@@ -731,6 +731,20 @@ struct Diag_Config_Globals_Type_Mismatch {
   Source_Code_Span value;
 };
 
+struct Diag_Config_JSX_Mode_Type_Mismatch {
+  [[qljs::diag("E0456", Diagnostic_Severity::error)]]  //
+  [[qljs::message("\"jsx-mode\" must be a string; try \"none\" or \"react\"",
+                  ARG(value))]]  //
+  Source_Code_Span value;
+};
+
+struct Diag_Config_JSX_Mode_Unrecognized {
+  [[qljs::diag("E0455", Diagnostic_Severity::error)]]  //
+  [[qljs::message("unknown JSX mode; try \"none\" or \"react\"",
+                  ARG(value))]]  //
+  Source_Code_Span value;
+};
+
 struct Diag_Depth_Limit_Exceeded {
   [[qljs::diag("E0203", Diagnostic_Severity::error)]]    //
   [[qljs::message("depth limit exceeded", ARG(token))]]  //
@@ -3566,6 +3580,24 @@ struct Diag_Unintuitive_Bitshift_Precedence {
   [[qljs::message("'&' here", ARG(and_operator))]]  //
   Source_Code_Span bitshift_operator;
   Source_Code_Span and_operator;
+};
+
+struct Diag_TypeScript_Namespace_Alias_Cannot_Use_Import_Type {
+  [[qljs::diag("E0717", Diagnostic_Severity::error)]]  //
+  [[qljs::message("namespace alias cannot use 'import type'",
+                  ARG(type_keyword))]]  //
+  Source_Code_Span type_keyword;
+};
+
+struct Diag_Using_Dot_After_Optional_Chaining {
+  [[qljs::diag("E0718", Diagnostic_Severity::warning)]]  //
+  // clang-format off
+  [[qljs::message("using a '.' after a '?.' might fail, since '?.' might "
+                  "return 'undefined'.",
+                  ARG(dot_op), ARG(optional_chain_op))]]  //
+  // clang-format on
+  Source_Code_Span dot_op;
+  Source_Code_Span optional_chain_op;
 };
 }
 QLJS_WARNING_POP

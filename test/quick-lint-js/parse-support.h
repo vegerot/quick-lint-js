@@ -43,6 +43,15 @@ void summarize(Expression*, std::string& out);
 std::string summarize(Expression*);
 std::string summarize(std::optional<Expression*>);
 
+struct Source_Code_Span_Offsets {
+  std::ptrdiff_t begin;
+  std::ptrdiff_t end;
+
+  friend std::ostream& operator<<(std::ostream&, Source_Code_Span_Offsets);
+  friend bool operator==(Source_Code_Span_Offsets, Source_Code_Span_Offsets);
+  friend bool operator!=(Source_Code_Span_Offsets, Source_Code_Span_Offsets);
+};
+
 inline constexpr Parser_Options javascript_options = [] {
   Parser_Options options;
   options.jsx = false;
@@ -85,7 +94,7 @@ class Test_Parser {
 
   explicit Test_Parser(String8_View input, const Parser_Options& options,
                        Capture_Diags_Tag)
-      : code_(input), parser_(&this->code_, &this->errors_, options) {}
+      : code_(input), parser_(&this->code_, &this->diag_reporter_, options) {}
 
   // Fails the test if there are any diagnostics during parsing.
   explicit Test_Parser(String8_View input)
@@ -145,16 +154,29 @@ class Test_Parser {
     return this->parser_.enter_function(attributes);
   }
 
-  // See offsets_matcher's constructor.
-  Offsets_Matcher matches_offsets(CLI_Source_Position::Offset_Type begin_offset,
-                                  String8_View text) {
-    return Offsets_Matcher(&this->code_, begin_offset, text);
+  Source_Code_Span_Offsets offsets(Source_Code_Span span) {
+    return Source_Code_Span_Offsets{
+        .begin = span.begin() - this->code_.data(),
+        .end = span.end() - this->code_.data(),
+    };
   }
 
-  // See offsets_matcher's constructor.
-  Offsets_Matcher matches_offsets(CLI_Source_Position::Offset_Type begin_offset,
-                                  CLI_Source_Position::Offset_Type end_offset) {
-    return Offsets_Matcher(&this->code_, begin_offset, end_offset);
+  void assert_offsets(Source_Code_Span span, std::ptrdiff_t expected_begin,
+                      std::ptrdiff_t expected_end,
+                      Source_Location caller = Source_Location::current()) {
+    EXPECT_EQ_AT_CALLER(this->offsets(span), (Source_Code_Span_Offsets{
+                                                 .begin = expected_begin,
+                                                 .end = expected_end,
+                                             }));
+  }
+
+  void assert_offsets(Source_Code_Span span, std::ptrdiff_t expected_begin,
+                      String8_View expected_characters,
+                      Source_Location caller = Source_Location::current()) {
+    this->assert_offsets(span, expected_begin,
+                         expected_begin + narrow_cast<std::ptrdiff_t>(
+                                              expected_characters.size()),
+                         caller);
   }
 
   Spy_Visitor& spy_visitor() { return this->errors_; }
@@ -168,6 +190,9 @@ class Test_Parser {
   Failing_Diag_Reporter failing_reporter_;
   quick_lint_js::Parser parser_;
 
+  Monotonic_Allocator diag_allocator_{"Test_Parser::diag_allocator_"};
+  Diag_List_Diag_Reporter diag_reporter_{&this->diag_allocator_};
+
  public:
   // Aliases for convenience.
   std::vector<std::string_view>& visits = this->errors_.visits;
@@ -180,8 +205,11 @@ class Test_Parser {
   std::vector<Visited_Variable_Declaration>& variable_declarations =
       this->errors_.variable_declarations;
   std::vector<String8>& variable_uses = this->errors_.variable_uses;
-  std::vector<Diag_Collector::Diag>& errors = this->errors_.errors;
+  const Diag_List& errors = this->diag_reporter_.diags();
   Padded_String_View code = Padded_String_View(&this->code_);
+
+  // TODO(#1154): Delete this.
+  std::vector<Diag_Collector::Diag> legacy_errors();
 };
 
 struct No_Diags_Tag {};

@@ -155,12 +155,12 @@ TEST_F(Test_Parse_Expression_Statement,
     Test_Parser p(concat(op, u8" x"_sv), capture_diags);
     SCOPED_TRACE(p.code);
     p.parse_and_visit_statement();
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(p.code, Diag_Missing_Operand_For_Operator,  //
-                              where, 0, op),
-        }));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            DIAGNOSTIC_ASSERTION_SPAN(Diag_Missing_Operand_For_Operator,  //
+                                      where, 0, op),
+        });
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_variable_use",  // x
                           }));
@@ -1066,7 +1066,7 @@ TEST_F(Test_Parse_Expression_Statement,
     Test_Parser p(concat(u8"*\n"_sv, statement), capture_diags);
     SCOPED_TRACE(p.code);
     p.parse_and_visit_module();
-    EXPECT_THAT(p.errors, Not(IsEmpty()));
+    EXPECT_THAT(p.legacy_errors(), Not(IsEmpty()));
   }
 }
 

@@ -8,6 +8,7 @@
 #include <quick-lint-js/assert.h>
 #include <quick-lint-js/configuration/configuration-loader.h>
 #include <quick-lint-js/container/padded-string.h>
+#include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/fe/linter.h>
 #include <quick-lint-js/logging/log.h>
 #include <quick-lint-js/lsp/lsp-document-text.h>
@@ -129,7 +130,7 @@ class QLJS_Config_Document : public QLJS_Document_Base {
 
     LSP_Locator locator(&loaded_config->file_content);
     VSCode_Diag_Reporter diag_reporter(vscode, env, &locator, this->uri());
-    loaded_config->errors.copy_into(&diag_reporter);
+    diag_reporter.report(loaded_config->errors);
     return std::move(diag_reporter).diagnostics();
   }
 };
@@ -138,8 +139,8 @@ class QLJS_Lintable_Document : public QLJS_Document_Base {
  public:
   explicit QLJS_Lintable_Document(VSCode_Document doc,
                                   const std::optional<std::string>& file_path,
-                                  Linter_Options lint_options)
-      : QLJS_Document_Base(doc, file_path), lint_options_(lint_options) {}
+                                  File_Language language)
+      : QLJS_Document_Base(doc, file_path), language_(language) {}
 
   void after_modification(::Napi::Env, QLJS_Workspace&,
                           VSCode_Diagnostic_Collection) override;
@@ -159,13 +160,20 @@ class QLJS_Lintable_Document : public QLJS_Document_Base {
     VSCode_Diag_Reporter diag_reporter(vscode, env, &this->document_.locator(),
                                        this->uri());
     parse_and_lint(this->document_.string(), diag_reporter,
-                   this->config_->globals(), this->lint_options_);
+                   Linter_Options{
+                       .language = this->language_,
+                       .configuration = this->config_,
+                   });
 
     return std::move(diag_reporter).diagnostics();
   }
 
   Configuration* config_;  // Initialized by finish_init.
-  Linter_Options lint_options_;
+
+  // Resolved parsing mode. Might not match VS Code's opinion.
+  //
+  // See VSCode_Language for how we determine this value.
+  File_Language language_;
 
   friend class QLJS_Document_Base;
   friend class QLJS_Workspace;

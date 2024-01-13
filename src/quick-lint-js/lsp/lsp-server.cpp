@@ -480,7 +480,7 @@ void Linting_LSP_Server_Handler::handle_text_document_did_open_notification(
           LSP_Language::find(notification.language_id, notification.uri.data)) {
     auto doc = std::make_unique<LSP_Documents::Lintable_Document>();
     init_document(*doc);
-    doc->lint_options = lang->lint_options;
+    doc->language = lang->language;
 
     auto config_file =
         this->config_loader_.watch_and_load_for_file(document_path,
@@ -637,7 +637,7 @@ void Linting_LSP_Server_Handler::get_config_file_diagnostics_notification(
   notification_json.append_copy(u8R"--(,"diagnostics":)--"_sv);
   LSP_Diag_Reporter diag_reporter(qljs_messages, notification_json,
                                   &config_file->file_content);
-  config_file->errors.copy_into(&diag_reporter);
+  diag_reporter.report(config_file->errors);
   diag_reporter.finish();
 
   notification_json.append_copy(u8R"--(},"jsonrpc":"2.0"})--"_sv);
@@ -754,12 +754,12 @@ LSP_Linter::~LSP_Linter() = default;
 void LSP_Linter::lint(LSP_Documents::Lintable_Document& doc,
                       String8_View uri_json,
                       Outgoing_JSON_RPC_Message_Queue& outgoing_messages) {
-  this->lint(*doc.config, doc.lint_options, doc.doc.string(), uri_json,
+  this->lint(*doc.config, doc.language, doc.doc.string(), uri_json,
              doc.version_json, outgoing_messages);
 }
 
 void LSP_JavaScript_Linter::lint(
-    Configuration& config, Linter_Options lint_options, Padded_String_View code,
+    Configuration& config, File_Language language, Padded_String_View code,
     String8_View uri_json, String8_View version_json,
     Outgoing_JSON_RPC_Message_Queue& outgoing_messages) {
   Byte_Buffer& notification_json = outgoing_messages.new_message();
@@ -776,16 +776,20 @@ void LSP_JavaScript_Linter::lint(
   notification_json.append_copy(version_json);
 
   notification_json.append_copy(u8R"--(,"diagnostics":)--"_sv);
-  this->lint_and_get_diagnostics(config, lint_options, code, notification_json);
+  this->lint_and_get_diagnostics(config, language, code, notification_json);
 
   notification_json.append_copy(u8R"--(},"jsonrpc":"2.0"})--"_sv);
 }
 
 void LSP_JavaScript_Linter::lint_and_get_diagnostics(
-    Configuration& config, Linter_Options lint_options, Padded_String_View code,
+    Configuration& config, File_Language language, Padded_String_View code,
     Byte_Buffer& diagnostics_json) {
   LSP_Diag_Reporter diag_reporter(qljs_messages, diagnostics_json, code);
-  parse_and_lint(code, diag_reporter, config.globals(), lint_options);
+  parse_and_lint(code, diag_reporter,
+                 Linter_Options{
+                     .language = language,
+                     .configuration = &config,
+                 });
   diag_reporter.finish();
 }
 

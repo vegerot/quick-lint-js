@@ -11,6 +11,7 @@
 #include <quick-lint-js/container/optional.h>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag/buffering-diag-reporter.h>
+#include <quick-lint-js/diag/diag-list-diag-reporter.h>
 #include <quick-lint-js/fe/identifier.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/fe/token.h>
@@ -206,7 +207,7 @@ class Lexer {
     Token_Type type;
     const Char8* end;
     // Might be null.
-    Buffering_Diag_Reporter* escape_sequence_diagnostics;
+    Diag_List* escape_sequence_diagnostics;
   };
 
   // The result of parsing an identifier.
@@ -284,7 +285,7 @@ class Lexer {
   };
 
   Parsed_Unicode_Escape parse_unicode_escape(const Char8* input,
-                                             Diag_Reporter*);
+                                             Diag_List* out_diags);
 
   Parsed_Identifier parse_identifier(const Char8*, Identifier_Kind);
   const Char8* parse_identifier_fast_only(const Char8*);
@@ -375,7 +376,7 @@ struct Lexer_Transaction {
   Token old_last_token;
   const Char8* old_last_last_token_end;
   const Char8* old_input;
-  std::optional<Buffering_Diag_Reporter> reporter;
+  std::optional<Diag_List_Diag_Reporter> reporter;
   Diag_Reporter* old_diag_reporter;
 };
 

@@ -3,34 +3,24 @@
 
 #pragma once
 
+#include <quick-lint-js/fe/language.h>
+
 namespace quick_lint_js {
+class Configuration;
 class Diag_Reporter;
-class Global_Declared_Variable_Set;
 class Padded_String_View;
 
 // TODO(#465): Accept parser options from quick-lint-js.config or CLI options.
 struct Linter_Options {
-  // If true, parse and lint JSX language extensions:
-  // https://facebook.github.io/jsx/
-  bool jsx = true;
+  File_Language language;
 
-  // If true, parse and lint TypeScript instead of JavaScript.
-  bool typescript = false;
-
-  // If true, parse as a TypeScript definition file (.d.ts).
-  //
-  // Invariant: typescript_definition implies typescript.
-  bool typescript_definition = false;
+  Configuration* configuration;
 
   // If true, print a human-readable representation of parser visits to stderr.
   bool print_parser_visits = false;
-
-  friend bool operator==(Linter_Options, Linter_Options);
-  friend bool operator!=(Linter_Options, Linter_Options);
 };
 
-void parse_and_lint(Padded_String_View code, Diag_Reporter&,
-                    const Global_Declared_Variable_Set&, Linter_Options);
+void parse_and_lint(Padded_String_View code, Diag_Reporter&, Linter_Options);
 }
 
 // quick-lint-js finds bugs in JavaScript programs.

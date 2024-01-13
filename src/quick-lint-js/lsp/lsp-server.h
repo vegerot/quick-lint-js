@@ -13,6 +13,7 @@
 #include <quick-lint-js/configuration/configuration-loader.h>
 #include <quick-lint-js/container/hash-map.h>
 #include <quick-lint-js/container/padded-string.h>
+#include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/fe/linter.h>
 #include <quick-lint-js/io/file-canonical.h>
 #include <quick-lint-js/json.h>
@@ -106,7 +107,11 @@ struct LSP_Documents {
                                 const Configuration_Change&) override;
 
     Configuration* config;
-    Linter_Options lint_options;
+    // Resolved parsing mode. Might not match the languageId given in
+    // textDocument/didOpen.
+    //
+    // See LSP_Language for how we determine this value.
+    File_Language language;
   };
 
   struct Unknown_Document final : Document_Base {
@@ -261,7 +266,7 @@ class LSP_Linter {
 
   virtual ~LSP_Linter();
 
-  virtual void lint(Configuration& config, Linter_Options lint_options,
+  virtual void lint(Configuration& config, File_Language language,
                     Padded_String_View code, String8_View uri_json,
                     String8_View version_json,
                     Outgoing_JSON_RPC_Message_Queue&) = 0;
@@ -274,12 +279,12 @@ class LSP_JavaScript_Linter final : public LSP_Linter {
  public:
   ~LSP_JavaScript_Linter() override = default;
 
-  void lint(Configuration&, Linter_Options, Padded_String_View code,
+  void lint(Configuration&, File_Language, Padded_String_View code,
             String8_View uri_json, String8_View version_json,
             Outgoing_JSON_RPC_Message_Queue&) override;
 
  private:
-  void lint_and_get_diagnostics(Configuration&, Linter_Options,
+  void lint_and_get_diagnostics(Configuration&, File_Language,
                                 Padded_String_View code,
                                 Byte_Buffer& diagnostics_json);
 };

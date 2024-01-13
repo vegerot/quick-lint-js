@@ -94,7 +94,7 @@ quick_lint_js_add_executable(
   test-cxx-parser.cpp
   test-debug-server.cpp
   test-diag-code-list.cpp
-  test-diag-matcher.cpp
+  test-diag-list.cpp
   test-diagnostic-assertion.cpp
   test-diagnostic-formatter.cpp
   test-diagnostic.cpp
@@ -139,6 +139,7 @@ quick_lint_js_add_executable(
   test-parse-expression-typescript.cpp
   test-parse-expression.cpp
   test-parse-function.cpp
+  test-parse-jsx-react.cpp
   test-parse-jsx.cpp
   test-parse-loop.cpp
   test-parse-module.cpp

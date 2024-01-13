@@ -1,6 +1,7 @@
 // Copyright (C) 2020  Matthew "strager" Glazar
 // See end of file for extended copyright information.
 
+#include <quick-lint-js/configuration/configuration.h>
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/debug/debug-probe.h>
 #include <quick-lint-js/fe/debug-parse-visitor.h>
@@ -11,35 +12,46 @@
 #include <quick-lint-js/fe/parse.h>
 #include <quick-lint-js/fe/variable-analyzer.h>
 #include <quick-lint-js/io/output-stream.h>
+#include <quick-lint-js/port/unreachable.h>
 
 namespace quick_lint_js {
-bool operator==(Linter_Options lhs, Linter_Options rhs) {
-  return lhs.jsx == rhs.jsx && lhs.typescript == rhs.typescript &&
-         lhs.typescript_definition == rhs.typescript_definition &&
-         lhs.print_parser_visits == rhs.print_parser_visits;
-}
-
-bool operator!=(Linter_Options lhs, Linter_Options rhs) {
-  return !(lhs == rhs);
-}
-
 void parse_and_lint(Padded_String_View code, Diag_Reporter& reporter,
-                    const Global_Declared_Variable_Set& globals,
                     Linter_Options options) {
-  Parser p(code, &reporter,
-           Parser_Options{
-               .jsx = options.jsx,
-               .typescript = options.typescript,
-               .typescript_definition_file = options.typescript_definition,
-           });
+  Parser_Options parser_options;
+  parser_options.jsx_mode = options.configuration->jsx_mode;
+  switch (options.language) {
+  case File_Language::javascript:
+    parser_options.jsx = false;
+    parser_options.typescript = false;
+    break;
+  case File_Language::javascript_jsx:
+    parser_options.jsx = true;
+    parser_options.typescript = false;
+    break;
+  case File_Language::typescript:
+    parser_options.jsx = false;
+    parser_options.typescript = true;
+    break;
+  case File_Language::typescript_definition:
+    parser_options.jsx = false;
+    parser_options.typescript = true;
+    parser_options.typescript_definition_file = true;
+    break;
+  case File_Language::typescript_jsx:
+    parser_options.jsx = true;
+    parser_options.typescript = true;
+    break;
+  }
+
+  Parser p(code, &reporter, parser_options);
   Variable_Analyzer var_analyzer(
-      &reporter, &globals,
+      &reporter, &options.configuration->globals(),
       Variable_Analyzer_Options{
-          .allow_deleting_typescript_variable = !options.typescript,
-          .eval_can_declare_variables = !options.typescript,
+          .allow_deleting_typescript_variable = !parser_options.typescript,
+          .eval_can_declare_variables = !parser_options.typescript,
           // TODO(strager): Deduplicate with typescript_var_options in tests.
-          .can_assign_to_class = !options.typescript,
-          .import_variable_can_be_runtime_or_type = options.typescript,
+          .can_assign_to_class = !parser_options.typescript,
+          .import_variable_can_be_runtime_or_type = parser_options.typescript,
       });
 
 #if defined(__EMSCRIPTEN__)

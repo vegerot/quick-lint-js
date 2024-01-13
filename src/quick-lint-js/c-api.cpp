@@ -10,6 +10,7 @@
 #include <quick-lint-js/configuration/configuration.h>
 #include <quick-lint-js/container/c-string-list.h>
 #include <quick-lint-js/container/padded-string.h>
+#include <quick-lint-js/diag/diag-list.h>
 #include <quick-lint-js/diag/diagnostic-types.h>
 #include <quick-lint-js/fe/linter.h>
 #include <quick-lint-js/lsp/lsp-document-text.h>
@@ -25,7 +26,7 @@ struct QLJS_Web_Demo_Document final {
   C_API_Diag_Reporter<QLJS_Web_Demo_Diagnostic, Web_Demo_Locator>
       diag_reporter_;
   Configuration config_;
-  Linter_Options linter_options_;
+  File_Language language_;
   bool is_config_json_ = false;
   QLJS_Web_Demo_Document* config_document_ = nullptr;
   bool need_update_config_ = true;
@@ -52,9 +53,24 @@ void qljs_web_demo_set_config(QLJS_Web_Demo_Document* js_document,
 
 void qljs_web_demo_set_language_options(QLJS_Web_Demo_Document* p,
                                         QLJS_Language_Options options) {
-  p->linter_options_.jsx = options & qljs_language_options_jsx_bit;
-  p->linter_options_.typescript =
-      options & qljs_language_options_typescript_bit;
+  switch (options & (qljs_language_options_jsx_bit |
+                     qljs_language_options_typescript_bit)) {
+  case 0:
+    p->language_ = File_Language::javascript;
+    break;
+  case qljs_language_options_jsx_bit:
+    p->language_ = File_Language::javascript_jsx;
+    break;
+  case qljs_language_options_typescript_bit:
+    p->language_ = File_Language::typescript;
+    break;
+  case qljs_language_options_jsx_bit | qljs_language_options_typescript_bit:
+    p->language_ = File_Language::typescript_jsx;
+    break;
+  default:
+    QLJS_UNREACHABLE();
+    break;
+  }
   p->is_config_json_ = options & qljs_language_options_config_json_bit;
 }
 
@@ -65,21 +81,26 @@ void qljs_web_demo_set_locale(QLJS_Web_Demo_Document* p, const char* locale) {
 }
 
 const QLJS_Web_Demo_Diagnostic* qljs_web_demo_lint(QLJS_Web_Demo_Document* p) {
+  Monotonic_Allocator temp_memory("qljs_web_demo_lint");
+
   if (p->need_update_config_) {
     p->config_.reset();
     if (p->config_document_) {
-      p->config_.load_from_json(&p->config_document_->text_,
-                                &Null_Diag_Reporter::instance);
+      Diag_List diags(&temp_memory);
+      p->config_.load_from_json(&p->config_document_->text_, &diags);
     }
   }
 
   p->diag_reporter_.reset();
   p->diag_reporter_.set_input(&p->text_);
   if (p->is_config_json_) {
-    Configuration().load_from_json(&p->text_, &p->diag_reporter_);
+    Diag_List diags(&temp_memory);
+    Configuration().load_from_json(&p->text_, &diags);
+    p->diag_reporter_.report(diags);
   } else {
-    parse_and_lint(&p->text_, p->diag_reporter_, p->config_.globals(),
-                   p->linter_options_);
+    parse_and_lint(
+        &p->text_, p->diag_reporter_,
+        Linter_Options{.language = p->language_, .configuration = &p->config_});
   }
   return p->diag_reporter_.get_diagnostics();
 }

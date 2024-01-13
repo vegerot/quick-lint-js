@@ -889,77 +889,48 @@ TEST_F(Test_Parse_TypeScript_Class,
   }
 
   for (String8 specifier : {u8"public", u8"protected", u8"private"}) {
-#define MATCH_ACCESS_SPECIFIER_ERROR(code_before)                            \
-  ::testing::AnyOf(                                                          \
-      DIAG_TYPE_OFFSETS(p.code,                                              \
-                        Diag_TypeScript_Private_Not_Allowed_In_JavaScript,   \
-                        specifier, code_before.size(), u8"private"_sv),      \
-      DIAG_TYPE_OFFSETS(p.code,                                              \
-                        Diag_TypeScript_Protected_Not_Allowed_In_JavaScript, \
-                        specifier, code_before.size(), u8"protected"_sv),    \
-      DIAG_TYPE_OFFSETS(p.code,                                              \
-                        Diag_TypeScript_Public_Not_Allowed_In_JavaScript,    \
-                        specifier, code_before.size(), u8"public"_sv))
+    auto access_specifier_error =
+        [&](String8_View code_before) -> Diagnostic_Assertion {
+      if (specifier == u8"private"_sv) {
+        return DIAGNOSTIC_ASSERTION_SPAN(
+            Diag_TypeScript_Private_Not_Allowed_In_JavaScript,  //
+            specifier, code_before.size(), u8"private"_sv);
+      } else if (specifier == u8"protected"_sv) {
+        return DIAGNOSTIC_ASSERTION_SPAN(
+            Diag_TypeScript_Protected_Not_Allowed_In_JavaScript,  //
+            specifier, code_before.size(), u8"protected"_sv);
+      } else if (specifier == u8"public"_sv) {
+        return DIAGNOSTIC_ASSERTION_SPAN(
+            Diag_TypeScript_Public_Not_Allowed_In_JavaScript,  //
+            specifier, code_before.size(), u8"public"_sv);
+      } else {
+        QLJS_UNREACHABLE();
+      }
+    };
 
-    {
-      Test_Parser p(
-          concat(u8"class C { "_sv, specifier, u8" field = init; }"_sv),
-          capture_diags);
-      SCOPED_TRACE(p.code);
-      p.parse_and_visit_statement();
-      EXPECT_THAT(p.errors, ElementsAreArray({
-                                MATCH_ACCESS_SPECIFIER_ERROR(u8"class C { "_sv),
-                            }));
-    }
+    test_parse_and_visit_statement(
+        concat(u8"class C { "_sv, specifier, u8" field = init; }"_sv),
+        access_specifier_error(u8"class C { "_sv), javascript_options);
 
-    {
-      Test_Parser p(
-          concat(u8"class C { "_sv, specifier, u8" field\nmethod() {} }"_sv),
-          capture_diags);
-      SCOPED_TRACE(p.code);
-      p.parse_and_visit_statement();
-      EXPECT_THAT(p.errors, ElementsAreArray({
-                                MATCH_ACCESS_SPECIFIER_ERROR(u8"class C { "_sv),
-                            }));
-    }
+    test_parse_and_visit_statement(
+        concat(u8"class C { "_sv, specifier, u8" field\nmethod() {} }"_sv),
+        access_specifier_error(u8"class C { "_sv), javascript_options);
 
-    {
-      Test_Parser p(concat(u8"class C { "_sv, specifier,
-                           u8" field\n[methodName]() {} }"_sv),
-                    capture_diags);
-      SCOPED_TRACE(p.code);
-      p.parse_and_visit_statement();
-      EXPECT_THAT(p.errors, ElementsAreArray({
-                                MATCH_ACCESS_SPECIFIER_ERROR(u8"class C { "_sv),
-                            }));
-    }
+    test_parse_and_visit_statement(concat(u8"class C { "_sv, specifier,
+                                          u8" field\n[methodName]() {} }"_sv),
+                                   access_specifier_error(u8"class C { "_sv),
+                                   javascript_options);
 
-    {
-      Test_Parser p(
-          concat(u8"class C { "_sv, specifier, u8" field? method() {} }"_sv),
-          capture_diags);
-      SCOPED_TRACE(p.code);
-      p.parse_and_visit_statement();
-      EXPECT_THAT(
-          p.errors,
-          UnorderedElementsAre(
-              DIAG_TYPE(
-                  Diag_TypeScript_Optional_Properties_Not_Allowed_In_JavaScript),
-              DIAG_TYPE(Diag_Missing_Semicolon_After_Field),
-              MATCH_ACCESS_SPECIFIER_ERROR(u8"class C { "_sv)));
-    }
+    test_parse_and_visit_statement(
+        concat(u8"class C { "_sv, specifier, u8" field? method() {} }"_sv),
+        access_specifier_error(u8"class C { "_sv),
+        u8"Diag_TypeScript_Optional_Properties_Not_Allowed_In_JavaScript"_diag,
+        u8"Diag_Missing_Semicolon_After_Field"_diag, javascript_options);
 
-    {
-      Test_Parser p(concat(u8"class C { "_sv, specifier,
-                           u8" async\nmethod() { const await = null; } }"_sv),
-                    capture_diags);
-      SCOPED_TRACE(p.code);
-      p.parse_and_visit_statement();
-      EXPECT_THAT(p.errors, ElementsAreArray({
-                                MATCH_ACCESS_SPECIFIER_ERROR(u8"class C { "_sv),
-                            }));
-    }
-#undef MATCH_ACCESS_SPECIFIER_ERROR
+    test_parse_and_visit_statement(
+        concat(u8"class C { "_sv, specifier,
+               u8" async\nmethod() { const await = null; } }"_sv),
+        access_specifier_error(u8"class C { "_sv), javascript_options);
   }
 }
 
@@ -1013,16 +984,16 @@ TEST_F(Test_Parse_TypeScript_Class,
       Test_Parser p(code.string_view(), typescript_options, capture_diags);
       p.parse_and_visit_statement();
 
-      EXPECT_THAT(
-          p.errors,
-          ElementsAreArray({
-              DIAG_TYPE_2_OFFSETS(
-                  p.code, Diag_Access_Specifier_Must_Precede_Other_Modifiers,
+      assert_diagnostics(
+          p.code, p.errors,
+          {
+              DIAGNOSTIC_ASSERTION_2_SPANS(
+                  Diag_Access_Specifier_Must_Precede_Other_Modifiers,
                   second_modifier,
                   concat(u8"class C { "_sv, other_modifier, u8" "_sv).size(),
                   access_specifier,  //
                   first_modifier, u8"class C { "_sv.size(), other_modifier),
-          }));
+          });
     }
   }
 
@@ -1034,16 +1005,16 @@ TEST_F(Test_Parse_TypeScript_Class,
       Test_Parser p(code.string_view(), typescript_options, capture_diags);
       p.parse_and_visit_statement();
 
-      EXPECT_THAT(
-          p.errors,
-          ElementsAreArray({
-              DIAG_TYPE_2_OFFSETS(
-                  p.code, Diag_Access_Specifier_Must_Precede_Other_Modifiers,
+      assert_diagnostics(
+          p.code, p.errors,
+          {
+              DIAGNOSTIC_ASSERTION_2_SPANS(
+                  Diag_Access_Specifier_Must_Precede_Other_Modifiers,  //
                   second_modifier,
                   concat(u8"class C { "_sv, other_modifier, u8" "_sv).size(),
                   access_specifier,  //
                   first_modifier, u8"class C { "_sv.size(), other_modifier),
-          }));
+          });
     }
   }
 }
@@ -1889,17 +1860,17 @@ TEST_F(Test_Parse_TypeScript_Class, parameter_property_in_constructor) {
     SCOPED_TRACE(p.code);
     p.parse_and_visit_module();
 
-    EXPECT_THAT(
-        p.errors,
-        ElementsAreArray({
-            DIAG_TYPE_2_OFFSETS(
-                p.code, Diag_Access_Specifier_Must_Precede_Other_Modifiers,
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            DIAGNOSTIC_ASSERTION_2_SPANS(
+                Diag_Access_Specifier_Must_Precede_Other_Modifiers,  //
                 second_modifier,
                 u8"class C {\n  constructor(readonly "_sv.size(),
                 access_specifier,  //
                 first_modifier, u8"class C {\n  constructor("_sv.size(),
-                u8"readonly"),
-        }));
+                u8"readonly"_sv),
+        });
   }
 }
 
@@ -1995,15 +1966,14 @@ TEST_F(Test_Parse_TypeScript_Class,
       EXPECT_THAT(p.variable_declarations,
                   ElementsAreArray(
                       {func_param_decl(u8"field"_sv), class_decl(u8"C"_sv)}));
-      EXPECT_THAT(
-          p.errors,
-          ElementsAreArray({
-              DIAG_TYPE_OFFSETS(
-                  p.code,
+      assert_diagnostics(
+          p.code, p.errors,
+          {
+              DIAGNOSTIC_ASSERTION_SPAN(
                   Diag_TypeScript_Parameter_Property_Not_Allowed_In_JavaScript,  //
                   property_keyword, u8"class C {\n  constructor("_sv.size(),
                   keyword),
-          }));
+          });
     }
   }
 
@@ -2020,18 +1990,16 @@ TEST_F(Test_Parse_TypeScript_Class,
       EXPECT_THAT(p.variable_declarations,
                   ElementsAreArray(
                       {func_param_decl(u8"field"_sv), class_decl(u8"C"_sv)}));
-      EXPECT_THAT(
-          p.errors,
-          ElementsAreArray({
-              DIAG_TYPE_OFFSETS(
-                  p.code,
+      // only the keyword should report a diagnostic; 'readonly' should not have
+      // its own diagnostic
+      assert_diagnostics(
+          p.code, p.errors,
+          {
+              DIAGNOSTIC_ASSERTION_SPAN(
                   Diag_TypeScript_Parameter_Property_Not_Allowed_In_JavaScript,  //
                   property_keyword, u8"class C {\n  constructor("_sv.size(),
                   keyword),
-          }))
-          << "only '" << out_string8(keyword)
-          << "' should report a diagnostic; 'readonly' should not have its own "
-             "diagnostic";
+          });
     }
   }
 }

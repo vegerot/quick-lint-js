@@ -34,7 +34,7 @@ TEST_F(Test_Parse_Expression_TypeScript, type_annotation) {
     Expression* ast = p.parse_expression();
     ASSERT_EQ(ast->kind(), Expression_Kind::Type_Annotated);
     EXPECT_EQ(summarize(ast->child_0()), "var x");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x: Type"_sv));
+    p.assert_offsets(ast->span(), 0, u8"x: Type"_sv);
 
     Spy_Visitor v;
     expression_cast<Expression::Type_Annotated*>(ast)->visit_type_annotation(v);
@@ -291,7 +291,7 @@ TEST_F(Test_Parse_Expression_TypeScript, as_type_assertion) {
     Expression* ast = p.parse_expression();
     ASSERT_EQ(ast->kind(), Expression_Kind::As_Type_Assertion);
     EXPECT_EQ(summarize(ast->child_0()), "var x");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x as y"_sv));
+    p.assert_offsets(ast->span(), 0, u8"x as y"_sv);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_enter_type_scope",  // as
                               "visit_variable_type_use",
@@ -371,7 +371,7 @@ TEST_F(Test_Parse_Expression_TypeScript,
     Expression* ast = p.parse_expression();
     ASSERT_EQ(ast->kind(), Expression_Kind::As_Type_Assertion);
     EXPECT_EQ(summarize(ast->child_0()), "object()");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"{} as const"_sv));
+    p.assert_offsets(ast->span(), 0, u8"{} as const"_sv);
   }
 }
 
@@ -417,14 +417,14 @@ TEST_F(Test_Parse_Expression_TypeScript,
     SCOPED_TRACE(code);
     Test_Parser p(code.string_view(), typescript_options, capture_diags);
     p.parse_and_visit_expression();
-    EXPECT_THAT(p.errors,
-                ElementsAreArray({
-                    DIAG_TYPE_2_OFFSETS(
-                        p.code,
-                        Diag_TypeScript_As_Const_With_Non_Literal_Typeable,  //
-                        expression, 0, expression,                           //
-                        as_const, expression.size() + 1, u8"as const"_sv),
-                }));
+    assert_diagnostics(
+        p.code, p.errors,
+        {
+            DIAGNOSTIC_ASSERTION_2_SPANS(
+                Diag_TypeScript_As_Const_With_Non_Literal_Typeable,  //
+                expression, 0, expression,                           //
+                as_const, expression.size() + 1, u8"as const"_sv),
+        });
   }
 
   test_parse_and_visit_expression(
@@ -479,7 +479,7 @@ TEST_F(Test_Parse_Expression_TypeScript, satisfies) {
     Expression* ast = p.parse_expression();
     ASSERT_EQ(ast->kind(), Expression_Kind::Satisfies);
     EXPECT_EQ(summarize(ast->child_0()), "var x");
-    EXPECT_THAT(ast->span(), p.matches_offsets(0, u8"x satisfies y"_sv));
+    p.assert_offsets(ast->span(), 0, u8"x satisfies y"_sv);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_enter_type_scope",  // satisfies
                               "visit_variable_type_use",

@@ -352,10 +352,28 @@ std::string summarize(std::optional<Expression*> expression) {
   }
 }
 
+std::ostream& operator<<(std::ostream& out, Source_Code_Span_Offsets offsets) {
+  out << offsets.begin << '-' << offsets.end;
+  return out;
+}
+
+bool operator==(Source_Code_Span_Offsets lhs, Source_Code_Span_Offsets rhs) {
+  return lhs.begin == rhs.begin && lhs.end == rhs.end;
+}
+
+bool operator!=(Source_Code_Span_Offsets lhs, Source_Code_Span_Offsets rhs) {
+  return !(lhs == rhs);
+}
+
 void Test_Parser::assert_diagnostics(Span<const Diagnostic_Assertion> diags,
                                      Source_Location caller) {
-  quick_lint_js::assert_diagnostics(this->code, this->errors_.errors, diags,
-                                    caller);
+  quick_lint_js::assert_diagnostics(this->code, this->errors, diags, caller);
+}
+
+std::vector<Diag_Collector::Diag> Test_Parser::legacy_errors() {
+  Diag_Collector d;
+  d.report(this->diag_reporter_.diags());
+  return std::move(d.errors);
 }
 
 Spy_Visitor test_parse_and_visit_statement(String8_View input, No_Diags_Tag,

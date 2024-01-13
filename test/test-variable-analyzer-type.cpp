@@ -285,9 +285,6 @@ TEST(Test_Variable_Analyzer_Type, type_use_does_not_see_non_type_variables) {
 
 TEST(Test_Variable_Analyzer_Type,
      interfaces_are_ignored_in_runtime_expressions) {
-  using Diags_Matcher =
-      testing::Matcher<const std::vector<Diag_Collector::Diag>&>;
-
   static const Char8 outer_declaration[] = u8"I";
   static const Char8 declaration[] = u8"I";
 
@@ -302,6 +299,8 @@ TEST(Test_Variable_Analyzer_Type,
       delete_expression.data() + 7, delete_expression.data() + 8);
   ASSERT_EQ(deleted_variable_span.string_view(), u8"I"_sv);
 
+  Monotonic_Allocator memory("test");
+
   struct Variable_Visit_Kind {
     const char* description;
     void (*visit)(Variable_Analyzer&);
@@ -312,8 +311,15 @@ TEST(Test_Variable_Analyzer_Type,
     //
     // If no run-time variable exists with the same name as the interface,
     // 'runtime_var_kind' is nullopt.
-    Diags_Matcher (*get_diags_matcher)(
-        std::optional<Variable_Kind> runtime_var_kind);
+    void (*check_diagnostics_impl)(
+        const Diag_List& diags, std::optional<Variable_Kind> runtime_var_kind,
+        Source_Location caller);
+
+    void check_diagnostics(
+        const Diag_List& diags, std::optional<Variable_Kind> runtime_var_kind,
+        Source_Location caller = Source_Location::current()) {
+      return this->check_diagnostics_impl(diags, runtime_var_kind, caller);
+    }
   };
 
   Variable_Visit_Kind variable_visit_kinds[] = {
@@ -324,24 +330,31 @@ TEST(Test_Variable_Analyzer_Type,
                 l.visit_variable_assignment(identifier_of(assignment),
                                             Variable_Assignment_Flags::none);
               },
-          .get_diags_matcher = [](std::optional<Variable_Kind> runtime_var_kind)
-              -> Diags_Matcher {
+          .check_diagnostics_impl =
+              [](const Diag_List& diags,
+                 std::optional<Variable_Kind> runtime_var_kind,
+                 Source_Location caller) -> void {
             if (runtime_var_kind.has_value()) {
               if (*runtime_var_kind == Variable_Kind::_const) {
-                return ElementsAreArray({
-                    DIAG_TYPE_2_SPANS(Diag_Assignment_To_Const_Variable,  //
-                                      assignment, span_of(assignment),    //
-                                      declaration, span_of(outer_declaration)),
-                });
+                auto* diag =
+                    get_only_diagnostic<Diag_Assignment_To_Const_Variable>(
+                        diags, Diag_Type::Diag_Assignment_To_Const_Variable);
+                ASSERT_NE_AT_CALLER(diag, nullptr);
+                EXPECT_TRUE_AT_CALLER(
+                    same_pointers(diag->assignment, span_of(assignment)));
+                EXPECT_TRUE_AT_CALLER(same_pointers(
+                    diag->declaration, span_of(outer_declaration)));
               } else {
-                return IsEmpty();
+                EXPECT_TRUE_AT_CALLER(diags.empty());
               }
             } else {
-              // TODO(strager): Report a more helpful message.
-              return ElementsAreArray({
-                  DIAG_TYPE_SPAN(Diag_Assignment_To_Undeclared_Variable,
-                                 assignment, span_of(assignment)),
-              });
+              // TODO(strager): Report a more helpful diagnostic.
+              auto* diag =
+                  get_only_diagnostic<Diag_Assignment_To_Undeclared_Variable>(
+                      diags, Diag_Type::Diag_Assignment_To_Undeclared_Variable);
+              ASSERT_NE_AT_CALLER(diag, nullptr);
+              EXPECT_TRUE_AT_CALLER(
+                  same_pointers(diag->assignment, span_of(assignment)));
             }
           },
       },
@@ -353,38 +366,45 @@ TEST(Test_Variable_Analyzer_Type,
                 l.visit_variable_delete_use(Identifier(deleted_variable_span),
                                             delete_keyword_span);
               },
-          .get_diags_matcher = [](std::optional<Variable_Kind> runtime_var_kind)
-              -> Diags_Matcher {
+          .check_diagnostics_impl =
+              [](const Diag_List& diags,
+                 std::optional<Variable_Kind> runtime_var_kind,
+                 Source_Location caller) -> void {
             if (runtime_var_kind.has_value()) {
-              return ElementsAreArray({
-                  DIAG_TYPE_OFFSETS(
-                      &delete_expression,
-                      Diag_Redundant_Delete_Statement_On_Variable,  //
-                      delete_expression, 0, u8"delete I"_sv),
-              });
+              auto* diag = get_only_diagnostic<
+                  Diag_Redundant_Delete_Statement_On_Variable>(
+                  diags,
+                  Diag_Type::Diag_Redundant_Delete_Statement_On_Variable);
+              ASSERT_NE_AT_CALLER(diag, nullptr);
+              EXPECT_TRUE_AT_CALLER(same_pointers(diag->delete_expression,
+                                                  span_of(delete_expression)));
             } else {
-              return IsEmpty();
+              EXPECT_TRUE_AT_CALLER(diags.empty());
             }
           },
       },
 
-      {.description = "visit_variable_use",
-       .visit =
-           [](Variable_Analyzer& l) {
-             l.visit_variable_use(identifier_of(use));
-           },
-       .get_diags_matcher =
-           [](std::optional<Variable_Kind> runtime_var_kind) -> Diags_Matcher {
-         if (runtime_var_kind.has_value()) {
-           return IsEmpty();
-         } else {
-           // TODO(strager): Report a more helpful message.
-           return ElementsAreArray({
-               DIAG_TYPE_SPAN(Diag_Use_Of_Undeclared_Variable, name,
-                              span_of(use)),
-           });
-         }
-       }},
+      {
+          .description = "visit_variable_use",
+          .visit =
+              [](Variable_Analyzer& l) {
+                l.visit_variable_use(identifier_of(use));
+              },
+          .check_diagnostics_impl =
+              [](const Diag_List& diags,
+                 std::optional<Variable_Kind> runtime_var_kind,
+                 Source_Location caller) -> void {
+            if (runtime_var_kind.has_value()) {
+              EXPECT_TRUE_AT_CALLER(diags.empty());
+            } else {
+              // TODO(strager): Report a more helpful diagnostic.
+              auto* diag = get_only_diagnostic<Diag_Use_Of_Undeclared_Variable>(
+                  diags, Diag_Type::Diag_Use_Of_Undeclared_Variable);
+              ASSERT_NE_AT_CALLER(diag, nullptr);
+              EXPECT_TRUE_AT_CALLER(same_pointers(diag->name, span_of(use)));
+            }
+          },
+      },
   };
 
   for (Variable_Visit_Kind& visit_kind : variable_visit_kinds) {
@@ -393,7 +413,7 @@ TEST(Test_Variable_Analyzer_Type,
     {
       // interface I {}
       // I;              // ERROR
-      Diag_Collector v;
+      Diag_List_Diag_Reporter v(&memory);
       Variable_Analyzer l(&v, &default_globals, javascript_var_options);
       l.visit_variable_declaration(identifier_of(declaration),
                                    Variable_Kind::_interface,
@@ -401,7 +421,7 @@ TEST(Test_Variable_Analyzer_Type,
       visit_kind.visit(l);
       l.visit_end_of_module();
 
-      EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(std::nullopt));
+      visit_kind.check_diagnostics(v.diags(), std::nullopt);
     }
 
     {
@@ -409,7 +429,7 @@ TEST(Test_Variable_Analyzer_Type,
       // {
       //   I;            // ERROR
       // }
-      Diag_Collector v;
+      Diag_List_Diag_Reporter v(&memory);
       Variable_Analyzer l(&v, &default_globals, javascript_var_options);
       l.visit_variable_declaration(identifier_of(declaration),
                                    Variable_Kind::_interface,
@@ -419,7 +439,7 @@ TEST(Test_Variable_Analyzer_Type,
       l.visit_exit_block_scope();
       l.visit_end_of_module();
 
-      EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(std::nullopt));
+      visit_kind.check_diagnostics(v.diags(), std::nullopt);
     }
 
     {
@@ -429,7 +449,7 @@ TEST(Test_Variable_Analyzer_Type,
       //     I;            // ERROR
       //   });
       // });
-      Diag_Collector v;
+      Diag_List_Diag_Reporter v(&memory);
       Variable_Analyzer l(&v, &default_globals, javascript_var_options);
       l.visit_variable_declaration(identifier_of(declaration),
                                    Variable_Kind::_interface,
@@ -443,7 +463,7 @@ TEST(Test_Variable_Analyzer_Type,
       l.visit_exit_function_scope();
       l.visit_end_of_module();
 
-      EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(std::nullopt));
+      visit_kind.check_diagnostics(v.diags(), std::nullopt);
     }
 
     for (Variable_Kind outer_kind : {
@@ -464,7 +484,7 @@ TEST(Test_Variable_Analyzer_Type,
         //   interface I {}
         //   I;
         // }
-        Diag_Collector v;
+        Diag_List_Diag_Reporter v(&memory);
         Variable_Analyzer l(&v, &default_globals, javascript_var_options);
         l.visit_variable_declaration(identifier_of(outer_declaration),
                                      outer_kind,
@@ -477,7 +497,7 @@ TEST(Test_Variable_Analyzer_Type,
         l.visit_exit_block_scope();
         l.visit_end_of_module();
 
-        EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(outer_kind));
+        visit_kind.check_diagnostics(v.diags(), outer_kind);
       }
 
       {
@@ -486,7 +506,7 @@ TEST(Test_Variable_Analyzer_Type,
         // {
         //   I;
         // }
-        Diag_Collector v;
+        Diag_List_Diag_Reporter v(&memory);
         Variable_Analyzer l(&v, &default_globals, javascript_var_options);
         l.visit_variable_declaration(identifier_of(outer_declaration),
                                      outer_kind,
@@ -499,14 +519,14 @@ TEST(Test_Variable_Analyzer_Type,
         l.visit_exit_block_scope();
         l.visit_end_of_module();
 
-        EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(outer_kind));
+        visit_kind.check_diagnostics(v.diags(), outer_kind);
       }
 
       {
         // let I;
         // interface I {}
         // I;
-        Diag_Collector v;
+        Diag_List_Diag_Reporter v(&memory);
         Variable_Analyzer l(&v, &default_globals, javascript_var_options);
         l.visit_variable_declaration(identifier_of(outer_declaration),
                                      outer_kind,
@@ -517,14 +537,14 @@ TEST(Test_Variable_Analyzer_Type,
         visit_kind.visit(l);
         l.visit_end_of_module();
 
-        EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(outer_kind));
+        visit_kind.check_diagnostics(v.diags(), outer_kind);
       }
 
       {
         // interface I {}
         // let I;
         // I;
-        Diag_Collector v;
+        Diag_List_Diag_Reporter v(&memory);
         Variable_Analyzer l(&v, &default_globals, javascript_var_options);
         l.visit_variable_declaration(identifier_of(declaration),
                                      Variable_Kind::_interface,
@@ -535,7 +555,7 @@ TEST(Test_Variable_Analyzer_Type,
         visit_kind.visit(l);
         l.visit_end_of_module();
 
-        EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(outer_kind));
+        visit_kind.check_diagnostics(v.diags(), outer_kind);
       }
 
       {
@@ -544,7 +564,7 @@ TEST(Test_Variable_Analyzer_Type,
         // });
         // interface I {}
         // let I;
-        Diag_Collector v;
+        Diag_List_Diag_Reporter v(&memory);
         Variable_Analyzer l(&v, &default_globals, javascript_var_options);
         l.visit_enter_function_scope();
         l.visit_enter_function_scope_body();
@@ -558,7 +578,7 @@ TEST(Test_Variable_Analyzer_Type,
                                      Variable_Declaration_Flags::none);
         l.visit_end_of_module();
 
-        EXPECT_THAT(v.errors, visit_kind.get_diags_matcher(outer_kind));
+        visit_kind.check_diagnostics(v.diags(), outer_kind);
       }
     }
   }

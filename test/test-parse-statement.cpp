@@ -610,9 +610,7 @@ TEST_F(Test_Parse_Statement, if_else_with_malformed_condition) {
                                   "visit_enter_block_scope",  //
                                   "visit_variable_use",       // e
                                   "visit_exit_block_scope"}));
-    EXPECT_THAT(
-        p.errors,
-        ::testing::Not(::testing::Contains(DIAG_TYPE(Diag_Else_Has_No_If))));
+    EXPECT_FALSE(p.errors.have_diagnostic(Diag_Type::Diag_Else_Has_No_If));
   }
 }
 
@@ -1306,11 +1304,25 @@ TEST_F(Test_Parse_Statement, if_body_with_semicolon_typescript) {
                           }));
   }
 
-  {
-    Spy_Visitor p = test_parse_and_visit_statement(
-        u8"if (a) {} else;\n"_sv, no_diags, typescript_options);
-    EXPECT_THAT(p.errors, IsEmpty());
-  }
+  test_parse_and_visit_statement(u8"if (a) {} else;\n"_sv, no_diags,
+                                 typescript_options);
+}
+
+TEST_F(Test_Parse_Statement, disallow_for_await_in_non_async_function) {
+  Spy_Visitor p = test_parse_and_visit_statement(
+      u8"function f() { for await (let x of []) {} }"_sv,  //
+      u8"                   ^^^^^ Diag_Await_Operator_Outside_Async"_diag);
+  EXPECT_THAT(p.visits, ElementsAreArray({
+                            "visit_enter_function_scope",       //
+                            "visit_enter_function_scope_body",  //
+                            "visit_enter_for_scope",            //
+                            "visit_variable_declaration",       // x
+                            "visit_enter_block_scope",          //
+                            "visit_exit_block_scope",           //
+                            "visit_exit_for_scope",             //
+                            "visit_exit_function_scope",        //
+                            "visit_variable_declaration",       //
+                        }));
 }
 }
 }

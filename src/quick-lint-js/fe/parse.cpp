@@ -158,6 +158,31 @@ Expression* Parser::build_expression(Binary_Expression_Builder& builder) {
   }
 }
 
+void Parser::check_all_jsx_attributes() {
+  switch (this->options_.jsx_mode) {
+  case Parser_JSX_Mode::none:
+    break;
+
+  case Parser_JSX_Mode::auto_detect:
+    if (this->imported_react_ + this->imported_preact_ > 1) {
+      // Ambiguous. Don't report any diagnostics.
+      break;
+    }
+    if (this->imported_react_) {
+      goto react;
+    }
+    break;
+
+  react:
+  case Parser_JSX_Mode::react:
+    this->jsx_intrinsic_attributes_.for_each(
+        [&](const Identifier& attribute_name) -> void {
+          this->check_jsx_attribute(attribute_name);
+        });
+    break;
+  }
+}
+
 QLJS_WARNING_PUSH
 QLJS_WARNING_IGNORE_GCC("-Wnull-dereference")
 void Parser::check_jsx_attribute(const Identifier& attribute_name) {
@@ -466,6 +491,57 @@ void Parser::error_on_invalid_as_const(Expression* ast,
             .as_const = as_const_span,
         });
     break;
+  }
+}
+
+void Parser::warn_on_dot_operator_after_optional_chain(Expression::Dot* ast) {
+  Expression* lhs = ast->child_;
+  Source_Code_Span operator_span = ast->operator_span_;
+  auto is_optional_chain = [](String8_View s) -> bool { return s[0] == u8'?'; };
+
+  // we know the current node is a dot operator.
+  // If it is a '.' and its parent is a '?.' or a '?.(' or a '?.['
+  // then we can report a warning
+  if (!is_optional_chain(operator_span.string_view())) {
+    switch (lhs->kind()) {
+    case Expression_Kind::Dot: {
+      auto lhs_dot = expression_cast<Expression::Dot*>(lhs);
+      Source_Code_Span lhs_operator_span = lhs_dot->operator_span_;
+      if (is_optional_chain(lhs_operator_span.string_view())) {
+        this->diag_reporter_->report(Diag_Using_Dot_After_Optional_Chaining{
+            .dot_op = operator_span,
+            .optional_chain_op = lhs_operator_span,
+        });
+      }
+      break;
+    }
+    case Expression_Kind::Call: {
+      auto lhs_call = expression_cast<Expression::Call*>(lhs);
+      std::optional<Source_Code_Span> lhs_operator_span =
+          lhs_call->optional_chaining_operator_span();
+      if (lhs_operator_span.has_value()) {
+        this->diag_reporter_->report(Diag_Using_Dot_After_Optional_Chaining{
+            .dot_op = operator_span,
+            .optional_chain_op = *lhs_operator_span,
+        });
+      }
+      break;
+    }
+    case Expression_Kind::Index: {
+      auto lhs_index = expression_cast<Expression::Index*>(lhs);
+      std::optional<Source_Code_Span> lhs_operator_span =
+          lhs_index->optional_chaining_operator_span();
+      if (lhs_operator_span.has_value()) {
+        this->diag_reporter_->report(Diag_Using_Dot_After_Optional_Chaining{
+            .dot_op = operator_span,
+            .optional_chain_op = *lhs_operator_span,
+        });
+      }
+      break;
+    }
+    default:
+      break;
+    }
   }
 }
 

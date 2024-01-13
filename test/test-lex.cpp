@@ -14,6 +14,7 @@
 #include <quick-lint-js/container/padded-string.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
+#include <quick-lint-js/diagnostic-assertion.h>
 #include <quick-lint-js/fe/lex.h>
 #include <quick-lint-js/fe/source-code-span.h>
 #include <quick-lint-js/fe/token.h>
@@ -53,6 +54,14 @@ class Test_Lex : public ::testing::Test {
       String8_View input, Diagnostic_Assertion,
       String8_View expected_identifier_name,
       Source_Location = Source_Location::current());
+  void check_single_token_with_errors(
+      String8_View input, Diagnostic_Assertion, Diagnostic_Assertion,
+      String8_View expected_identifier_name,
+      Source_Location = Source_Location::current());
+  void check_single_token_with_errors(
+      String8_View input, Span<const Diagnostic_Assertion>,
+      String8_View expected_identifier_name,
+      Source_Location = Source_Location::current());
   void check_tokens(String8_View input,
                     std::initializer_list<Token_Type> expected_token_types,
                     Source_Location = Source_Location::current());
@@ -87,13 +96,13 @@ class Test_Lex : public ::testing::Test {
       void (*check_errors)(Padded_String_View input,
                            const std::vector<Diag_Collector::Diag>&),
       Source_Location = Source_Location::current());
-  std::vector<Token> lex_to_eof(Padded_String_View, Diag_Collector&);
+  std::vector<Token> lex_to_eof(Padded_String_View, Diag_Reporter&);
   std::vector<Token> lex_to_eof(Padded_String_View,
                                 Source_Location = Source_Location::current());
   std::vector<Token> lex_to_eof(String8_View,
                                 Source_Location = Source_Location::current());
 
-  Lexer& make_lexer(Padded_String_View input, Diag_Collector* errors) {
+  Lexer& make_lexer(Padded_String_View input, Diag_Reporter* errors) {
     return this->lexers_.emplace_back(input, errors);
   }
 
@@ -101,6 +110,8 @@ class Test_Lex : public ::testing::Test {
   // Lexer::skip_in_jsx instead of Lexer::skip. This has no effect on the first
   // token.
   bool lex_jsx_tokens = false;
+
+  Monotonic_Allocator memory_{"test"};
 
  private:
   Linked_Vector<Lexer> lexers_ = Linked_Vector<Lexer>(new_delete_resource());
@@ -114,30 +125,30 @@ TEST_F(Test_Lex, lex_block_comments) {
   EXPECT_THAT(this->lex_to_eof(u8"/**/"_sv), IsEmpty());
 
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"hello /* unterminated comment "_sv);
     auto error = /*  */ u8"      ^^ Diag_Unclosed_Block_Comment"_diag;
     Lexer l(&input, &v);
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 }
 
 TEST_F(Test_Lex, lex_unopened_block_comment) {
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"hello */"_sv);
     auto error = /*  */ u8"      ^^ Diag_Unopened_Block_Comment"_diag;
     Lexer l(&input, &v);  // identifier
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
     l.skip();  // end of file
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"*-----*/"_sv);
     auto error = /*  */ u8"      ^^ Diag_Unopened_Block_Comment"_diag;
     Lexer l(&input, &v);
@@ -147,10 +158,10 @@ TEST_F(Test_Lex, lex_unopened_block_comment) {
     }
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"*******/"_sv);
     auto error = /*  */ u8"      ^^ Diag_Unopened_Block_Comment"_diag;
     Lexer l(&input, &v);
@@ -162,33 +173,33 @@ TEST_F(Test_Lex, lex_unopened_block_comment) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"*/"_sv);
     auto error = /*  */ u8"^^ Diag_Unopened_Block_Comment"_diag;
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"**/"_sv);
     auto error = /*  */ u8" ^^ Diag_Unopened_Block_Comment"_diag;
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::star);
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 }
 
 TEST_F(Test_Lex, lex_regexp_literal_starting_with_star_slash) {
   {
     // '/*' is not an end of block comment because it precedes a regexp literal
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"*/ hello/"_sv);
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::star);
@@ -200,14 +211,14 @@ TEST_F(Test_Lex, lex_regexp_literal_starting_with_star_slash) {
     EXPECT_EQ(l.peek().end, &input[input.size()]);
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
-    EXPECT_THAT(v.errors, IsEmpty());
+    assert_diagnostics(&input, v.diags(), {});
   }
 }
 
 TEST_F(Test_Lex, lex_regexp_literal_starting_with_star_star_slash) {
   {
     Padded_String input(u8"3 **/ banana/"_sv);
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::number);
     l.skip();
@@ -220,7 +231,7 @@ TEST_F(Test_Lex, lex_regexp_literal_starting_with_star_star_slash) {
     EXPECT_EQ(l.peek().end, &input[input.size()]);
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
-    EXPECT_THAT(v.errors, IsEmpty());
+    assert_diagnostics(&input, v.diags(), {});
   }
 }
 
@@ -641,7 +652,7 @@ TEST_F(Test_Lex, lex_number_with_many_underscores) {
 
 TEST_F(Test_Lex, lex_number_with_multiple_groups_of_consecutive_underscores) {
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     // clang-format off
     Padded_String input(u8"123__45___6"_sv);
     auto error1 = /* */ u8"       ^^^ Diag_Number_Literal_Contains_Consecutive_Underscores"_diag;
@@ -653,7 +664,7 @@ TEST_F(Test_Lex, lex_number_with_multiple_groups_of_consecutive_underscores) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors, {error0, error1});
+    assert_diagnostics(&input, v.diags(), {error0, error1});
   }
 }
 
@@ -700,7 +711,7 @@ TEST_F(Test_Lex, lex_strings) {
   }
 
   for (String8_View line_terminator : line_terminators_except_ls_ps) {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(
         concat(u8"'unterminated"_sv, line_terminator, u8"hello"_sv));
     Lexer l(&input, &v);
@@ -709,7 +720,7 @@ TEST_F(Test_Lex, lex_strings) {
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
     EXPECT_EQ(l.peek().identifier_name().normalized_name(), u8"hello"_sv);
 
-    assert_diagnostics(&input, v.errors,
+    assert_diagnostics(&input, v.diags(),
                        {
                            // 'unterminated\nhello
                            u8"^^^^^^^^^^^^^ Diag_Unclosed_String_Literal"_diag,
@@ -717,27 +728,27 @@ TEST_F(Test_Lex, lex_strings) {
   }
 
   for (String8_View line_terminator : line_terminators_except_ls_ps) {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter diags(&this->memory_);
     Padded_String input(
         concat(u8"'separated"_sv, line_terminator, u8"hello'"_sv));
-    Lexer l(&input, &v);
+    Lexer l(&input, &diags);
     EXPECT_EQ(l.peek().type, Token_Type::string);
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    EXPECT_THAT(v.errors,
-                ElementsAreArray({
-                    DIAG_TYPE_OFFSETS(&input,
-                                      Diag_Unclosed_String_Literal,  //
-                                      string_literal, 0, input.string_view()),
-                }));
+    assert_diagnostics(
+        &input, diags.diags(),
+        {
+            DIAGNOSTIC_ASSERTION_SPAN(Diag_Unclosed_String_Literal,  //
+                                      string_literal, 0, input),
+        });
   }
 
   for (String8_View line_terminator : line_terminators_except_ls_ps) {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter diags(&this->memory_);
     Padded_String input(concat(u8"'separated"_sv, line_terminator,
                                line_terminator, u8"hello'"_sv));
-    Lexer l(&input, &v);
+    Lexer l(&input, &diags);
     EXPECT_EQ(l.peek().type, Token_Type::string);
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
@@ -746,20 +757,22 @@ TEST_F(Test_Lex, lex_strings) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    EXPECT_THAT(
-        v.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(&input, Diag_Unclosed_String_Literal,  //
-                              string_literal, 0, u8"'separated"_sv),
-            DIAG_TYPE_OFFSETS(
-                &input, Diag_Unclosed_String_Literal, string_literal,  //
-                u8"'separatedhello"_sv.size() + 2 * line_terminator.size(),
-                u8"'"_sv),
-        }));
+    assert_diagnostics(
+        &input, diags.diags(),
+        {
+            DIAGNOSTIC_ASSERTION_SPAN(Diag_Unclosed_String_Literal,  //
+                                      string_literal, 0, u8"'separated"_sv),
+            DIAGNOSTIC_ASSERTION_SPAN(Diag_Unclosed_String_Literal,  //
+                                      string_literal,
+                                      u8"'separated"_sv.size() +
+                                          2 * line_terminator.size() +
+                                          u8"hello"_sv.size(),
+                                      u8"'"_sv),
+        });
   }
 
   for (String8_View line_terminator : line_terminators_except_ls_ps) {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(
         concat(u8"let x = 'hello"_sv, line_terminator, u8"let y = 'world'"_sv));
     Lexer l(&input, &v);
@@ -781,7 +794,7 @@ TEST_F(Test_Lex, lex_strings) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors,
+    assert_diagnostics(&input, v.diags(),
                        {
                            // let x = 'hello\nlet y = 'world'
                            u8"        ^^^^^^ Diag_Unclosed_String_Literal"_diag,
@@ -986,7 +999,7 @@ world`)"_sv,
                                  {Token_Type::complete_template});
 
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"`${un}terminated"_sv);
     auto error = /*  */ u8"^^^^^^^^^^^^^^^^ Diag_Unclosed_Template"_diag;
 
@@ -1002,7 +1015,7 @@ world`)"_sv,
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 
   this->check_tokens_with_errors(
@@ -1017,13 +1030,13 @@ TEST_F(Test_Lex, templates_buffer_unicode_escape_errors) {
     Padded_String input(u8"`hello\\u`"_sv);
     auto error = /*  */ u8"      ^^^^ Diag_Expected_Hex_Digits_In_Unicode_Escape"_diag;
     // clang-format on
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer& l = this->make_lexer(&input, &errors);
 
     EXPECT_EQ(l.peek().type, Token_Type::complete_template);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
     l.peek().report_errors_for_escape_sequences_in_template(&errors);
-    assert_diagnostics(&input, errors.errors, {error});
+    assert_diagnostics(&input, errors.diags(), {error});
 
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
@@ -1034,13 +1047,13 @@ TEST_F(Test_Lex, templates_buffer_unicode_escape_errors) {
     Padded_String input(u8"`hello\\u{110000}`"_sv);
     auto error = /*  */ u8"      ^^^^^^^^^^^ Diag_Escaped_Code_Point_In_Unicode_Out_Of_Range"_diag;
     // clang-format on
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer& l = this->make_lexer(&input, &errors);
 
     EXPECT_EQ(l.peek().type, Token_Type::complete_template);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
     l.peek().report_errors_for_escape_sequences_in_template(&errors);
-    assert_diagnostics(&input, errors.errors, {error});
+    assert_diagnostics(&input, errors.diags(), {error});
 
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
@@ -1051,13 +1064,13 @@ TEST_F(Test_Lex, templates_buffer_unicode_escape_errors) {
     Padded_String input(u8"`hello\\u${expr}`"_sv);
     auto error = /*  */ u8"      ^^^^ Diag_Expected_Hex_Digits_In_Unicode_Escape"_diag;
     // clang-format on
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer& l = this->make_lexer(&input, &errors);
 
     EXPECT_EQ(l.peek().type, Token_Type::incomplete_template);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
     l.peek().report_errors_for_escape_sequences_in_template(&errors);
-    assert_diagnostics(&input, errors.errors, {error});
+    assert_diagnostics(&input, errors.diags(), {error});
 
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
@@ -1067,13 +1080,13 @@ TEST_F(Test_Lex, templates_buffer_unicode_escape_errors) {
 TEST_F(Test_Lex, templates_do_not_buffer_valid_unicode_escapes) {
   {
     Padded_String input(u8"`hell\\u{6f}`"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer& l = this->make_lexer(&input, &errors);
 
     EXPECT_EQ(l.peek().type, Token_Type::complete_template);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
     l.peek().report_errors_for_escape_sequences_in_template(&errors);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
 
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
@@ -1081,13 +1094,13 @@ TEST_F(Test_Lex, templates_do_not_buffer_valid_unicode_escapes) {
 
   {
     Padded_String input(u8"`hell\\u{6f}${expr}`"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer& l = this->make_lexer(&input, &errors);
 
     EXPECT_EQ(l.peek().type, Token_Type::incomplete_template);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
     l.peek().report_errors_for_escape_sequences_in_template(&errors);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
 
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
@@ -1113,10 +1126,10 @@ TEST_F(Test_Lex, lex_template_literal_with_ascii_control_characters) {
 }
 
 TEST_F(Test_Lex, lex_regular_expression_literals) {
-  auto check_regexp = [](String8_View raw_code) {
+  auto check_regexp = [&](String8_View raw_code) {
     Padded_String code(raw_code);
     SCOPED_TRACE(code);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
 
     EXPECT_THAT(l.peek().type,
@@ -1128,7 +1141,7 @@ TEST_F(Test_Lex, lex_regular_expression_literals) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   };
 
   check_regexp(u8"/ /"_sv);
@@ -1142,19 +1155,20 @@ TEST_F(Test_Lex, lex_regular_expression_literals) {
   for (String8_View raw_code : {u8"/end_of_file"_sv, u8R"(/eof\)"_sv}) {
     Padded_String code(raw_code);
     SCOPED_TRACE(code);
-    Diag_Collector v;
-    Lexer l(&code, &v);
+    Diag_List_Diag_Reporter diags(&this->memory_);
+    Lexer l(&code, &diags);
     EXPECT_EQ(l.peek().type, Token_Type::slash);
     l.reparse_as_regexp();
     EXPECT_EQ(l.peek().type, Token_Type::regexp);
     EXPECT_EQ(l.peek().begin, &code[0]);
     EXPECT_EQ(l.peek().end, &code[code.size()]);
 
-    EXPECT_THAT(v.errors,
-                ElementsAreArray({
-                    DIAG_TYPE_OFFSETS(&code, Diag_Unclosed_Regexp_Literal,  //
-                                      regexp_literal, 0, code.string_view()),
-                }));
+    assert_diagnostics(
+        &code, diags.diags(),
+        {
+            DIAGNOSTIC_ASSERTION_SPAN(Diag_Unclosed_Regexp_Literal,  //
+                                      regexp_literal, 0, code),
+        });
 
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
@@ -1164,7 +1178,7 @@ TEST_F(Test_Lex, lex_regular_expression_literals) {
     Padded_String code(
         concat(u8"/first_line"_sv, line_terminator, u8"second_line/"_sv));
     SCOPED_TRACE(code);
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Lexer l(&code, &v);
     EXPECT_EQ(l.peek().type, Token_Type::slash);
     l.reparse_as_regexp();
@@ -1172,7 +1186,7 @@ TEST_F(Test_Lex, lex_regular_expression_literals) {
     EXPECT_EQ(l.peek().begin, &code[0]);
     EXPECT_EQ(l.peek().end, code.data() + u8"/first_line"_sv.size());
 
-    assert_diagnostics(&code, v.errors,
+    assert_diagnostics(&code, v.diags(),
                        {
                            // /first_line\nsecond_line/
                            u8"^^^^^^^^^^^ Diag_Unclosed_Regexp_Literal"_diag,
@@ -1187,7 +1201,7 @@ TEST_F(Test_Lex, lex_regular_expression_literals) {
     Padded_String code(
         concat(u8"/first[line"_sv, line_terminator, u8"second]line/"_sv));
     SCOPED_TRACE(code);
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Lexer l(&code, &v);
     EXPECT_EQ(l.peek().type, Token_Type::slash);
     l.reparse_as_regexp();
@@ -1195,7 +1209,7 @@ TEST_F(Test_Lex, lex_regular_expression_literals) {
     EXPECT_EQ(l.peek().begin, &code[0]);
     EXPECT_EQ(l.peek().end, code.data() + u8"/first[line"_sv.size());
 
-    assert_diagnostics(&code, v.errors,
+    assert_diagnostics(&code, v.diags(),
                        {
                            // /first[line\nsecond]line/
                            u8"^^^^^^^^^^^ Diag_Unclosed_Regexp_Literal"_diag,
@@ -1227,7 +1241,7 @@ TEST_F(Test_Lex, lex_regular_expression_literal_with_digit_flag) {
 }
 
 TEST_F(Test_Lex, lex_unicode_escape_in_regular_expression_literal_flags) {
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   // clang-format off
   Padded_String input(u8"/hello/\\u{67}i"_sv);
   auto error = /*  */ u8"       ^^^^^^^Diag_Regexp_Literal_Flags_Cannot_Contain_Unicode_Escapes"_diag;
@@ -1241,11 +1255,11 @@ TEST_F(Test_Lex, lex_unicode_escape_in_regular_expression_literal_flags) {
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-  assert_diagnostics(&input, errors.errors, {error});
+  assert_diagnostics(&input, errors.diags(), {error});
 }
 
 TEST_F(Test_Lex, lex_non_ascii_in_regular_expression_literal_flags) {
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Padded_String input(u8"/hello/\u05d0"_sv);
 
   Lexer l(&input, &errors);
@@ -1284,7 +1298,7 @@ TEST_F(Test_Lex, lex_regular_expression_literal_with_ascii_control_characters) {
     Padded_String input(
         concat(u8"/hello"_sv, control_character, u8"world/"_sv));
     SCOPED_TRACE(input);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&input, &errors);
 
     l.reparse_as_regexp();
@@ -1292,7 +1306,7 @@ TEST_F(Test_Lex, lex_regular_expression_literal_with_ascii_control_characters) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
   }
 
   for (String8_View control_character :
@@ -1300,7 +1314,7 @@ TEST_F(Test_Lex, lex_regular_expression_literal_with_ascii_control_characters) {
     Padded_String input(
         concat(u8"/hello\\"_sv, control_character, u8"world/"_sv));
     SCOPED_TRACE(input);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&input, &errors);
 
     l.reparse_as_regexp();
@@ -1308,7 +1322,7 @@ TEST_F(Test_Lex, lex_regular_expression_literal_with_ascii_control_characters) {
     l.skip();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&input, errors.diags(), {});
   }
 }
 
@@ -1580,35 +1594,24 @@ TEST_F(Test_Lex, lex_identifier_with_out_of_range_escaped_character) {
 TEST_F(Test_Lex, lex_identifier_with_out_of_range_utf_8_sequence) {
   // f4 90 80 80 is U+110000
   this->check_single_token_with_errors(
-      "too\xf4\x90\x80\x80\x62ig"_s8v, "too\xf4\x90\x80\x80\x62ig"_s8v,
-      [](Padded_String_View input, const auto& errors) {
-        EXPECT_THAT(
-            errors,
-            ElementsAreArray({
-                DIAG_TYPE_OFFSETS(input, Diag_Invalid_Utf_8_Sequence,  //
-                                  sequence, std::strlen("too"),
-                                  "\xf4\x90\x80\x80"_s8v),
-            }));
-      });
+      "too\xf4\x90\x80\x80\x62ig"_s8v,
+      DIAGNOSTIC_ASSERTION_SPAN(Diag_Invalid_Utf_8_Sequence,  //
+                                sequence, std::strlen("too"),
+                                "\xf4\x90\x80\x80"_s8v),
+      "too\xf4\x90\x80\x80\x62ig"_s8v);
 }
 
 TEST_F(Test_Lex, lex_identifier_with_malformed_utf_8_sequence) {
   this->check_single_token_with_errors(
       "illegal\xc0\xc1\xc2\xc3\xc4utf8\xfe\xff"_s8v,
-      "illegal\xc0\xc1\xc2\xc3\xc4utf8\xfe\xff"_s8v,
-      [](Padded_String_View input, const auto& errors) {
-        EXPECT_THAT(
-            errors,
-            ElementsAreArray({
-                DIAG_TYPE_OFFSETS(input, Diag_Invalid_Utf_8_Sequence,  //
-                                  sequence, std::strlen("illegal"),
-                                  "\xc0\xc1\xc2\xc3\xc4"_s8v),
-                DIAG_TYPE_OFFSETS(
-                    input, Diag_Invalid_Utf_8_Sequence,  //
-                    sequence, std::strlen("illegal\xc0\xc1\xc2\xc3\xc4utf8"),
-                    "\xfe\xff"_s8v),
-            }));
-      });
+      DIAGNOSTIC_ASSERTION_SPAN(Diag_Invalid_Utf_8_Sequence,  //
+                                sequence, std::strlen("illegal"),
+                                "\xc0\xc1\xc2\xc3\xc4"_s8v),
+      DIAGNOSTIC_ASSERTION_SPAN(Diag_Invalid_Utf_8_Sequence,  //
+                                sequence,
+                                std::strlen("illegal\xc0\xc1\xc2\xc3\xc4utf8"),
+                                "\xfe\xff"_s8v),
+      "illegal\xc0\xc1\xc2\xc3\xc4utf8\xfe\xff"_s8v);
 }
 
 TEST_F(Test_Lex, lex_identifier_with_disallowed_character_escape_sequence) {
@@ -1857,19 +1860,22 @@ TEST_F(
   for (String8 keyword : disallowed_binding_identifier_keywords) {
     Padded_String code(escape_first_character_in_keyword(keyword));
     SCOPED_TRACE(code);
-    Diag_Collector errors;
-    Lexer& l = this->make_lexer(&code, &errors);
+    Diag_List_Diag_Reporter diags(&this->memory_);
+    Lexer& l = this->make_lexer(&code, &diags);
 
     EXPECT_THAT(l.peek().type,
                 Token_Type::reserved_keyword_with_escape_sequence);
     EXPECT_THAT(l.peek().identifier_name().normalized_name(), keyword);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, diags.diags(), {});
 
-    l.peek().report_errors_for_escape_sequences_in_keyword(&errors);
-    EXPECT_THAT(errors.errors,
-                ElementsAreArray({DIAG_TYPE_OFFSETS(
-                    &code, Diag_Keywords_Cannot_Contain_Escape_Sequences,  //
-                    escape_sequence, 0, u8"\\u{??}"_sv)}));
+    l.peek().report_errors_for_escape_sequences_in_keyword(&diags);
+    assert_diagnostics(
+        &code, diags.diags(),
+        {
+            DIAGNOSTIC_ASSERTION_SPAN(
+                Diag_Keywords_Cannot_Contain_Escape_Sequences,  //
+                escape_sequence, 0, u8"\\u{??}"_sv),
+        });
   }
 }
 
@@ -2046,7 +2052,7 @@ TEST_F(Test_Lex, lex_whitespace) {
 
 TEST_F(Test_Lex, unicode_next_line_is_invalid_in_javascript) {
   // TODO(strager): Treat U+0085 as whitespace but report a nice diagnostic.
-  Diag_Collector v;
+  Diag_List_Diag_Reporter v(&this->memory_);
   Padded_String code(u8"a\u0085false"_sv);
   auto error = /* */ u8" ^^^^^^ Diag_Character_Disallowed_In_Identifiers"_diag;
   Lexer l(&code, &v, Lexer_Options{.typescript = false});
@@ -2056,11 +2062,11 @@ TEST_F(Test_Lex, unicode_next_line_is_invalid_in_javascript) {
   EXPECT_EQ(l.peek().type, Token_Type::end_of_file)
       << "U+0085 should be interpreted as part of the identifier";
 
-  assert_diagnostics(&code, v.errors, {error});
+  assert_diagnostics(&code, v.diags(), {error});
 }
 
 TEST_F(Test_Lex, unicode_next_line_is_horizontal_whitespace_in_typescript) {
-  Diag_Collector v;
+  Diag_List_Diag_Reporter v(&this->memory_);
   Padded_String code(u8"a\u0085false"_sv);
   Lexer l(&code, &v, Lexer_Options{.typescript = true});
 
@@ -2069,7 +2075,7 @@ TEST_F(Test_Lex, unicode_next_line_is_horizontal_whitespace_in_typescript) {
   EXPECT_EQ(l.peek().type, Token_Type::kw_false);
   EXPECT_FALSE(l.peek().has_leading_newline);
 
-  EXPECT_THAT(v.errors, IsEmpty());
+  assert_diagnostics(&code, v.diags(), {});
 }
 
 TEST_F(Test_Lex, lex_shebang) {
@@ -2081,39 +2087,39 @@ TEST_F(Test_Lex, lex_shebang) {
 TEST_F(Test_Lex, lex_not_shebang) {
   // Whitespace must not appear between '#' and '!'.
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"# !notashebang"_sv);
     auto error = /*  */ u8"^ Diag_Unexpected_Hash_Character"_diag;
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::bang) << "# should be skipped";
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 
   // '#!' must be on the first line.
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"\n#!notashebang\n"_sv);
     auto error = /*  */ u8"  ^ Diag_Unexpected_Hash_Character"_diag;
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::bang) << "# should be skipped";
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 
   // Whitespace must not appear before '#!'.
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"  #!notashebang\n"_sv);
     auto error = /*  */ u8"  ^ Diag_Unexpected_Hash_Character"_diag;
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::bang) << "# should be skipped";
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     // clang-format off
     Padded_String input(u8"#\\u{21}\n"_sv);
     auto error = /*  */ u8" ^^^^^^^ Diag_Escaped_Character_Disallowed_In_Identifiers"_diag;
@@ -2122,20 +2128,20 @@ TEST_F(Test_Lex, lex_not_shebang) {
     EXPECT_EQ(l.peek().type, Token_Type::private_identifier);
     EXPECT_EQ(l.peek().identifier_name().normalized_name(), u8"#\\u{21}"_sv);
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 }
 
 TEST_F(Test_Lex, lex_unexpected_bom_before_shebang) {
   // BOM must not appear before '#!'.
   {
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Padded_String input(u8"\ufeff#!notashebang\n"_sv);
     auto error = /*  */ u8"^^^^^^ Diag_Unexpected_Bom_Before_Shebang"_diag;
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file) << "# should be skipped";
 
-    assert_diagnostics(&input, v.errors, {error});
+    assert_diagnostics(&input, v.diags(), {error});
   }
 }
 
@@ -2143,17 +2149,17 @@ TEST_F(Test_Lex, ascii_control_characters_are_disallowed) {
   for (String8_View control_character : control_characters_except_whitespace) {
     Padded_String input(String8(control_character) + u8"hello");
     SCOPED_TRACE(input);
-    Diag_Collector v;
+    Diag_List_Diag_Reporter diags(&this->memory_);
 
-    Lexer l(&input, &v);
+    Lexer l(&input, &diags);
     EXPECT_EQ(l.peek().type, Token_Type::identifier)
         << "control character should be skipped";
-    EXPECT_THAT(
-        v.errors,
-        ElementsAreArray({
-            DIAG_TYPE_OFFSETS(&input, Diag_Unexpected_Control_Character,  //
-                              character, 0, control_character),
-        }));
+    assert_diagnostics(
+        &input, diags.diags(),
+        {
+            DIAGNOSTIC_ASSERTION_SPAN(Diag_Unexpected_Control_Character,  //
+                                      character, 0, control_character),
+        });
   }
 }
 
@@ -2161,7 +2167,7 @@ TEST_F(Test_Lex, ascii_control_characters_sorta_treated_like_whitespace) {
   for (String8_View control_character : control_characters_except_whitespace) {
     Padded_String input(concat(u8"  "_sv, control_character, u8"  hello"_sv));
     SCOPED_TRACE(input);
-    Diag_Collector v;
+    Diag_List_Diag_Reporter v(&this->memory_);
     Lexer l(&input, &v);
     EXPECT_EQ(l.peek().type, Token_Type::identifier)
         << "control character should be skipped";
@@ -2264,7 +2270,7 @@ TEST_F(Test_Lex, insert_semicolon_at_beginning_of_input) {
 
 TEST_F(Test_Lex, inserting_semicolon_at_right_curly_remembers_next_token) {
   Padded_String code(u8"{ x }"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::left_curly);
@@ -2292,39 +2298,41 @@ TEST_F(Test_Lex, inserting_semicolon_at_right_curly_remembers_next_token) {
 
   EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 }
 
 TEST_F(Test_Lex, transaction_buffers_errors_until_commit) {
   Padded_String code(u8"x 0b y"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction transaction = l.begin_transaction();
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::number);
-  EXPECT_THAT(errors.errors, IsEmpty())
-      << "0b error shouldn't be written to error reporter";
+  // 0b error shouldn't be written to error reporter.
+  // FIXME(#1154): Instead of buffering, use a rewind mechanism. (No rewinding
+  // should happen in this test.)
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.commit_transaction(std::move(transaction));
-  EXPECT_THAT(errors.errors,
-              ElementsAreArray({DIAG_TYPE(Diag_No_Digits_In_Binary_Number)}));
+  assert_diagnostics(&code, errors.diags(),
+                     {u8"Diag_No_Digits_In_Binary_Number"_diag});
 }
 
 TEST_F(Test_Lex, nested_transaction_buffers_errors_until_outer_commit) {
   Padded_String code(u8"x y 0b z"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);  // x
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction outer_transaction = l.begin_transaction();
   l.skip();
@@ -2333,31 +2341,36 @@ TEST_F(Test_Lex, nested_transaction_buffers_errors_until_outer_commit) {
   Lexer_Transaction inner_transaction = l.begin_transaction();
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::number);  // 0b
-  EXPECT_THAT(errors.errors, IsEmpty())
-      << "0b error shouldn't be written to error reporter";
+  // 0b error shouldn't be written to error reporter.
+  // FIXME(#1154): Instead of buffering, use a rewind mechanism. (No rewinding
+  // should happen in this test.)
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::identifier);  // z
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.commit_transaction(std::move(inner_transaction));
-  EXPECT_THAT(errors.errors, IsEmpty())
-      << "committing inner_transaction should not report 0b error";
+  // committing inner_transaction should not report 0b error.
+  // FIXME(#1154): Instead of buffering, use a rewind mechanism. (No rewinding
+  // should happen in this test.)
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.commit_transaction(std::move(outer_transaction));
-  EXPECT_THAT(errors.errors, ElementsAreArray({
-                                 DIAG_TYPE(Diag_No_Digits_In_Binary_Number),
-                             }))
-      << "committing outer_transaction should report 0b error";
+  // committing outer_transaction should report 0b error.
+  assert_diagnostics(&code, errors.diags(),
+                     {
+                         u8"Diag_No_Digits_In_Binary_Number"_diag,
+                     });
 }
 
 TEST_F(Test_Lex, rolled_back_inner_transaction_discards_errors) {
   Padded_String code(u8"x y 0b z"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);  // x
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction outer_transaction = l.begin_transaction();
   l.skip();
@@ -2369,21 +2382,22 @@ TEST_F(Test_Lex, rolled_back_inner_transaction_discards_errors) {
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::identifier);  // z
-  EXPECT_THAT(errors.errors, IsEmpty());
+  // FIXME(#1154): Instead of buffering, use a rewind mechanism.
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.roll_back_transaction(std::move(inner_transaction));
   l.commit_transaction(std::move(outer_transaction));
-  EXPECT_THAT(errors.errors, IsEmpty())
-      << "0b error shouldn't be written to error reporter";
+  // 0b error shouldn't be written to error reporter.
+  assert_diagnostics(&code, errors.diags(), {});
 }
 
 TEST_F(Test_Lex, rolled_back_outer_transaction_discards_errors) {
   Padded_String code(u8"x y 0b z"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);  // x
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction outer_transaction = l.begin_transaction();
   l.skip();
@@ -2395,21 +2409,22 @@ TEST_F(Test_Lex, rolled_back_outer_transaction_discards_errors) {
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::identifier);  // z
-  EXPECT_THAT(errors.errors, IsEmpty());
+  // FIXME(#1154): Instead of buffering, use a rewind mechanism.
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.commit_transaction(std::move(inner_transaction));
   l.roll_back_transaction(std::move(outer_transaction));
-  EXPECT_THAT(errors.errors, IsEmpty())
-      << "0b error shouldn't be written to error reporter";
+  // 0b error shouldn't be written to error reporter.
+  assert_diagnostics(&code, errors.diags(), {});
 }
 
 TEST_F(Test_Lex, errors_after_transaction_commit_are_reported_unbuffered) {
   Padded_String code(u8"x 'y' 0b"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction transaction = l.begin_transaction();
   l.skip();
@@ -2417,21 +2432,23 @@ TEST_F(Test_Lex, errors_after_transaction_commit_are_reported_unbuffered) {
 
   l.commit_transaction(std::move(transaction));
   EXPECT_EQ(l.peek().type, Token_Type::string);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::number);
-  EXPECT_THAT(errors.errors,
-              ElementsAreArray({DIAG_TYPE(Diag_No_Digits_In_Binary_Number)}));
+  assert_diagnostics(&code, errors.diags(),
+                     {
+                         u8"Diag_No_Digits_In_Binary_Number"_diag,
+                     });
 }
 
 TEST_F(Test_Lex, errors_after_transaction_rollback_are_reported_unbuffered) {
   Padded_String code(u8"x 'y' 0b"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction transaction = l.begin_transaction();
   l.skip();
@@ -2441,21 +2458,23 @@ TEST_F(Test_Lex, errors_after_transaction_rollback_are_reported_unbuffered) {
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::string);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::number);
-  EXPECT_THAT(errors.errors,
-              ElementsAreArray({DIAG_TYPE(Diag_No_Digits_In_Binary_Number)}));
+  assert_diagnostics(&code, errors.diags(),
+                     {
+                         u8"Diag_No_Digits_In_Binary_Number"_diag,
+                     });
 }
 
 TEST_F(Test_Lex, rolling_back_transaction) {
   Padded_String code(u8"x 'y' 3"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   Lexer_Transaction transaction = l.begin_transaction();
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
@@ -2478,11 +2497,11 @@ TEST_F(Test_Lex, rolling_back_transaction) {
 
 TEST_F(Test_Lex, insert_semicolon_after_rolling_back_transaction) {
   Padded_String code(u8"x 'y' 3"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   EXPECT_EQ(l.peek().type, Token_Type::identifier);
-  EXPECT_THAT(errors.errors, IsEmpty());
+  assert_diagnostics(&code, errors.diags(), {});
 
   l.skip();
   EXPECT_EQ(l.peek().type, Token_Type::string);
@@ -2508,7 +2527,7 @@ TEST_F(Test_Lex, unfinished_transaction_does_not_leak_memory) {
   // Clang's LeakSanitizer.
 
   Padded_String code(u8"a b c d e f g"_sv);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
 
   [[maybe_unused]] Lexer_Transaction outer_transaction = l.begin_transaction();
@@ -2564,12 +2583,12 @@ TEST_F(Test_Lex, is_identifier_byte_agrees_with_is_identifier_character) {
 }
 
 TEST_F(Test_Lex, jsx_identifier) {
-  auto check_identifier = [](String8_View tag_code,
-                             String8_View expected_normalized) -> void {
+  auto check_identifier = [&](String8_View tag_code,
+                              String8_View expected_normalized) -> void {
     SCOPED_TRACE(out_string8(tag_code));
 
     Padded_String code(u8"!" + String8(tag_code));
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '!'.
 
@@ -2577,7 +2596,7 @@ TEST_F(Test_Lex, jsx_identifier) {
     EXPECT_EQ(l.peek().identifier_name().normalized_name(),
               expected_normalized);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   };
 
   check_identifier(u8"div"_sv, u8"div"_sv);
@@ -2625,11 +2644,11 @@ TEST_F(Test_Lex, invalid_jsx_identifier) {
 }
 
 TEST_F(Test_Lex, jsx_string) {
-  auto check_string = [](String8_View string_code) -> void {
+  auto check_string = [&](String8_View string_code) -> void {
     SCOPED_TRACE(out_string8(string_code));
 
     Padded_String code(u8"!" + String8(string_code));
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '!'.
 
@@ -2638,7 +2657,7 @@ TEST_F(Test_Lex, jsx_string) {
     l.skip_in_jsx();
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   };
 
   check_string(u8R"('hello')"_sv);
@@ -2671,7 +2690,7 @@ TEST_F(Test_Lex, jsx_string) {
 TEST_F(Test_Lex, jsx_string_ignores_comments) {
   {
     Padded_String code(u8"! 'hello // '\nworld'"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '!'.
 
@@ -2684,12 +2703,12 @@ TEST_F(Test_Lex, jsx_string_ignores_comments) {
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
     EXPECT_EQ(l.peek().identifier_name().normalized_name(), u8"world"_sv);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 
   {
     Padded_String code(u8R"(! "hello/* not"comment */world")"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '!'.
 
@@ -2702,19 +2721,19 @@ TEST_F(Test_Lex, jsx_string_ignores_comments) {
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
     EXPECT_EQ(l.peek().identifier_name().normalized_name(), u8"comment"_sv);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 }
 
 TEST_F(Test_Lex, unterminated_jsx_string) {
   Padded_String code(u8"! 'hello"_sv);
   auto error = /* */ u8"  ^ Diag_Unclosed_JSX_String_Literal"_diag;
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   Lexer l(&code, &errors);
   l.skip_in_jsx();  // Ignore '!'.
 
   EXPECT_EQ(l.peek().type, Token_Type::string);
-  assert_diagnostics(&code, errors.errors, {error});
+  assert_diagnostics(&code, errors.diags(), {error});
 
   l.skip_in_jsx();
   EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
@@ -2723,7 +2742,7 @@ TEST_F(Test_Lex, unterminated_jsx_string) {
 TEST_F(Test_Lex, jsx_tag) {
   {
     Padded_String code(u8"<svg:rect>"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
@@ -2737,12 +2756,12 @@ TEST_F(Test_Lex, jsx_tag) {
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
     EXPECT_EQ(l.peek().identifier_name().normalized_name(), u8"rect"_sv);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 
   {
     Padded_String code(u8"<myModule.MyComponent>"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
@@ -2756,26 +2775,26 @@ TEST_F(Test_Lex, jsx_tag) {
     EXPECT_EQ(l.peek().type, Token_Type::identifier);
     EXPECT_EQ(l.peek().identifier_name().normalized_name(), u8"MyComponent"_sv);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 }
 
 TEST_F(Test_Lex, jsx_text_children) {
   {
     Padded_String code(u8"<>hello world"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
     l.skip_in_jsx_children();  // Skip '>'.
 
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 
   {
     Padded_String code(u8"<>hello</>"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
@@ -2784,14 +2803,14 @@ TEST_F(Test_Lex, jsx_text_children) {
     EXPECT_EQ(l.peek().type, Token_Type::less);
     EXPECT_EQ(l.peek().begin, &code[u8"<>hello"_sv.size()]);
     EXPECT_EQ(l.peek().end, &code[u8"<>hello<"_sv.size()]);
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 
   // '>=' might be interpreted as greater_equal by a buggy lexer, for example.
   for (String8 text_begin : {u8"=", u8">", u8">>", u8">=", u8">>="}) {
     Padded_String code(u8"<>" + text_begin + u8"hello");
     SCOPED_TRACE(code);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
@@ -2802,16 +2821,16 @@ TEST_F(Test_Lex, jsx_text_children) {
 
     EXPECT_EQ(l.peek().type, Token_Type::end_of_file);
     if (text_begin == u8"=") {
-      EXPECT_THAT(errors.errors, IsEmpty());
+      assert_diagnostics(&code, errors.diags(), {});
     } else if (text_begin == u8">" || text_begin == u8">=") {
-      assert_diagnostics(&code, errors.errors,
+      assert_diagnostics(&code, errors.diags(),
                          {
                              // <>>hello
                              // <>>=hello
                              u8"  ^ Diag_Unexpected_Greater_In_JSX_Text"_diag,
                          });
     } else if (text_begin == u8">>" || text_begin == u8">>=") {
-      assert_diagnostics(&code, errors.errors,
+      assert_diagnostics(&code, errors.diags(),
                          {
                              // <>>>hello
                              // <>>>=hello
@@ -2828,13 +2847,13 @@ TEST_F(Test_Lex, jsx_illegal_text_children) {
   {
     Padded_String code(u8"<>hello>world</>"_sv);
     auto error = /* */ u8"       ^ Diag_Unexpected_Greater_In_JSX_Text"_diag;
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
     l.skip_in_jsx_children();  // Skip '>'.
     EXPECT_EQ(l.peek().type, Token_Type::less);
-    assert_diagnostics(&code, errors.errors, {error});
+    assert_diagnostics(&code, errors.diags(), {error});
   }
 
   {
@@ -2842,13 +2861,13 @@ TEST_F(Test_Lex, jsx_illegal_text_children) {
     Padded_String code(u8"<>hello}world</>"_sv);
     auto error = /* */ u8"       ^ Diag_Unexpected_Right_Curly_In_JSX_Text"_diag;
     // clang-format on
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     l.skip_in_jsx();  // Ignore '<'.
 
     l.skip_in_jsx_children();  // Skip '>'.
     EXPECT_EQ(l.peek().type, Token_Type::less);
-    assert_diagnostics(&code, errors.errors, {error});
+    assert_diagnostics(&code, errors.diags(), {error});
   }
 }
 
@@ -2857,7 +2876,7 @@ TEST_F(Test_Lex, jsx_expression_children) {
 
   {
     Padded_String code(u8"<>hello {name}!</>"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
 
     // <>hello
@@ -2881,7 +2900,7 @@ TEST_F(Test_Lex, jsx_expression_children) {
     l.skip_in_jsx();
     EXPECT_EQ(l.peek().type, Token_Type::greater);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 }
 
@@ -2890,7 +2909,7 @@ TEST_F(Test_Lex, jsx_nested_children) {
 
   {
     Padded_String code(u8"<>hello <span>world</span>!</>"_sv);
-    Diag_Collector errors;
+    Diag_List_Diag_Reporter errors(&this->memory_);
     Lexer l(&code, &errors);
     // <>hello
     EXPECT_EQ(l.peek().type, Token_Type::less);
@@ -2921,7 +2940,7 @@ TEST_F(Test_Lex, jsx_nested_children) {
     l.skip_in_jsx();
     EXPECT_EQ(l.peek().type, Token_Type::greater);
 
-    EXPECT_THAT(errors.errors, IsEmpty());
+    assert_diagnostics(&code, errors.diags(), {});
   }
 }
 
@@ -2966,8 +2985,24 @@ void Test_Lex::check_single_token_with_errors(
 void Test_Lex::check_single_token_with_errors(
     String8_View input, Diagnostic_Assertion diag0,
     String8_View expected_identifier_name, Source_Location caller) {
+  return this->check_single_token_with_errors(
+      input, Span<const Diagnostic_Assertion>({diag0}),
+      expected_identifier_name, caller);
+}
+
+void Test_Lex::check_single_token_with_errors(
+    String8_View input, Diagnostic_Assertion diag0, Diagnostic_Assertion diag1,
+    String8_View expected_identifier_name, Source_Location caller) {
+  return this->check_single_token_with_errors(
+      input, Span<const Diagnostic_Assertion>({diag0, diag1}),
+      expected_identifier_name, caller);
+}
+
+void Test_Lex::check_single_token_with_errors(
+    String8_View input, Span<const Diagnostic_Assertion> diagnostic_assertions,
+    String8_View expected_identifier_name, Source_Location caller) {
   Padded_String code(input);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   std::vector<Token> lexed_tokens = this->lex_to_eof(&code, errors);
 
   EXPECT_THAT_AT_CALLER(
@@ -2984,7 +3019,7 @@ void Test_Lex::check_single_token_with_errors(
                         expected_identifier_name);
   }
 
-  assert_diagnostics(&code, errors.errors, {diag0}, caller);
+  assert_diagnostics(&code, errors.diags(), diagnostic_assertions, caller);
 }
 
 void Test_Lex::check_tokens(
@@ -3050,7 +3085,7 @@ void Test_Lex::check_tokens_with_errors(
     std::initializer_list<Token_Type> expected_token_types,
     Source_Location caller) {
   Padded_String code(input);
-  Diag_Collector errors;
+  Diag_List_Diag_Reporter errors(&this->memory_);
   std::vector<Token> lexed_tokens = this->lex_to_eof(&code, errors);
 
   std::vector<Token_Type> lexed_token_types;
@@ -3061,7 +3096,7 @@ void Test_Lex::check_tokens_with_errors(
   EXPECT_THAT_AT_CALLER(lexed_token_types,
                         ::testing::ElementsAreArray(expected_token_types));
 
-  assert_diagnostics(&code, errors.errors, diag_assertions, caller);
+  assert_diagnostics(&code, errors.diags(), diag_assertions, caller);
 }
 
 void Test_Lex::check_tokens_with_errors(
@@ -3095,14 +3130,14 @@ void Test_Lex::check_tokens_with_errors(
 
 std::vector<Token> Test_Lex::lex_to_eof(Padded_String_View input,
                                         Source_Location caller) {
-  Diag_Collector errors;
-  std::vector<Token> tokens = this->lex_to_eof(input, errors);
-  EXPECT_THAT_AT_CALLER(errors.errors, IsEmpty());
+  Diag_List_Diag_Reporter diags(&this->memory_);
+  std::vector<Token> tokens = this->lex_to_eof(input, diags);
+  assert_diagnostics(input, diags.diags(), {}, caller);
   return tokens;
 }
 
 std::vector<Token> Test_Lex::lex_to_eof(Padded_String_View input,
-                                        Diag_Collector& errors) {
+                                        Diag_Reporter& errors) {
   Lexer& l = this->make_lexer(input, &errors);
   std::vector<Token> tokens;
   while (l.peek().type != Token_Type::end_of_file) {

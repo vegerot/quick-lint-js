@@ -187,8 +187,8 @@ TEST(Test_TypeScript_Test, json_file_is_not_linted) {
     TypeScript_Test_Units units =
         extract_units_from_typescript_test(std::move(file), u8"hello.ts");
     ASSERT_EQ(units.size(), 2);
-    std::optional<Linter_Options> options = units[1].get_linter_options();
-    ASSERT_FALSE(options.has_value());
+    std::optional<File_Language> language = units[1].get_language();
+    ASSERT_FALSE(language.has_value());
   }
 
   {
@@ -199,8 +199,8 @@ TEST(Test_TypeScript_Test, json_file_is_not_linted) {
     TypeScript_Test_Units units =
         extract_units_from_typescript_test(std::move(file), u8"hello.json");
     ASSERT_EQ(units.size(), 2);
-    std::optional<Linter_Options> options = units[0].get_linter_options();
-    ASSERT_FALSE(options.has_value());
+    std::optional<File_Language> language = units[0].get_language();
+    ASSERT_FALSE(language.has_value());
   }
 }
 
@@ -213,10 +213,9 @@ TEST(Test_TypeScript_Test, typescript_file_is_linted) {
     TypeScript_Test_Units units =
         extract_units_from_typescript_test(std::move(file), u8"hello.ts");
     ASSERT_EQ(units.size(), 2);
-    std::optional<Linter_Options> options = units[0].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_TRUE(options->typescript);
-    EXPECT_FALSE(options->jsx);
+    std::optional<File_Language> language = units[0].get_language();
+    ASSERT_TRUE(language.has_value());
+    EXPECT_EQ(*language, File_Language::typescript);
   }
 
   {
@@ -227,10 +226,9 @@ TEST(Test_TypeScript_Test, typescript_file_is_linted) {
     TypeScript_Test_Units units =
         extract_units_from_typescript_test(std::move(file), u8"hello.json");
     ASSERT_EQ(units.size(), 2);
-    std::optional<Linter_Options> options = units[1].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_TRUE(options->typescript);
-    EXPECT_FALSE(options->jsx);
+    std::optional<File_Language> language = units[1].get_language();
+    ASSERT_TRUE(language.has_value());
+    EXPECT_EQ(*language, File_Language::typescript);
   }
 }
 
@@ -243,10 +241,9 @@ TEST(Test_TypeScript_Test, typescript_react_file_is_linted) {
     TypeScript_Test_Units units =
         extract_units_from_typescript_test(std::move(file), u8"hello.tsx");
     ASSERT_EQ(units.size(), 2);
-    std::optional<Linter_Options> options = units[0].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_TRUE(options->typescript);
-    EXPECT_TRUE(options->jsx);
+    std::optional<File_Language> language = units[0].get_language();
+    ASSERT_TRUE(language.has_value());
+    EXPECT_EQ(*language, File_Language::typescript_jsx);
   }
 
   {
@@ -257,10 +254,9 @@ TEST(Test_TypeScript_Test, typescript_react_file_is_linted) {
     TypeScript_Test_Units units =
         extract_units_from_typescript_test(std::move(file), u8"hello.json");
     ASSERT_EQ(units.size(), 2);
-    std::optional<Linter_Options> options = units[1].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_TRUE(options->typescript);
-    EXPECT_TRUE(options->jsx);
+    std::optional<File_Language> language = units[1].get_language();
+    ASSERT_TRUE(language.has_value());
+    EXPECT_EQ(*language, File_Language::typescript_jsx);
   }
 }
 
@@ -271,11 +267,9 @@ TEST(Test_TypeScript_Test, typescript_definition_file) {
   TypeScript_Test_Units units =
       extract_units_from_typescript_test(std::move(file), u8"hello.ts");
   ASSERT_EQ(units.size(), 1);
-  std::optional<Linter_Options> options = units[0].get_linter_options();
-  ASSERT_TRUE(options.has_value());
-  EXPECT_TRUE(options->typescript);
-  EXPECT_TRUE(options->typescript_definition);
-  EXPECT_FALSE(options->jsx);
+  std::optional<File_Language> language = units[0].get_language();
+  ASSERT_TRUE(language.has_value());
+  EXPECT_EQ(*language, File_Language::typescript_definition);
 }
 
 TEST(Test_TypeScript_Test, typescript_definition_file_with_weird_extension) {
@@ -285,10 +279,9 @@ TEST(Test_TypeScript_Test, typescript_definition_file_with_weird_extension) {
   TypeScript_Test_Units units =
       extract_units_from_typescript_test(std::move(file), u8"hello.ts");
   ASSERT_EQ(units.size(), 1);
-  std::optional<Linter_Options> options = units[0].get_linter_options();
-  ASSERT_TRUE(options.has_value());
-  EXPECT_TRUE(options->typescript);
-  EXPECT_TRUE(options->typescript_definition);
+  std::optional<File_Language> language = units[0].get_language();
+  ASSERT_TRUE(language.has_value());
+  EXPECT_EQ(*language, File_Language::typescript_definition);
 }
 
 TEST(Test_TypeScript_Test, javascript_file_is_linted) {
@@ -301,19 +294,15 @@ TEST(Test_TypeScript_Test, javascript_file_is_linted) {
         extract_units_from_typescript_test(std::move(file), u8"hello.js");
     ASSERT_EQ(units.size(), 2);
 
-    std::optional<Linter_Options> options = units[0].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_FALSE(options->typescript);
-    // FIXME(strager): Should we only set jsx=true if a @jsx directive is
-    // present?
-    EXPECT_TRUE(options->jsx);
+    std::optional<File_Language> language = units[0].get_language();
+    ASSERT_TRUE(language.has_value());
+    // FIXME(strager): Should we only enable jsx if a @jsx directive is present?
+    EXPECT_EQ(*language, File_Language::javascript_jsx);
 
-    options = units[1].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_FALSE(options->typescript);
-    // FIXME(strager): Should we only set jsx=true if a @jsx directive is
-    // present?
-    EXPECT_TRUE(options->jsx);
+    language = units[1].get_language();
+    ASSERT_TRUE(language.has_value());
+    // FIXME(strager): Should we only enable jsx if a @jsx directive is present?
+    EXPECT_EQ(*language, File_Language::javascript_jsx);
   }
 }
 
@@ -327,15 +316,13 @@ TEST(Test_TypeScript_Test, javascript_react_file_is_linted) {
         extract_units_from_typescript_test(std::move(file), u8"hello.jsx");
     ASSERT_EQ(units.size(), 2);
 
-    std::optional<Linter_Options> options = units[0].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_FALSE(options->typescript);
-    EXPECT_TRUE(options->jsx);
+    std::optional<File_Language> language = units[0].get_language();
+    ASSERT_TRUE(language.has_value());
+    EXPECT_EQ(*language, File_Language::javascript_jsx);
 
-    options = units[1].get_linter_options();
-    ASSERT_TRUE(options.has_value());
-    EXPECT_FALSE(options->typescript);
-    EXPECT_TRUE(options->jsx);
+    language = units[1].get_language();
+    ASSERT_TRUE(language.has_value());
+    EXPECT_EQ(*language, File_Language::javascript_jsx);
   }
 }
 
@@ -350,9 +337,9 @@ TEST(Test_TypeScript_Test, markdown_unit_is_ignored) {
   TypeScript_Test_Units units =
       extract_units_from_typescript_test(std::move(file), u8"hello.ts");
   ASSERT_EQ(units.size(), 3);
-  EXPECT_TRUE(units[0].get_linter_options().has_value());
-  EXPECT_FALSE(units[1].get_linter_options().has_value());
-  EXPECT_TRUE(units[2].get_linter_options().has_value());
+  EXPECT_TRUE(units[0].get_language().has_value());
+  EXPECT_FALSE(units[1].get_language().has_value());
+  EXPECT_TRUE(units[2].get_language().has_value());
 }
 
 TEST(Test_TypeScript_Test, files_in_node_modules_are_ignored) {
@@ -365,7 +352,7 @@ TEST(Test_TypeScript_Test, files_in_node_modules_are_ignored) {
   TypeScript_Test_Units units =
       extract_units_from_typescript_test(std::move(file), u8"hello.js");
   ASSERT_EQ(units.size(), 1);
-  EXPECT_FALSE(units[0].get_linter_options().has_value());
+  EXPECT_FALSE(units[0].get_language().has_value());
 }
 }
 }

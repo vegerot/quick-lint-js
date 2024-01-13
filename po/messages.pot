@@ -710,6 +710,14 @@ msgid "\"globals\" must be an object"
 msgstr ""
 
 #: src/quick-lint-js/diag/diagnostic-metadata-generated.cpp
+msgid "\"jsx-mode\" must be a string; try \"none\" or \"react\""
+msgstr ""
+
+#: src/quick-lint-js/diag/diagnostic-metadata-generated.cpp
+msgid "unknown JSX mode; try \"none\" or \"react\""
+msgstr ""
+
+#: src/quick-lint-js/diag/diagnostic-metadata-generated.cpp
 msgid "depth limit exceeded"
 msgstr ""
 
@@ -2399,6 +2407,14 @@ msgstr ""
 
 #: src/quick-lint-js/diag/diagnostic-metadata-generated.cpp
 msgid "'&' here"
+msgstr ""
+
+#: src/quick-lint-js/diag/diagnostic-metadata-generated.cpp
+msgid "namespace alias cannot use 'import type'"
+msgstr ""
+
+#: src/quick-lint-js/diag/diagnostic-metadata-generated.cpp
+msgid "using a '.' after a '?.' might fail, since '?.' might return 'undefined'."
 msgstr ""
 
 #: test/test-diagnostic-formatter.cpp

@@ -5,22 +5,31 @@
 #include <quick-lint-js/configuration/configuration.h>
 #include <quick-lint-js/diag-collector.h>
 #include <quick-lint-js/diag-matcher.h>
+#include <quick-lint-js/diag/diag-list.h>
 #include <quick-lint-js/diag/diagnostic-types.h>
+#include <quick-lint-js/diagnostic-assertion.h>
 #include <quick-lint-js/fe/language.h>
 #include <quick-lint-js/fe/variable-analyzer.h>
 #include <quick-lint-js/port/char8.h>
 #include <string_view>
 #include <vector>
 
-#define EXPECT_DEFAULT_CONFIG(config)                                          \
+#define EXPECT_DEFAULT_CONFIG(config)                         \
+  do {                                                        \
+    EXPECT_EQ((config).jsx_mode,                              \
+              ::quick_lint_js::Parser_JSX_Mode::auto_detect); \
+    EXPECT_DEFAULT_CONFIG_GLOBALS(config);                    \
+  } while (false)
+
+#define EXPECT_DEFAULT_CONFIG_GLOBALS(config)                                  \
   do {                                                                         \
+    EXPECT_TRUE((config).globals().find_runtime_or_type(u8"Array"_sv));        \
     EXPECT_TRUE((config).globals().find_runtime_or_type(u8"Array"_sv));        \
     EXPECT_TRUE((config).globals().find_runtime_or_type(u8"console"_sv));      \
     EXPECT_FALSE(                                                              \
         (config).globals().find_runtime_or_type(u8"variableDoesNotExist"_sv)); \
   } while (false)
 
-using ::testing::ElementsAreArray;
 using namespace std::literals::string_view_literals;
 
 namespace quick_lint_js {
@@ -501,7 +510,7 @@ TEST(Test_Configuration_JSON, true_global_groups_leaves_defaults) {
   Configuration c;
   load_from_json(c, u8R"({"global-groups": true})"_sv);
 
-  EXPECT_DEFAULT_CONFIG(c);
+  EXPECT_DEFAULT_CONFIG_GLOBALS(c);
 }
 
 TEST(Test_Configuration_JSON, false_global_groups_disables_all_groups) {
@@ -532,7 +541,7 @@ TEST(Test_Configuration_JSON, empty_globals_leaves_defaults) {
   Configuration c;
   load_from_json(c, u8R"({"globals": {}})"_sv);
 
-  EXPECT_DEFAULT_CONFIG(c);
+  EXPECT_DEFAULT_CONFIG_GLOBALS(c);
 }
 
 TEST(Test_Configuration_JSON, true_global_is_usable) {
@@ -597,6 +606,8 @@ TEST(Test_Configuration_JSON, false_global_overrides_global_group) {
 }
 
 TEST(Test_Configuration_JSON, invalid_json_reports_error) {
+  Monotonic_Allocator temp_memory("test");
+
   // TODO(strager): The following are erroneously treated as schema
   // errors, but should be JSON parse errors:
   // u8R"({"global-groups": {42}})"_sv,
@@ -617,41 +628,39 @@ TEST(Test_Configuration_JSON, invalid_json_reports_error) {
     Configuration c;
 
     Padded_String json(json_string);
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
 
     // TODO(strager): Check Diag_Config_Json_Syntax_Error::where.
-    EXPECT_THAT(errors.errors,
-                ElementsAreArray({DIAG_TYPE(Diag_Config_Json_Syntax_Error)}));
+    assert_diagnostics(&json, diags, {u8"Diag_Config_Json_Syntax_Error"_diag});
   }
 }
 
 TEST(Test_Configuration_JSON, bad_schema_in_globals_reports_error) {
+  Monotonic_Allocator temp_memory("test");
+
   {
-    Padded_String json(u8R"({"globals":["myGlobalVariable"]})"_sv);
+    // clang-format off
+    Padded_String json(u8"{\"globals\":[\"myGlobalVariable\"]}"_sv);
+    auto error = /* */ u8"             ^ Diag_Config_Globals_Type_Mismatch"_diag;
+    // clang-format on
     Configuration c;
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
-    EXPECT_THAT(errors.errors,
-                ElementsAreArray({DIAG_TYPE_OFFSETS(
-                    &json, Diag_Config_Globals_Type_Mismatch,  //
-                    value, u8R"({"globals":)"_sv.size(), u8"["_sv)}));
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
     EXPECT_FALSE(c.globals().find_runtime_or_type(u8"myGlobalVariable"_sv))
         << "invalid global should be ignored";
   }
 
   {
-    Padded_String json(
-        u8R"({"globals":{"testBefore":true,"testBad":"string","testAfter":true}})"_sv);
+    // clang-format off
+    Padded_String json(u8"{\"globals\":{\"testBefore\":true,\"testBad\":\"string\",\"testAfter\":true}}"_sv);
+    auto error = /* */ u8"                                              ^^^^^^^^^^ Diag_Config_Globals_Descriptor_Type_Mismatch"_diag;
+    // clang-format on
     Configuration c;
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
-    EXPECT_THAT(errors.errors,
-                ElementsAreArray({DIAG_TYPE_OFFSETS(
-                    &json, Diag_Config_Globals_Descriptor_Type_Mismatch,  //
-                    descriptor,
-                    u8R"({"globals":{"testBefore":true,"testBad":)"_sv.size(),
-                    u8R"("string")"_sv)}));
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
 
     EXPECT_TRUE(c.globals().find_runtime_or_type(u8"testBefore"_sv))
         << "valid globals before should work";
@@ -662,19 +671,14 @@ TEST(Test_Configuration_JSON, bad_schema_in_globals_reports_error) {
   }
 
   {
-    Padded_String json(
-        u8R"({"globals":{"testBefore":true,"testBad":{"writable":false,"shadowable":"string"},"testAfter":true}})"_sv);
+    // clang-format off
+    Padded_String json(u8"{\"globals\":{\"testBefore\":true,\"testBad\":{\"writable\":false,\"shadowable\":\"string\"},\"testAfter\":true}}"_sv);
+    auto error = /* */ u8"                                                                                 ^^^^^^^^^^ Diag_Config_Globals_Descriptor_Shadowable_Type_Mismatch"_diag;
+    // clang-format on
     Configuration c;
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
-    EXPECT_THAT(
-        errors.errors,
-        ElementsAreArray({DIAG_TYPE_OFFSETS(
-            &json, Diag_Config_Globals_Descriptor_Shadowable_Type_Mismatch,  //
-            value,
-            u8R"({"globals":{"testBefore":true,"testBad":{"writable":false,"shadowable":)"_sv
-                .size(),
-            u8R"("string")"_sv)}));
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
 
     EXPECT_TRUE(c.globals().find_runtime_or_type(u8"testBefore"_sv))
         << "valid globals before should work";
@@ -690,19 +694,14 @@ TEST(Test_Configuration_JSON, bad_schema_in_globals_reports_error) {
   }
 
   {
-    Padded_String json(
-        u8R"({"globals":{"testBefore":true,"testBad":{"writable":"string","shadowable":false},"testAfter":true}})"_sv);
+    // clang-format off
+    Padded_String json(u8"{\"globals\":{\"testBefore\":true,\"testBad\":{\"writable\":\"string\",\"shadowable\":false},\"testAfter\":true}}"_sv);
+    auto error = /* */ u8"                                                            ^^^^^^^^^^ Diag_Config_Globals_Descriptor_Writable_Type_Mismatch"_diag;
+    // clang-format on
     Configuration c;
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
-    EXPECT_THAT(
-        errors.errors,
-        ElementsAreArray({DIAG_TYPE_OFFSETS(
-            &json, Diag_Config_Globals_Descriptor_Writable_Type_Mismatch,  //
-            value,
-            u8R"({"globals":{"testBefore":true,"testBad":{"writable":)"_sv
-                .size(),
-            u8R"("string")"_sv)}));
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
 
     EXPECT_TRUE(c.globals().find_runtime_or_type(u8"testBefore"_sv))
         << "valid globals before should work";
@@ -719,30 +718,30 @@ TEST(Test_Configuration_JSON, bad_schema_in_globals_reports_error) {
 }
 
 TEST(Test_Configuration_JSON, bad_schema_in_global_groups_reports_error) {
+  Monotonic_Allocator temp_memory("test");
+
   {
-    Padded_String json(u8R"({"global-groups":{"browser":true}})"_sv);
+    // clang-format off
+    Padded_String json(u8"{\"global-groups\":{\"browser\":true}}"_sv);
+    auto error = /* */ u8"                   ^ Diag_Config_Global_Groups_Type_Mismatch"_diag;
+    // clang-format on
     Configuration c;
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
-    EXPECT_THAT(errors.errors,
-                ElementsAreArray({DIAG_TYPE_OFFSETS(
-                    &json, Diag_Config_Global_Groups_Type_Mismatch,  //
-                    value, u8R"({"global-groups":)"_sv.size(), u8"{"_sv)}));
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
     EXPECT_TRUE(c.globals().find_runtime_or_type(u8"Array"_sv))
         << "invalid global-groups should be ignored";
   }
 
   {
-    Padded_String json(
-        u8R"({"global-groups":["browser",false,"ecmascript"]})"_sv);
+    // clang-format off
+    Padded_String json(u8"{\"global-groups\":[\"browser\",false,\"ecmascript\"]}"_sv);
+    auto error = /* */ u8"                                ^^^^^ Diag_Config_Global_Groups_Group_Type_Mismatch"_diag;
+    // clang-format on
     Configuration c;
-    Diag_Collector errors;
-    c.load_from_json(&json, &errors);
-    EXPECT_THAT(errors.errors,
-                ElementsAreArray({DIAG_TYPE_OFFSETS(
-                    &json, Diag_Config_Global_Groups_Group_Type_Mismatch,  //
-                    group, u8R"({"global-groups":["browser",)"_sv.size(),
-                    u8"false"_sv)}));
+    Diag_List diags(&temp_memory);
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
 
     EXPECT_TRUE(c.globals().find_runtime_or_type(u8"Array"_sv))
         << "valid group-groups entries should take effect\n"
@@ -761,24 +760,92 @@ TEST(Test_Configuration_JSON, bad_global_error_excludes_trailing_whitespace) {
   // simdjson's raw_json_token function returns trailing whitespace by default.
   // Ensure the whitespace is not included in error messages.
 
+  Monotonic_Allocator temp_memory("test");
+
   // According to RFC 8259, whitespace characters are U+0009, U+000A, U+000D,
   // and U+0020.
+  // clang-format off
   Padded_String json(u8"{ \"globals\": { \"a\": \"b\"  \n\t\r }}"_sv);
+  auto error = /* */ u8"                        ^^^^^ Diag_Config_Globals_Descriptor_Type_Mismatch"_diag;
+  // clang-format on
   Configuration c;
-  Diag_Collector errors;
-  c.load_from_json(&json, &errors);
+  Diag_List diags(&temp_memory);
+  c.load_from_json(&json, &diags);
 
-  EXPECT_THAT(
-      errors.errors,
-      ElementsAreArray({DIAG_TYPE_OFFSETS(
-          &json, Diag_Config_Globals_Descriptor_Type_Mismatch,  //
-          descriptor, u8R"({ "globals": { "a": )"_sv.size(), u8R"("b")"_sv)}));
+  assert_diagnostics(&json, diags, {error});
+}
+
+TEST(Test_Configuration_JSON, valid_jsx_mode) {
+  {
+    Configuration c;
+    load_from_json(c, u8R"({"jsx-mode": "auto"})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::auto_detect);
+  }
+
+  {
+    Configuration c;
+    load_from_json(c, u8R"({"jsx-mode": "react"})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::react);
+  }
+
+  {
+    Configuration c;
+    load_from_json(c, u8R"({"jsx-mode": "none"})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::none);
+  }
+}
+
+TEST(Test_Configuration_JSON, revert_jsx_mode_to_default) {
+  {
+    Configuration c;
+    load_from_json(c, u8R"({"jsx-mode": "react"})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::react);
+    c.reset();
+    load_from_json(c, u8R"({"jsx-mode": "auto"})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::auto_detect);
+  }
+
+  {
+    Configuration c;
+    load_from_json(c, u8R"({"jsx-mode": "react"})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::react);
+    c.reset();
+    load_from_json(c, u8R"({})"_sv);
+    EXPECT_EQ(c.jsx_mode, Parser_JSX_Mode::auto_detect);
+  }
+}
+
+TEST(Test_Configuration_JSON, invalid_jsx_mode) {
+  Monotonic_Allocator temp_memory("test");
+
+  {
+    // clang-format off
+    Padded_String json(u8"{\"jsx-mode\": \"AUTO\"}"_sv);
+    auto error = /* */ u8"               ^^^^^^^^ Diag_Config_JSX_Mode_Unrecognized"_diag;
+    // clang-format on
+    Diag_List diags(&temp_memory);
+    Configuration c;
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
+  }
+
+  {
+    // clang-format off
+    Padded_String json(u8"{\"jsx-mode\": true}"_sv);
+    auto error = /* */ u8"               ^^^^ Diag_Config_JSX_Mode_Type_Mismatch"_diag;
+    // clang-format on
+    Diag_List diags(&temp_memory);
+    Configuration c;
+    c.load_from_json(&json, &diags);
+    assert_diagnostics(&json, diags, {error});
+  }
 }
 
 void load_from_json(Configuration& config, Padded_String_View json) {
-  Diag_Collector errors;
-  config.load_from_json(json, &errors);
-  EXPECT_THAT(errors.errors, ::testing::IsEmpty());
+  Monotonic_Allocator temp_memory("test");
+  Diag_List diags(&temp_memory);
+  config.load_from_json(json, &diags);
+  assert_diagnostics(json, diags, {});
 }
 
 void load_from_json(Configuration& config, String8_View json) {
