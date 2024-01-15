@@ -94,11 +94,17 @@ class QLJS_Document_Base {
                                       VSCode_Diagnostic_Collection,
                                       Loaded_Config_File* config_file) = 0;
 
+  virtual void update_is_snarky(
+      bool is_snarky_enabled, ::Napi::Env env, QLJS_Workspace& workspace,
+      VSCode_Diagnostic_Collection diagnostic_collection) = 0;
+
  protected:
   ::Napi::Value uri() { return this->vscode_document_.Value().uri(); }
 
   LSP_Document_Text document_;
   ::Napi::Reference<VSCode_Document> vscode_document_;
+
+  bool is_snarky_enabled_ = false;
 
   friend class QLJS_Workspace;
 };
@@ -118,6 +124,9 @@ class QLJS_Config_Document : public QLJS_Document_Base {
   void on_config_file_changed(::Napi::Env, QLJS_Workspace&,
                               VSCode_Diagnostic_Collection,
                               Loaded_Config_File* config_file) override;
+  void update_is_snarky(
+      bool is_snarky_enabled, ::Napi::Env env, QLJS_Workspace& workspace,
+      VSCode_Diagnostic_Collection diagnostic_collection) override;
 
  private:
   Loaded_Config_File* loaded_config_ = nullptr;
@@ -141,6 +150,9 @@ class QLJS_Lintable_Document : public QLJS_Document_Base {
   void on_config_file_changed(::Napi::Env, QLJS_Workspace&,
                               VSCode_Diagnostic_Collection,
                               Loaded_Config_File* config_file) override;
+  void update_is_snarky(
+      bool is_snarky_enabled, ::Napi::Env env, QLJS_Workspace& workspace,
+      VSCode_Diagnostic_Collection diagnostic_collection) override;
 
   void lint_javascript_and_publish_diagnostics(::Napi::Env, QLJS_Workspace&,
                                                VSCode_Diagnostic_Collection);
