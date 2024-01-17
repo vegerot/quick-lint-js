@@ -86,6 +86,14 @@ class Extension_Configuration {
     }
   }
 
+  bool get_snarky(::Napi::Env env) {
+    ::Napi::Value value = this->get(env, "snarky");
+    if (!value.IsBoolean()) {
+      return false;
+    }
+    return value.As<::Napi::Boolean>();
+  }
+
   ::Napi::Value get(::Napi::Env env, const char* section) {
     return this->config_ref_.Get("get").As<::Napi::Function>().Call(
         this->config_ref_.Value(), {::Napi::String::New(env, section)});
@@ -124,7 +132,8 @@ QLJS_Workspace::QLJS_Workspace(const Napi::CallbackInfo& info)
           ::Napi::Persistent(info[2].As<::Napi::Object>())),
       ui_(this) {
   QLJS_DEBUG_LOG("Workspace %p: created\n", this);
-  this->update_logging(info.Env());
+  configuration_changed(info);
+
   this->fs_change_detection_thread_ =
       Thread([this]() -> void { this->run_fs_change_detection_thread(); });
 }
@@ -234,8 +243,31 @@ void QLJS_Workspace::dispose_documents() {
   ::Napi::Env env = info.Env();
 
   this->update_logging(env);
+  this->update_is_snarky(env);
 
   return env.Undefined();
+}
+
+bool QLJS_Workspace::is_snarky_enabled() const {
+  return this->is_snarky_enabled_;
+}
+
+void QLJS_Workspace::update_is_snarky(::Napi::Env env) {
+  Extension_Configuration config(env, this->vscode_);
+  bool is_snarky = config.get_snarky(env);
+
+  this->is_snarky_enabled_ = is_snarky;
+  if (is_snarky) {
+    this->translator_.use_messages_from_locale("en_US@snarky");
+  } else {
+    // TODO(#529): Use the locale from the VS Code configuration.
+    this->translator_.use_messages_from_source_code();
+  }
+  this->qljs_documents_.for_each([this, is_snarky,
+                                  env](::Napi::Value value) -> void {
+    QLJS_Document_Base* doc = QLJS_Document_Base::unwrap(value);
+    doc->update_is_snarky(is_snarky, env, *this, this->diagnostic_collection());
+  });
 }
 
 ::Napi::Value QLJS_Workspace::editor_visibility_changed(

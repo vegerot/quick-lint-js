@@ -1095,6 +1095,196 @@ tests = {
 
   // TODO(strager): Allow the user to delete the extenion, thereby deleting
   // the output channel.
+
+  snarky_enabled_at_start: async ({ addCleanup }) => {
+    addCleanup(resetConfigurationAsync);
+
+    await vscode.workspace
+      .getConfiguration("quick-lint-js")
+      .update("snarky", true, vscode.ConfigurationTarget.Workspace);
+
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.js");
+    fs.writeFileSync(helloFilePath, "let x = undeclaredVariable;\n");
+    let helloURI = vscode.Uri.file(helloFilePath);
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    await loadExtensionAsync({ addCleanup });
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    await waitUntilAnyDiagnosticsAsync(helloURI);
+    let diags = normalizeDiagnostics(helloURI);
+    diags = diags.map(({ code, severity, message }) => ({
+      code,
+      severity,
+      message,
+    }));
+    assert.deepStrictEqual(diags, [
+      // use of undeclared variable 'undeclaredVariable'
+      {
+        code: {
+          target: "https://quick-lint-js.com/errors/E0057/",
+          value: "E0057",
+        },
+        severity: vscode.DiagnosticSeverity.Warning,
+        message: "did you fail spelling class?",
+      },
+    ]);
+  },
+
+  enable_snarky: async ({ addCleanup }) => {
+    addCleanup(resetConfigurationAsync);
+    await loadExtensionAsync({ addCleanup });
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.js");
+    fs.writeFileSync(helloFilePath, "let x = undeclaredVariable;\n");
+    let helloURI = vscode.Uri.file(helloFilePath);
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    // 1. Make sure we're not snarky at the start
+    {
+      await waitUntilAnyDiagnosticsAsync(helloURI);
+      let diags = normalizeDiagnostics(helloURI);
+      diags = diags.map(({ code, severity, message }) => ({
+        code,
+        severity,
+        message,
+      }));
+      assert.deepStrictEqual(diags, [
+        // use of undeclared variable 'undeclaredVariable'
+        {
+          code: {
+            target: "https://quick-lint-js.com/errors/E0057/",
+            value: "E0057",
+          },
+          severity: vscode.DiagnosticSeverity.Warning,
+          message: "use of undeclared variable: undeclaredVariable",
+        },
+      ]);
+    }
+
+    // 2. Enable snarky
+    await vscode.workspace
+      .getConfiguration("quick-lint-js")
+      .update("snarky", true, vscode.ConfigurationTarget.Workspace);
+
+    // 3. Make sure we're snarky now
+    await pollAsync(() => {
+      let diags = normalizeDiagnostics(helloURI);
+      diags = diags.map(({ code, severity, message }) => ({
+        code,
+        severity,
+        message,
+      }));
+      let got = diags;
+      let want = [
+        {
+          code: {
+            target: "https://quick-lint-js.com/errors/E0057/",
+            value: "E0057",
+          },
+          severity: vscode.DiagnosticSeverity.Warning,
+          message: "did you fail spelling class?",
+        },
+      ];
+      assert.deepStrictEqual(diags, want);
+    });
+  },
+
+  // this starts off the exact same as snarky_enabled_at_start, so maybe these
+  // tests should be merged
+  disable_snarky: async ({ addCleanup }) => {
+    addCleanup(resetConfigurationAsync);
+
+    await vscode.workspace
+      .getConfiguration("quick-lint-js")
+      .update("snarky", true, vscode.ConfigurationTarget.Workspace);
+
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let helloFilePath = path.join(scratchDirectory, "hello.js");
+    fs.writeFileSync(helloFilePath, "let x = undeclaredVariable;\n");
+    let helloURI = vscode.Uri.file(helloFilePath);
+    let helloDocument = await vscode.workspace.openTextDocument(helloURI);
+    await loadExtensionAsync({ addCleanup });
+    let helloEditor = await vscode.window.showTextDocument(helloDocument);
+
+    // 1. Make sure we're snarky at the start
+    await waitUntilAnyDiagnosticsAsync(helloURI);
+    let diags = normalizeDiagnostics(helloURI);
+    diags = diags.map(({ code, severity, message }) => ({
+      code,
+      severity,
+      message,
+    }));
+    assert.deepStrictEqual(diags, [
+      // use of undeclared variable 'undeclaredVariable'
+      {
+        code: {
+          target: "https://quick-lint-js.com/errors/E0057/",
+          value: "E0057",
+        },
+        severity: vscode.DiagnosticSeverity.Warning,
+        message: "did you fail spelling class?",
+      },
+    ]);
+
+    // 2. Disable snarky
+    await vscode.workspace
+      .getConfiguration("quick-lint-js")
+      .update("snarky", false, vscode.ConfigurationTarget.Workspace);
+
+    // 3. Make sure we're polite now
+    await pollAsync(() => {
+      let diags = normalizeDiagnostics(helloURI);
+      diags = diags.map(({ code, severity, message }) => ({
+        code,
+        severity,
+        message,
+      }));
+      let got = diags;
+      let want = [
+        {
+          code: {
+            target: "https://quick-lint-js.com/errors/E0057/",
+            value: "E0057",
+          },
+          severity: vscode.DiagnosticSeverity.Warning,
+          message: "use of undeclared variable: undeclaredVariable",
+        },
+      ];
+      assert.deepStrictEqual(diags, want);
+    });
+  },
+  snarky_enabled_at_start_config_file: async ({ addCleanup }) => {
+    addCleanup(resetConfigurationAsync);
+    await vscode.workspace
+      .getConfiguration("quick-lint-js")
+      .update("snarky", true, vscode.ConfigurationTarget.Workspace);
+    let scratchDirectory = makeScratchDirectory({ addCleanup });
+    let configFilePath = path.join(scratchDirectory, "quick-lint-js.config");
+    fs.writeFileSync(configFilePath, "{");
+    let configURI = vscode.Uri.file(configFilePath);
+
+    await loadExtensionAsync({ addCleanup });
+    let configDocument = await vscode.workspace.openTextDocument(configURI);
+    let configEditor = await vscode.window.showTextDocument(configDocument);
+
+    await waitUntilAnyDiagnosticsAsync(configURI);
+
+    let configDiags = normalizeDiagnostics(configURI);
+    assert.deepStrictEqual(
+      configDiags.map(({ code, message }) => ({ code, message })),
+      [
+        {
+          code: {
+            target: "https://quick-lint-js.com/errors/E0164/",
+            value: "E0164",
+          },
+          message: "yeah, JSON sucks; try quick-lint-json",
+        },
+      ]
+    );
+  },
 };
 
 if (os.platform() === "linux") {
@@ -1535,7 +1725,7 @@ async function pollAsync(callback) {
 }
 
 async function resetConfigurationAsync() {
-  for (let setting of ["logging"]) {
+  for (let setting of ["logging", "snarky"]) {
     await vscode.workspace
       .getConfiguration("quick-lint-js")
       .update(setting, undefined, vscode.ConfigurationTarget.Workspace);
