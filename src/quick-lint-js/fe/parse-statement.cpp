@@ -5383,6 +5383,8 @@ void Parser::parse_and_visit_let_bindings(
     declaration_kind = Variable_Kind::_let;
     break;
   case Token_Type::kw_using:
+    // 'using' declarations are immutable lexical bindings, so they share the
+    // same variable-analysis behavior as 'const'.
     declaration_kind = Variable_Kind::_const;
     break;
   case Token_Type::kw_var:
