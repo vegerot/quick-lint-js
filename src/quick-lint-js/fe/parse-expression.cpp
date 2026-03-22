@@ -1353,6 +1353,7 @@ Expression* Parser::parse_await_expression(Parse_Visitor_Base& v,
       case Token_Type::kw_let:
       case Token_Type::kw_set:
       case Token_Type::kw_static:
+      case Token_Type::kw_using:
       case Token_Type::kw_yield:
       case Token_Type::number:
       case Token_Type::private_identifier:

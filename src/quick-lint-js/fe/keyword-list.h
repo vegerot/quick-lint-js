@@ -87,6 +87,7 @@
   QLJS_KEYWORD(undefined)   \
   QLJS_KEYWORD(unique)      \
   QLJS_KEYWORD(unknown)     \
+  QLJS_KEYWORD(using)       \
   QLJS_KEYWORD(var)         \
   QLJS_KEYWORD(void)        \
   QLJS_KEYWORD(while)       \

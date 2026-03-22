@@ -88,6 +88,34 @@ TEST_F(Test_Parse_Var, parse_simple_const) {
               ElementsAreArray({const_init_decl(u8"x"_sv)}));
 }
 
+TEST_F(Test_Parse_Var, parse_simple_using) {
+  Spy_Visitor p = test_parse_and_visit_statement(u8"using x = resource"_sv,
+                                                 no_diags, javascript_options);
+  EXPECT_THAT(p.visits, ElementsAreArray({
+                            "visit_variable_use",          // resource
+                            "visit_variable_declaration",  // x
+                        }));
+  ASSERT_EQ(p.variable_declarations.size(), 1);
+  EXPECT_EQ(p.variable_declarations[0].name, u8"x");
+  EXPECT_EQ(p.variable_declarations[0].flags,
+            Variable_Declaration_Flags::initialized_with_equals);
+  EXPECT_THAT(p.variable_uses, ElementsAreArray({u8"resource"}));
+}
+
+TEST_F(Test_Parse_Var, parse_await_using_in_async_function) {
+  Spy_Visitor p = test_parse_and_visit_module(
+      u8"async function f() { await using x = resource; }"_sv, no_diags,
+      javascript_options);
+  EXPECT_THAT(p.variable_uses, ::testing::Contains(u8"resource"));
+
+  auto using_declaration = std::find_if(
+      p.variable_declarations.begin(), p.variable_declarations.end(),
+      [](const Visited_Variable_Declaration &decl) { return decl.name == u8"x"; });
+  ASSERT_NE(using_declaration, p.variable_declarations.end());
+  EXPECT_EQ(using_declaration->flags,
+            Variable_Declaration_Flags::initialized_with_equals);
+}
+
 TEST_F(Test_Parse_Var, parse_const_with_no_initializers) {
   Spy_Visitor p = test_parse_and_visit_statement(
       u8"const x;"_sv,  //

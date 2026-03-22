@@ -875,7 +875,7 @@ TEST_F(Test_Parse_Expression_Statement, conditional_expression) {
 }
 
 TEST_F(Test_Parse_Expression_Statement, statement_beginning_with_async_or_let) {
-  for (String8 name : {u8"async", u8"let"}) {
+  for (String8 name : {u8"async", u8"let", u8"using"}) {
     SCOPED_TRACE(out_string8(name));
 
     {

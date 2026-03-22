@@ -91,6 +91,16 @@ bool Parser::parse_and_visit_statement(Parse_Visitor_Base &v,
       }
     }
   };
+  auto parse_and_visit_using_declaration_statement = [&](Token using_token) {
+    this->is_current_typescript_namespace_non_empty_ = true;
+    this->parse_and_visit_let_bindings(
+        v, Parse_Let_Bindings_Options{
+               .declaring_token = using_token,
+               .is_top_level_typescript_definition_without_declare_or_export =
+                   options.top_level_typescript_definition,
+           });
+    this->consume_semicolon_after_statement();
+  };
 
 parse_statement:
   switch (this->peek().type) {
@@ -187,6 +197,30 @@ parse_statement:
                      options.top_level_typescript_definition,
              });
       this->consume_semicolon_after_statement();
+    }
+    break;
+  }
+
+    // using resource = expr;
+    // using();
+    // using: while (true) {}
+  case Token_Type::kw_using: {
+    Token using_token = this->peek();
+    Lexer_Transaction transaction = this->lexer_.begin_transaction();
+    this->skip();
+    if (this->peek().type == Token_Type::colon) {
+      this->lexer_.commit_transaction(std::move(transaction));
+      this->skip();
+      this->check_body_after_label();
+      goto parse_statement;
+    } else if (this->is_let_token_a_variable_reference(
+                   this->peek(),
+                   /*allow_declarations=*/options.allow_let_declaration)) {
+      this->lexer_.roll_back_transaction(std::move(transaction));
+      goto parse_loop_label_or_expression_starting_with_identifier;
+    } else {
+      this->lexer_.commit_transaction(std::move(transaction));
+      parse_and_visit_using_declaration_statement(using_token);
     }
     break;
   }
@@ -418,10 +452,20 @@ parse_statement:
     // await: for(;;);
   case Token_Type::kw_await: {
     this->is_current_typescript_namespace_non_empty_ = true;
-    on_non_declaring_statement();
     Token await_token = this->peek();
     this->skip();
-    if (this->peek().type == Token_Type::colon) {
+    if (this->peek().type == Token_Type::kw_using &&
+        !this->peek().has_leading_newline) {
+      if (!this->in_top_level_ && !this->in_async_function_) {
+        this->diags_.add(Diag_Await_Operator_Outside_Async{
+            .await_operator = await_token.span(),
+        });
+      }
+      Token using_token = this->peek();
+      this->skip();
+      parse_and_visit_using_declaration_statement(using_token);
+    } else if (this->peek().type == Token_Type::colon) {
+      on_non_declaring_statement();
       // Labelled statement.
       if (this->in_async_function_) {
         this->diags_.add(Diag_Label_Named_Await_Not_Allowed_In_Async_Function{
@@ -431,6 +475,7 @@ parse_statement:
       this->check_body_after_label();
       goto parse_statement;
     } else {
+      on_non_declaring_statement();
       Expression *ast =
           this->parse_await_expression(v, await_token, Precedence{});
       ast = this->parse_expression_remainder(v, ast, Precedence{});
@@ -5301,6 +5346,7 @@ void Parser::parse_and_visit_variable_declaration_statement(
   Token declaring_token = this->peek();
   QLJS_ASSERT(declaring_token.type == Token_Type::kw_const ||
               declaring_token.type == Token_Type::kw_let ||
+              declaring_token.type == Token_Type::kw_using ||
               declaring_token.type == Token_Type::kw_var);
   this->skip();
   if (this->peek().type == Token_Type::kw_enum &&
@@ -5335,6 +5381,9 @@ void Parser::parse_and_visit_let_bindings(
     break;
   case Token_Type::kw_let:
     declaration_kind = Variable_Kind::_let;
+    break;
+  case Token_Type::kw_using:
+    declaration_kind = Variable_Kind::_const;
     break;
   case Token_Type::kw_var:
     declaration_kind = Variable_Kind::_var;
