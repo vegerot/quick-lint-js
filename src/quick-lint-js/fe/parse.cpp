@@ -655,6 +655,15 @@ void Parser::error_on_lexical_declaration(Statement_Kind statement_kind) {
     break;
   }
 
+  case Token_Type::kw_using: {
+    Lexer_Transaction transaction = this->lexer_.begin_transaction();
+    this->skip();
+    is_lexical_declaration = !this->is_let_token_a_variable_reference(
+        this->peek(), /*allow_declarations=*/false);
+    this->lexer_.roll_back_transaction(std::move(transaction));
+    break;
+  }
+
   default:
     is_lexical_declaration = false;
     break;

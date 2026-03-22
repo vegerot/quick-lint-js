@@ -364,6 +364,7 @@ Expression* Parser::parse_primary_expression(Parse_Visitor_Base& v,
   case Token_Type::kw_of:
   case Token_Type::kw_satisfies:
   case Token_Type::kw_set:
+  case Token_Type::kw_using:
   case Token_Type::kw_static: {
     Expression* ast = this->make_expression<Expression::Variable>(
         this->peek().identifier_name(), this->peek().type);
@@ -1353,6 +1354,7 @@ Expression* Parser::parse_await_expression(Parse_Visitor_Base& v,
       case Token_Type::kw_let:
       case Token_Type::kw_set:
       case Token_Type::kw_static:
+      case Token_Type::kw_using:
       case Token_Type::kw_yield:
       case Token_Type::number:
       case Token_Type::private_identifier:
