@@ -245,7 +245,31 @@ TEST_F(Test_Parse_Loop, c_style_for_loop) {
                               "visit_enter_block_scope",    //
                               "visit_variable_use",         // body
                               "visit_exit_block_scope",
+                           }));
+  }
+
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"for (using resource = acquire(); cond; after) { body; }"_sv,
+        no_diags, javascript_options);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_for_scope",       //
+                              "visit_variable_use",          // acquire
+                              "visit_variable_declaration",  // resource
+                              "visit_variable_use",          // cond
+                              "visit_enter_block_scope",     //
+                              "visit_variable_use",          // body
+                              "visit_exit_block_scope",      //
+                              "visit_variable_use",          // after
+                              "visit_exit_for_scope",
                           }));
+    ASSERT_EQ(p.variable_declarations.size(), 1);
+    EXPECT_EQ(p.variable_declarations[0].name, u8"resource");
+    EXPECT_EQ(p.variable_declarations[0].flags,
+              Variable_Declaration_Flags::
+                  inside_for_loop_head_initialized_with_equals);
+    EXPECT_THAT(p.variable_uses,
+                ElementsAreArray({u8"acquire", u8"cond", u8"body", u8"after"}));
   }
 }
 
@@ -839,6 +863,19 @@ TEST_F(Test_Parse_Loop, invalid_for_in_loop) {
                               "visit_enter_block_scope",     //
                               "visit_exit_block_scope",      //
                               "visit_exit_for_scope",
+                           }));
+  }
+
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"for (using x = 10 in []) {}"_sv,  //
+        u8"             ^ Diag_Cannot_Assign_To_Loop_Variable_In_For_Of_Or_In_Loop"_diag);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_for_scope",       //
+                              "visit_variable_declaration",  // x
+                              "visit_enter_block_scope",     //
+                              "visit_exit_block_scope",      //
+                              "visit_exit_for_scope",
                           }));
   }
 }
@@ -922,6 +959,20 @@ TEST_F(Test_Parse_Loop, for_of_loop) {
         test_parse_and_visit_statement(u8"for (const x of []) {}"_sv, no_diags);
     EXPECT_THAT(p.visits, ElementsAreArray({
                               "visit_enter_for_scope",       //
+                              "visit_variable_declaration",  // x
+                              "visit_enter_block_scope",     //
+                              "visit_exit_block_scope",      //
+                              "visit_exit_for_scope",
+                           }));
+  }
+
+  {
+    Spy_Visitor p = test_parse_and_visit_statement(
+        u8"for (using x of xs) {}"_sv,  //
+        u8"           ^ Diag_Missing_Initializer_In_Const_Declaration.variable_name"_diag);
+    EXPECT_THAT(p.visits, ElementsAreArray({
+                              "visit_enter_for_scope",       //
+                              "visit_variable_use",          // xs
                               "visit_variable_declaration",  // x
                               "visit_enter_block_scope",     //
                               "visit_exit_block_scope",      //

@@ -4155,8 +4155,10 @@ void Parser::parse_and_visit_for(Parse_Visitor_Base &v) {
     // for (let i = 0; i < length; ++length) {}
     // for (let x of xs) {}
     // for (let in xs) {}
+    // for (using resource = acquire(); cond; after) {}
   case Token_Type::kw_const:
   case Token_Type::kw_let:
+  case Token_Type::kw_using:
     v.visit_enter_for_scope();
     entered_for_scope = true;
     [[fallthrough]];
@@ -4166,13 +4168,18 @@ void Parser::parse_and_visit_for(Parse_Visitor_Base &v) {
     Lexer_Transaction transaction = this->lexer_.begin_transaction();
     this->skip();
     Stacked_Buffering_Visitor lhs = this->buffering_visitor_stack_.push();
-    if (declaring_token.type == Token_Type::kw_let &&
+    if ((declaring_token.type == Token_Type::kw_let ||
+         declaring_token.type == Token_Type::kw_using) &&
         this->is_let_token_a_variable_reference(this->peek(),
                                                 /*allow_declarations=*/true)) {
       // for (let = expression; cond; up) {}
       // for (let(); cond; up) {}
       // for (let; cond; up) {}
       // for (let in myArray) {}
+      // for (using = expression; cond; up) {}
+      // for (using(); cond; up) {}
+      // for (using; cond; up) {}
+      // for (using in myArray) {}
       this->lexer_.roll_back_transaction(std::move(transaction));
       Expression *ast =
           this->parse_expression(v, Precedence{.in_operator = false});
@@ -4217,7 +4224,8 @@ void Parser::parse_and_visit_for(Parse_Visitor_Base &v) {
           lhs.visitor(), Parse_Let_Bindings_Options{
                              .declaring_token = declaring_token,
                              .allow_in_operator = false,
-                             .allow_const_without_initializer = true,
+                             .allow_const_without_initializer =
+                                 declaring_token.type != Token_Type::kw_using,
                              .is_in_for_initializer = true,
                          });
     }
