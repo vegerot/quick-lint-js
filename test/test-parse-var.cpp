@@ -116,6 +116,19 @@ TEST_F(Test_Parse_Var, parse_await_using_in_async_function) {
             Variable_Declaration_Flags::initialized_with_equals);
 }
 
+TEST_F(Test_Parse_Var, await_using_call_in_async_function_is_expression) {
+  Spy_Visitor p = test_parse_and_visit_module(
+      u8"async function f() { await using(); }"_sv, no_diags,
+      javascript_options);
+  EXPECT_THAT(p.variable_uses, ::testing::Contains(u8"using"));
+  auto using_declaration = std::find_if(
+      p.variable_declarations.begin(), p.variable_declarations.end(),
+      [](const Visited_Variable_Declaration &decl) {
+        return decl.name == u8"using";
+      });
+  EXPECT_EQ(using_declaration, p.variable_declarations.end());
+}
+
 TEST_F(Test_Parse_Var, parse_const_with_no_initializers) {
   Spy_Visitor p = test_parse_and_visit_statement(
       u8"const x;"_sv,  //

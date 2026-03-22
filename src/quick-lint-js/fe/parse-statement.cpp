@@ -454,8 +454,20 @@ parse_statement:
     this->is_current_typescript_namespace_non_empty_ = true;
     Token await_token = this->peek();
     this->skip();
+    bool is_await_using_declaration = false;
     if (this->peek().type == Token_Type::kw_using &&
         !this->peek().has_leading_newline) {
+      Lexer_Transaction transaction = this->lexer_.begin_transaction();
+      this->skip();
+      is_await_using_declaration =
+          this->peek().type != Token_Type::colon &&
+          !this->is_let_token_a_variable_reference(
+              this->peek(),
+              /*allow_declarations=*/options.allow_let_declaration);
+      this->lexer_.roll_back_transaction(std::move(transaction));
+    }
+
+    if (is_await_using_declaration) {
       if (!this->in_top_level_ && !this->in_async_function_) {
         this->diags_.add(Diag_Await_Operator_Outside_Async{
             .await_operator = await_token.span(),
@@ -4224,6 +4236,10 @@ void Parser::parse_and_visit_for(Parse_Visitor_Base &v) {
           lhs.visitor(), Parse_Let_Bindings_Options{
                              .declaring_token = declaring_token,
                              .allow_in_operator = false,
+                             // The TC39 explicit resource management proposal
+                             // only allows 'using' in classic for-loop
+                             // initializer clauses, where an initializer is
+                             // mandatory.
                              .allow_const_without_initializer =
                                  declaring_token.type != Token_Type::kw_using,
                              .is_in_for_initializer = true,
